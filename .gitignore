@@ -1,0 +1,27 @@
+# Build output
+build/
+dist/
+test-tmp/
+
+# Packager generated artifacts (keep packager/*.c and *.rc source)
+packager/*.exe
+packager/*.res
+packager/*.zip
+packager/dbg_*.txt
+
+# Compiled / binary
+*.exe
+*.dll
+*.obj
+*.o
+*.res
+*.zip
+*.pdb
+*.ilk
+
+# Runtime data
+settings.ini
+*.log
+
+# Stray temp file
+Untitled.ico

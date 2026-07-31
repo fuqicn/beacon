@@ -1,0 +1,35 @@
+<RCC>
+    <qresource prefix="/qml">
+        <file alias="main.qml">../src/qml/main.qml</file>
+        <file alias="SplashScreen.qml">../src/qml/SplashScreen.qml</file>
+        <file alias="theme/Theme.qml">../src/qml/theme/Theme.qml</file>
+        <file alias="pages/LaunchPage.qml">../src/qml/pages/LaunchPage.qml</file>
+        <file alias="pages/InstancesPage.qml">../src/qml/pages/InstancesPage.qml</file>
+        <file alias="pages/DownloadPage.qml">../src/qml/pages/DownloadPage.qml</file>
+        <file alias="pages/SettingsPage.qml">../src/qml/pages/SettingsPage.qml</file>
+        <file alias="pages/ToolsPage.qml">../src/qml/pages/ToolsPage.qml</file>
+        <file alias="pages/InstanceSettingsPage.qml">../src/qml/pages/InstanceSettingsPage.qml</file>
+        <file alias="components/AppIcon.qml">../src/qml/components/AppIcon.qml</file>
+        <file alias="components/DownloadDialog.qml">../src/qml/components/DownloadDialog.qml</file>
+        <file alias="components/DownloadProgressButton.qml">../src/qml/components/DownloadProgressButton.qml</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="play.svg">../src/icons/play.svg</file>
+        <file alias="home.svg">../src/icons/home.svg</file>
+        <file alias="download.svg">../src/icons/download.svg</file>
+        <file alias="gear.svg">../src/icons/gear.svg</file>
+        <file alias="wrench.svg">../src/icons/wrench.svg</file>
+        <file alias="magnifying-glass.svg">../src/icons/magnifying-glass.svg</file>
+        <file alias="coffee.svg">../src/icons/coffee.svg</file>
+        <file alias="folder.svg">../src/icons/folder.svg</file>
+        <file alias="file-lines.svg">../src/icons/file-lines.svg</file>
+        <file alias="star.svg">../src/icons/star.svg</file>
+        <file alias="check.svg">../src/icons/check.svg</file>
+        <file alias="xmark.svg">../src/icons/xmark.svg</file>
+        <file alias="sun.svg">../src/icons/sun.svg</file>
+        <file alias="moon.svg">../src/icons/moon.svg</file>
+        <file alias="trash.svg">../src/icons/trash.svg</file>
+        <file alias="refresh.svg">../src/icons/refresh.svg</file>
+        <file alias="power.svg">../src/icons/power.svg</file>
+    </qresource>
+</RCC>

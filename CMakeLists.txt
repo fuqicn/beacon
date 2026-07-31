@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Widgets Svg)
+find_package(Qt6 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg)
 
 set(KERNEL_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../launcher-kernel")
 
@@ -88,9 +88,40 @@ target_link_libraries(Beacon PRIVATE
     Qt6::Qml
     Qt6::QuickControls2
     Qt6::QuickDialogs2
-    Qt6::Widgets
     Qt6::Svg
     -lz
+)
+
+set(QML_SOURCES
+    src/qml/main.qml
+    src/qml/SplashScreen.qml
+    src/qml/theme/Theme.qml
+    src/qml/pages/LaunchPage.qml
+    src/qml/pages/InstancesPage.qml
+    src/qml/pages/DownloadPage.qml
+    src/qml/pages/SettingsPage.qml
+    src/qml/pages/ToolsPage.qml
+    src/qml/pages/InstanceSettingsPage.qml
+    src/qml/components/AppIcon.qml
+    src/qml/components/DownloadDialog.qml
+    src/qml/components/DownloadProgressButton.qml
+)
+
+# Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged
+foreach(_qml_src IN LISTS QML_SOURCES)
+    file(RELATIVE_PATH _qml_alias
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/qml" "${CMAKE_CURRENT_SOURCE_DIR}/${_qml_src}")
+    set_source_files_properties(${_qml_src} PROPERTIES QT_RESOURCE_ALIAS "${_qml_alias}")
+endforeach()
+
+# AOT-compile the QML into the executable to reduce QML engine runtime memory
+qt_add_qml_module(Beacon
+    URI "Beacon"
+    VERSION 1.0
+    RESOURCE_PREFIX "/qml"
+    NO_RESOURCE_TARGET_PATH
+    NO_LINT
+    QML_FILES ${QML_SOURCES}
 )
 
 # Copy mirrors.json to build directory

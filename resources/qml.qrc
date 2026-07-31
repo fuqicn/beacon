@@ -1,18 +1,4 @@
 <RCC>
-    <qresource prefix="/qml">
-        <file alias="main.qml">../src/qml/main.qml</file>
-        <file alias="SplashScreen.qml">../src/qml/SplashScreen.qml</file>
-        <file alias="theme/Theme.qml">../src/qml/theme/Theme.qml</file>
-        <file alias="pages/LaunchPage.qml">../src/qml/pages/LaunchPage.qml</file>
-        <file alias="pages/InstancesPage.qml">../src/qml/pages/InstancesPage.qml</file>
-        <file alias="pages/DownloadPage.qml">../src/qml/pages/DownloadPage.qml</file>
-        <file alias="pages/SettingsPage.qml">../src/qml/pages/SettingsPage.qml</file>
-        <file alias="pages/ToolsPage.qml">../src/qml/pages/ToolsPage.qml</file>
-        <file alias="pages/InstanceSettingsPage.qml">../src/qml/pages/InstanceSettingsPage.qml</file>
-        <file alias="components/AppIcon.qml">../src/qml/components/AppIcon.qml</file>
-        <file alias="components/DownloadDialog.qml">../src/qml/components/DownloadDialog.qml</file>
-        <file alias="components/DownloadProgressButton.qml">../src/qml/components/DownloadProgressButton.qml</file>
-    </qresource>
     <qresource prefix="/icons">
         <file alias="play.svg">../src/icons/play.svg</file>
         <file alias="home.svg">../src/icons/home.svg</file>

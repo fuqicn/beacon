@@ -15,6 +15,7 @@
 #include <QQuickImageProvider>
 #include <QSettings>
 #include <QStyleHints>
+#include <QThreadPool>
 #include <QFile>
 #include <QPixmapCache>
 #include <QTimer>
@@ -231,6 +232,8 @@ int main(int argc, char *argv[])
     app.setOrganizationName("Beacon");
 
     QPixmapCache::setCacheLimit(2048); // 2MB image cache limit
+
+    QThreadPool::globalInstance()->setMaxThreadCount(8);
 
     {
         QFont f = app.font();

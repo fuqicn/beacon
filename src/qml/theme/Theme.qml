@@ -62,9 +62,9 @@ QtObject {
         } else {
             themeMode = mode
         }
-        alwaysScrollbars = sm.value("system/scrollbars", false)
-        transparencyEnabled = sm.value("system/transparency", true)
-        animationsEnabled = sm.value("system/animations", true)
+        alwaysScrollbars = sm.value("system/scrollbars", "false").toString() === "true"
+        transparencyEnabled = sm.value("system/transparency", "true").toString() !== "false"
+        animationsEnabled = sm.value("system/animations", "true").toString() !== "false"
         kernel.applyThemeMode(themeMode)
     }
 

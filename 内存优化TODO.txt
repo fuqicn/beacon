@@ -39,13 +39,35 @@ B 组：中量级（约 10–25MB + 启动更快）
        Release 无 QT_QML_DEBUG，缓存运行期生效；已核对无 QML 报错
 
 ---------------------------------------------------------------
-C 组：大项但有取舍（约 30–80MB，需拍板）
+C 组：页面卸载（约 20–50MB，已拍板：延迟卸载）
 ---------------------------------------------------------------
-[ ] 4. 页面离开后卸载
-     - 现在 6 页访问一次即常驻（保状态）
-     - 改为离开即卸载对象树（只留 active+相邻页），大幅砍 QML 对象/绑定内存
-     - 取舍：丢失页内滚动位置 / 未保存编辑（选中实例等核心状态在 kernel 不丢）
-     - 冲突点：与"不减功能"要求有冲突，须明确同意"丢页内瞬态状态"才做
+[x] 4. 页面离开后延迟卸载
+     - 现在 6 页访问一次即常驻（l.active = l.active || show 永不卸载）
+     - 改为：离开 60s 后置 active=false 销毁该页对象树；60s 内切回不卸载（无感）
+     - 取舍：丢页内滚动位置 / 瞬态 UI 状态（选中实例、版本、设置等核心状态在 kernel 不丢）
+     - 卸载后调 engine->trimComponentCache() + collectGarbage()（KernelBridge 新增
+       setEngine + Q_INVOKABLE qmlCollectGarbage，防 Loader 卸载后组件缓存残留）
+     - 需确认重载页（尤其 LaunchPage/InstancesPage）Component.onCompleted 不重复网络/扫描
+     - 已做：main.qml activatePage + repeat Timer 置 active=false；KernelBridge qmlCollectGarbage
+
+---------------------------------------------------------------
+D 组：补充项（已获批）
+---------------------------------------------------------------
+[x] 5. 渲染循环 basic（约 5–15MB，试行，变差即回退）
+     - main.cpp 在 QGuiApplication 构造前 qputenv("QSG_RENDER_LOOP","basic")
+     - 省独立渲染线程栈 + 交换链；动画理论上仍流畅，实测有掉帧则回退
+     - 已做：实测 TH 22→18 但 PB/WS 几乎不变（219.1/234.2 vs 219.1/233.3），
+       无内存收益有动画风险，已回退
+
+[x] 6. 释放 Splash 场景图（约 1–5MB）
+     - main.cpp 主窗口显示后 splashView.setSource(QUrl())，销毁对象树与组件缓存
+       （现在 close() 只隐藏，QML 树活到 main() 返回）
+     - 已做：splash 显示后 setSource(QUrl()) 释放对象树
+
+[x] 7. 周期性 GC（约 2–8MB 瞬态回收）
+     - main.cpp 60s QTimer：engine->collectGarbage() + trimComponentCache()
+     - 回收 classifyVersions() 等产生的瞬态 JS 分配
+     - 已做：QTimer 60s 周期 collectGarbage + trimComponentCache
 
 ---------------------------------------------------------------
 已排查排除项（无需处理）
@@ -63,4 +85,15 @@ C 组：大项但有取舍（约 30–80MB，需拍板）
      与基线基本持平（WS +1.2MB，PB +7.9MB，线程/句柄同量级）。
      注：单次长测曾见 PB 250.9 / WS 278.2 / TH 27 / HD 1225，为网络活跃（mirrors/版本检测）瞬时值，
      稳态后回落至基线水平，非回归。
-     C 组（页面卸载）未做：需用户拍板"丢页内瞬态状态"。
+     A+B 已提交 git（d43cf11）。
+  2026-07-31 用户拍板 C 组：延迟卸载（60s）；D 组 5（basic 试行）与 6/7 获批；衡量口径 = PB + WS 双指标。
+     下一步执行顺序：6 → 5 → 4 → 7，每步构建 + 双指标采样（8/15/25/40s），并人工确认动画/切换体验。
+  2026-07-31 阶段二完成（6/7/4 已做、5 试行后回退）。含 6/7/4 实测（无 basic）：
+     稳态 PB≈212.3 / WS≈218.9 / TH20-22，比 A+B 基线 WS -12.8MB；70s 运行无 JS 报错。
+     页面卸载收益未测（需人工访问全部页面再等 60s）。
+  2026-07-31 滚动条 bug 根因定位并修复：ini 存字符串 "false"，QML 里
+     sm.value("system/scrollbars", false) 返回 QVariant(QString)，赋给 bool 属性时
+     QML 把非空字符串强转成 true → 关闭后重启又开。修复为
+     .toString() === "true" / !== "false" 显式比较（Theme.qml:65-67）。
+     transparency/animations 存 "true" 恰碰巧强转正确，一并显式化。
+     验证：运行时 alwaysScrollbars=false（diag 确认），冒烟测试正常。

@@ -17,6 +17,7 @@
 #include "SkinManager.h"
 
 class QQuickWindow;
+class QQmlEngine;
 
 class KernelBridge : public QObject
 {
@@ -53,6 +54,7 @@ public:
     QString mcDir() const { return m_mcDir; }
     void setMcDir(const QString &dir) { m_mcDir = dir; }
     void setMainWindow(QQuickWindow *window) { m_mainWindow = window; }
+    void setEngine(QQmlEngine *engine) { m_engine = engine; }
 
     Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void setColorScheme(bool dark);
@@ -64,6 +66,7 @@ public:
     Q_INVOKABLE int getRequiredJavaVersion() const;
     Q_INVOKABLE bool isAnyMinecraftRunning() const;
     Q_INVOKABLE void killAllMinecraft();
+    Q_INVOKABLE void qmlCollectGarbage();
 
     bool javaDownloading() const { return m_javaDownloading; }
     void setJavaDownloading(bool v);
@@ -87,6 +90,7 @@ private:
     int m_launchMemory = 4096;
     bool m_javaDownloading = false;
     QQuickWindow *m_mainWindow = nullptr;
+    QQmlEngine *m_engine = nullptr;
     VersionManager *m_versionManager = nullptr;
     DownloadManager *m_downloadManager = nullptr;
     AuthManager *m_authManager = nullptr;

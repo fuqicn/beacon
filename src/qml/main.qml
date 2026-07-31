@@ -148,9 +148,9 @@ ApplicationWindow {
                         var l = children[i]
                         if (!l.hasOwnProperty("pageIndex")) continue
                         var show = (l.pageIndex === index)
-                        l.active = l.active || show
                         l.enabled = show
                         if (show) {
+                            l.active = true
                             if (animate && l.opacity !== 1) {
                                 l.scale = scaleAnim ? 0.92 : 1
                                 l.opacity = 0
@@ -166,6 +166,26 @@ ApplicationWindow {
 
                 onCurrentChanged: activatePage(current, true)
                 Component.onCompleted: activatePage(0, false)
+
+                // Unload pages left for a while to reclaim QML object/binding memory
+                Timer {
+                    id: unloadTimer
+                    interval: 60000
+                    repeat: true
+                    onTriggered: {
+                        var unloaded = false
+                        for (var i = 0; i < parent.children.length; i++) {
+                            var l = parent.children[i]
+                            if (!l.hasOwnProperty("pageIndex")) continue
+                            if (!l.enabled && l.active) {
+                                l.active = false
+                                unloaded = true
+                            }
+                        }
+                        if (unloaded)
+                            kernel.qmlCollectGarbage()
+                    }
+                }
 
                 Loader {
                     id: page0

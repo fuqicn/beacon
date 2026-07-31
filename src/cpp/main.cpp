@@ -285,6 +285,7 @@ int main(int argc, char *argv[])
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
 
     engine.rootContext()->setContextProperty("kernel", KernelBridge::instance());
+    KernelBridge::instance()->setEngine(&engine);
 
     bool isWin11 = false;
 #if defined(Q_OS_WIN)
@@ -323,6 +324,8 @@ int main(int argc, char *argv[])
         return -1;
 
     splashView.close();
+    // Release the splash scene graph / object tree (close() only hides it)
+    splashView.setSource(QUrl());
 
     if (auto *mainWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0))) {
         auto *kb = KernelBridge::instance();
@@ -330,6 +333,15 @@ int main(int argc, char *argv[])
         kb->applyWindowTransparency(
             kb->settingsManager()->value("system/transparency", true).toBool());
     }
+
+    // Periodically reclaim transient JS allocations and unused compiled caches
+    QTimer gcTimer;
+    gcTimer.setInterval(60000);
+    QObject::connect(&gcTimer, &QTimer::timeout, [&engine]() {
+        engine.collectGarbage();
+        engine.trimComponentCache();
+    });
+    gcTimer.start();
 
     int ret = app.exec();
     KernelBridge::shutdown();

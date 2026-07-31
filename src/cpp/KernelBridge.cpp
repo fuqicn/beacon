@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QThread>
 #include <QQuickWindow>
+#include <QQmlEngine>
 #include "WindowEffects.h"
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -312,6 +313,13 @@ void KernelBridge::killAllMinecraft()
 
     emit minecraftRunningChanged();
 #endif
+}
+
+void KernelBridge::qmlCollectGarbage()
+{
+    if (!m_engine) return;
+    m_engine->trimComponentCache();
+    m_engine->collectGarbage();
 }
 
 void KernelBridge::launchGame(int memory)

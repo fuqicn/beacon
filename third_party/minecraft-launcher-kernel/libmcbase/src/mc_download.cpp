@@ -364,8 +364,8 @@ int mc_download_translate_mojang_url(const char *url, char *mirror, size_t mirro
             strstr(url, "maven.minecraftforge.net") || strstr(url, "maven.neoforged.net")) {
             from_domain = ".net";
             to_domain = "download.mcbbs.net/maven";
-            char *extracted = strstr(url, "://");
-            if (extracted) extracted += 3; else extracted = (char*)url;
+            const char *extracted = strstr(url, "://");
+            if (extracted) extracted += 3; else extracted = url;
             const char *slash = strchr(extracted, '/');
             if (slash) {
                 char path_only[1024];
@@ -382,8 +382,8 @@ int mc_download_translate_mojang_url(const char *url, char *mirror, size_t mirro
             }
             return 0;
         } else if (strstr(url, "resources.download.minecraft.net")) {
-            char *extracted = strstr(url, "://");
-            if (extracted) extracted += 3; else extracted = (char*)url;
+            const char *extracted = strstr(url, "://");
+            if (extracted) extracted += 3; else extracted = url;
             const char *slash = strchr(extracted, '/');
             if (slash) {
                 char path_only[1024];

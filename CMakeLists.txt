@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+include(GNUInstallDirs)
+
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg Widgets)
 find_package(ZLIB QUIET)
 
@@ -163,4 +165,16 @@ add_custom_command(TARGET Beacon POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json"
         "$<TARGET_FILE_DIR:Beacon>/mirrors.json"
     COMMENT "Copying mirrors.json to build directory"
+)
+
+# ---- Install rules (Linux/macOS packaging) ----
+install(TARGETS Beacon
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    BUNDLE DESTINATION .
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/beacon
 )

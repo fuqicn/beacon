@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #ifndef LAUNCHMANAGER_H
 #define LAUNCHMANAGER_H
 
@@ -20,6 +38,7 @@ class LaunchManager : public QObject
     Q_PROPERTY(QString versionId READ versionId WRITE setVersionId NOTIFY versionChanged)
     Q_PROPERTY(QString javaPath READ javaPath WRITE setJavaPath NOTIFY javaChanged)
     Q_PROPERTY(QString mcDir READ mcDir WRITE setMcDir NOTIFY mcDirChanged)
+    Q_PROPERTY(QString gameDir READ gameDir WRITE setGameDir NOTIFY gameDirChanged)
     Q_PROPERTY(int memory READ memory WRITE setMemory NOTIFY memoryChanged)
 
 public:
@@ -34,19 +53,25 @@ public:
     QString versionId() const { return m_versionId; }
     QString javaPath() const { return m_javaPath; }
     QString mcDir() const { return m_mcDir; }
+    QString gameDir() const { return m_gameDir; }
     int memory() const { return m_memory; }
 
     void setVersionId(const QString &id);
     void setJavaPath(const QString &path);
     void setMemory(int mb);
     void setMcDir(const QString &dir);
+    void setGameDir(const QString &dir);
     void setDir(const QString &dir) { m_mcDir = dir; }
     void setUsername(const QString &name) { m_username = name; }
     void setSession(const McAuthSession *session);
     void setExtraJvmArgs(const QString &args) { m_extraJvmArgs = args; }
+    void setFullscreen(bool on) { m_fullscreen = on; }
+    void setResolution(int w, int h) { m_resolutionW = w; m_resolutionH = h; }
 
     Q_INVOKABLE void launch();
     Q_INVOKABLE void stop();
+    Q_INVOKABLE void setCancelRequested(bool v);
+    bool cancelRequested() const { return m_cancelRequested; }
 
 signals:
     void runningChanged();
@@ -56,6 +81,7 @@ signals:
     void versionChanged();
     void javaChanged();
     void mcDirChanged();
+    void gameDirChanged();
     void memoryChanged();
     void launchStarted();
     void launchCompleted(int exitCode);
@@ -75,6 +101,8 @@ private:
                       const QStringList &classpath, QStringList &args);
     void buildGameArgs(McVersion *ver, const char *mcDir,
                        const QStringList &jvmArgs, QStringList &gameArgs);
+
+    bool abortVerifyIfCancelled();
 
     // Async verify state
     struct VerifyState {
@@ -99,15 +127,20 @@ private:
     QString m_versionId;
     QString m_javaPath;
     QString m_mcDir;
+    QString m_gameDir;
     int m_memory = 4096;
     QString m_username = "Player";
     QString m_extraJvmArgs;
+    bool m_fullscreen = false;
+    int m_resolutionW = 0;
+    int m_resolutionH = 0;
     McAuthSession m_session;
     bool m_running = false;
     bool m_ready = false;
     bool m_verifying = false;
     qreal m_verifyProgress = 0.0;
     QString m_verifyTask;
+    bool m_cancelRequested = false;
     QProcess *m_process = nullptr;
     QFile *m_gameLog = nullptr;
 };

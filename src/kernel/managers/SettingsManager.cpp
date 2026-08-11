@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #include "SettingsManager.h"
 #include <QDir>
 #include <QProcess>
@@ -106,13 +124,26 @@ QVariantMap SettingsManager::detectSystemSettings() const
 #elif defined(Q_OS_LINUX)
     {
         QProcess p;
-        p.start("gsettings",
-                QStringList() << "get" << "org.gnome.desktop.interface" << "color-scheme");
-        if (p.waitForFinished(1500)) {
-            QString val = QString::fromUtf8(p.readAllStandardOutput()).trimmed();
-            if (val.contains("prefer-dark"))
-                out["theme"] = "dark";
-        }
+        auto gs = [&p](const QString &key, const QString &get) -> QString {
+            p.start("gsettings", QStringList() << "get" << key << get);
+            if (p.waitForFinished(1500)) {
+                return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+            }
+            return QString();
+        };
+
+        QString theme = gs("org.gnome.desktop.interface", "color-scheme");
+        if (theme.contains("prefer-dark"))
+            out["theme"] = "dark";
+
+        QString overlay = gs("org.gnome.desktop.interface", "overlay-scrolling");
+        if (!overlay.isEmpty())
+            out["scrollbars"] = (overlay != "true");   // overlay off => always show
+
+        QString anim = gs("org.gnome.desktop.interface", "enable-animations");
+        if (!anim.isEmpty())
+            out["animations"] = (anim != "false");
+        // transparency: GNOME/KDE expose no simple gsettings key; keep default.
     }
 #endif
     return out;

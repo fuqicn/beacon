@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #include "LaunchManager.h"
 #include <mc_log.h>
 #include <mc_path.h>
@@ -6,6 +24,7 @@
 #include <mc_str.h>
 #include <mc_download.h>
 #include <mc_download_qt.h>
+#include <mc_version.h>
 
 #include <QDir>
 #include <QFile>
@@ -19,13 +38,16 @@
 #include <QTimer>
 #include <QThread>
 #include <cstdlib>
+#ifdef Q_OS_WIN
 #include <windows.h>
+#include <shellapi.h>
+#endif
 
 static bool mc_download_pclce(const char *url, const char *path, const char *sha1, long size, int timeout) {
     char mirrorUrl[2048];
     const char *urls[2];
     QByteArray mirrorBuf;
-    if (mc_download_translate_mojang_url(url, mirrorUrl, sizeof(mirrorUrl), "bmclapi") && mirrorUrl[0]) {
+    if (mc_download_translate_mojang_url_auto(url, mirrorUrl, sizeof(mirrorUrl)) && mirrorUrl[0]) {
         mirrorBuf = QByteArray(mirrorUrl);
         urls[0] = mirrorBuf.constData();
     } else {
@@ -39,7 +61,6 @@ static bool mc_download_pclce(const char *url, const char *path, const char *sha
     }
     return ok;
 }
-#include <shellapi.h>
 #include <zlib.h>
 
 // Raw deflate decompression (ZIP storage method 8)
@@ -58,15 +79,34 @@ static bool rawInflate(const QByteArray &in, QByteArray &out, unsigned int expec
     return true;
 }
 
-// Shorten long paths using Win32 GetShortPathNameW (like PCLCE)
+// Shorten long paths using Win32 GetShortPathNameW (like PCLCE).
+// On Unix paths are not length-limited, so the original path is returned.
 static QString shortenPath(const QString &path, int threshold = 247)
 {
+#ifndef Q_OS_WIN
+    Q_UNUSED(threshold);
+    return path;
+#else
     if (path.length() <= threshold) return path;
     wchar_t shortBuf[1024];
     DWORD ret = GetShortPathNameW((LPCWSTR)path.utf16(), shortBuf, 1024);
     if (ret > 0 && ret < 1024)
         return QString::fromWCharArray(shortBuf);
     return path;
+#endif
+}
+
+// Native library file extension for the current platform.
+static bool isNativeFile(const QString &name) {
+#if defined(Q_OS_WIN)
+    return name.endsWith(".dll", Qt::CaseInsensitive);
+#elif defined(Q_OS_MACOS)
+    return name.endsWith(".dylib", Qt::CaseInsensitive)
+        || name.endsWith(".jnilib", Qt::CaseInsensitive)
+        || name.endsWith(".so", Qt::CaseInsensitive);
+#else
+    return name.endsWith(".so", Qt::CaseInsensitive);
+#endif
 }
 
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent)
@@ -100,6 +140,14 @@ void LaunchManager::setMcDir(const QString &dir)
     if (m_mcDir != dir) {
         m_mcDir = dir;
         emit mcDirChanged();
+    }
+}
+
+void LaunchManager::setGameDir(const QString &dir)
+{
+    if (m_gameDir != dir) {
+        m_gameDir = dir;
+        emit gameDirChanged();
     }
 }
 
@@ -139,6 +187,7 @@ void LaunchManager::launch()
     }
     if (m_mcDir.isEmpty()) m_mcDir = QDir::homePath() + "/.minecraft";
 
+    m_cancelRequested = false;
     m_verifying = true;
     m_verifyProgress = 0.0;
     m_verifyTask = "正在验证文件...";
@@ -148,8 +197,37 @@ void LaunchManager::launch()
     QTimer::singleShot(0, this, [this]() { doVerifyAndLaunch(); });
 }
 
+void LaunchManager::setCancelRequested(bool v)
+{
+    if (m_cancelRequested == v) return;
+    m_cancelRequested = v;
+}
+
+bool LaunchManager::abortVerifyIfCancelled()
+{
+    if (!m_cancelRequested) return false;
+    mc_info("[Launch] Verify cancelled by user");
+    mc_qt_download_set_cancel(0);
+    if (m_vs.verLoaded) {
+        mc_version_free(&m_vs.ver);
+        m_vs.verLoaded = false;
+    }
+    m_vs.missingLibs.clear();
+    m_vs.missingLibUrls.clear();
+    m_vs.missingLibSha1s.clear();
+    m_vs.missingAssets.clear();
+    m_vs.missingAssetUrls.clear();
+    m_verifying = false;
+    m_cancelRequested = false;
+    emit verifyingChanged();
+    emit errorOccurred("已取消启动");
+    return true;
+}
+
 void LaunchManager::doVerifyAndLaunch()
 {
+    if (abortVerifyIfCancelled()) return;
+
     mc_info("[Verify] doVerifyAndLaunch start: mcDir=%s verId=%s",
             m_mcDir.toUtf8().constData(), m_versionId.toUtf8().constData());
 
@@ -259,6 +337,8 @@ void LaunchManager::doVerifyAndLaunch()
 // Step 1: Check client JAR
 void LaunchManager::verifyClientJar()
 {
+    if (abortVerifyIfCancelled()) return;
+
     m_verifyTask = "检查客户端...";
     m_verifyProgress = 0.05;
     emit verifyProgressChanged();
@@ -306,6 +386,8 @@ void LaunchManager::verifyClientJar()
 // Step 2: Check libraries (existence + size + SHA1)
 void LaunchManager::verifyLibraries()
 {
+    if (abortVerifyIfCancelled()) return;
+
     m_verifyTask = "检查支持库...";
     m_verifyProgress = 0.15;
     emit verifyProgressChanged();
@@ -363,6 +445,8 @@ void LaunchManager::verifyLibraries()
 // Step 3: Check assets (existence + size only - FAST)
 void LaunchManager::verifyAssets()
 {
+    if (abortVerifyIfCancelled()) return;
+
     m_verifyTask = "检查资源文件...";
     m_verifyProgress = 0.4;
     emit verifyProgressChanged();
@@ -441,6 +525,8 @@ void LaunchManager::verifyAssets()
 // Step 4: Download missing files (client JAR + libraries only, skip assets to avoid blocking)
 void LaunchManager::downloadMissingFiles()
 {
+    if (abortVerifyIfCancelled()) return;
+
     // Only auto-download client JAR and libraries — assets should be pre-downloaded
     // Downloading 5000+ assets synchronously would freeze the UI for minutes
     int libsMissing = m_vs.missingLibs.size();
@@ -476,8 +562,8 @@ void LaunchManager::downloadMissingFiles()
     QStringList allOrigUrls;
     if (clientMissing) {
         char jarUrl[2048];
-        int ok = mc_download_translate_mojang_url(
-            m_vs.ver.client_url, jarUrl, sizeof(jarUrl), "bmclapi");
+        int ok = mc_download_translate_mojang_url_auto(
+            m_vs.ver.client_url, jarUrl, sizeof(jarUrl));
         if (!ok || !jarUrl[0])
             qstrncpy(jarUrl, m_vs.ver.client_url, sizeof(jarUrl));
 
@@ -510,9 +596,9 @@ void LaunchManager::downloadMissingFiles()
                            libUrl.contains("resources.download.minecraft.net");
         if (isMojangUrl) {
             char translated[2048];
-            int ok = mc_download_translate_mojang_url(
+            int ok = mc_download_translate_mojang_url_auto(
                 libUrl.toUtf8().constData(),
-                translated, sizeof(translated), "bmclapi");
+                translated, sizeof(translated));
             if (ok && translated[0])
                 mirrorUrl = QString::fromUtf8(translated);
             else
@@ -620,6 +706,11 @@ void LaunchManager::downloadMissingFiles()
     m_verifyTask = "验证完成";
     emit verifyProgressChanged();
 
+    if (m_cancelRequested) {
+        abortVerifyIfCancelled();
+        return;
+    }
+
     // Re-check client JAR after download
     if (!m_vs.clientJarOk && !m_vs.ver.client_url[0]) {
         // Can't verify further without URL, just proceed
@@ -634,6 +725,8 @@ void LaunchManager::downloadMissingFiles()
 
 void LaunchManager::doLaunch()
 {
+    if (abortVerifyIfCancelled()) return;
+
     m_verifying = false;
     emit verifyingChanged();
 
@@ -673,6 +766,11 @@ void LaunchManager::doLaunch()
 
     char mcDir[1024];
     qstrncpy(mcDir, m_mcDir.toUtf8().constData(), sizeof(mcDir));
+
+    // Game directory: isolated instances run in <root>/instances/<verId>,
+    // otherwise the root .minecraft itself. Saves/mods/config live here.
+    QString gameDir = m_gameDir.isEmpty() ? m_mcDir : m_gameDir;
+    QDir().mkpath(gameDir);
 
     char fn[256];
 
@@ -761,52 +859,66 @@ void LaunchManager::doLaunch()
         // Open JAR as ZIP and extract .dll files
         QFile f(jarPath);
         if (!f.open(QIODevice::ReadOnly)) continue;
-        QByteArray data = f.readAll();
-        f.close();
+        qint64 fileSize = f.size();
+        const uchar *mapped = f.map(0, fileSize);
+        QByteArray data;
+        const uchar *base = mapped;
+        if (!base) {
+            data = f.readAll();
+            base = reinterpret_cast<const uchar *>(data.constData());
+            fileSize = data.size();
+        }
 
         // Parse ZIP central directory and extract entries ending in .dll
         unsigned int eocdOffset = 0;
-        int searchEnd = data.size() - 22;
+        int searchEnd = static_cast<int>(fileSize) - 22;
         int searchStart = searchEnd - 65536;
         if (searchStart < 0) searchStart = 0;
         for (int pos = searchEnd; pos >= searchStart; pos--) {
-            if ((unsigned char)data[pos] == 0x50 && (unsigned char)data[pos+1] == 0x4b &&
-                (unsigned char)data[pos+2] == 0x05 && (unsigned char)data[pos+3] == 0x06) {
+            if (base[pos] == 0x50 && base[pos + 1] == 0x4b &&
+                base[pos + 2] == 0x05 && base[pos + 3] == 0x06) {
                 eocdOffset = pos;
                 break;
             }
         }
-        if (eocdOffset == 0) continue;
+        if (eocdOffset == 0) {
+            if (mapped) f.unmap(const_cast<uchar *>(mapped));
+            continue;
+        }
 
-        unsigned int cdOffset = *(unsigned int *)(data.data() + eocdOffset + 16);
-        unsigned int cdEntries = *(unsigned short *)(data.data() + eocdOffset + 10);
+        unsigned int cdOffset = *(const unsigned int *)(base + eocdOffset + 16);
+        unsigned int cdEntries = *(const unsigned short *)(base + eocdOffset + 10);
         unsigned int pos2 = cdOffset;
         for (unsigned int e = 0; e < cdEntries; ++e) {
-            if (pos2 + 46 > (unsigned)data.size()) break;
-            unsigned int nameLen = *(unsigned short *)(data.data() + pos2 + 28);
-            unsigned int extraLen = *(unsigned short *)(data.data() + pos2 + 30);
-            unsigned int commentLen = *(unsigned short *)(data.data() + pos2 + 32);
-            unsigned int localOffset = *(unsigned int *)(data.data() + pos2 + 42);
-            unsigned int compSz = *(unsigned int *)(data.data() + pos2 + 20);
-            unsigned int ucSz = *(unsigned int *)(data.data() + pos2 + 24);
-            unsigned short method = *(unsigned short *)(data.data() + pos2 + 10);
+            if (pos2 + 46 > (unsigned)fileSize) break;
+            unsigned int nameLen = *(const unsigned short *)(base + pos2 + 28);
+            unsigned int extraLen = *(const unsigned short *)(base + pos2 + 30);
+            unsigned int commentLen = *(const unsigned short *)(base + pos2 + 32);
+            unsigned int localOffset = *(const unsigned int *)(base + pos2 + 42);
+            unsigned int compSz = *(const unsigned int *)(base + pos2 + 20);
+            unsigned int ucSz = *(const unsigned int *)(base + pos2 + 24);
+            unsigned short method = *(const unsigned short *)(base + pos2 + 10);
 
-            if (pos2 + 46 + nameLen > (unsigned)data.size()) break;
-            QString entryName = QString::fromUtf8(data.mid(pos2 + 46, nameLen));
+            if (pos2 + 46 + nameLen > (unsigned)fileSize) break;
+            QString entryName = QString::fromUtf8(reinterpret_cast<const char *>(base + pos2 + 46), nameLen);
             pos2 += 46 + nameLen + extraLen + commentLen;
 
-            if (!entryName.endsWith(".dll", Qt::CaseInsensitive)) continue;
+            if (!isNativeFile(entryName)) continue;
 
             // Extract
             QByteArray raw;
-            if (localOffset + 30 + nameLen > (unsigned)data.size()) continue;
-            unsigned int lhExtraLen = *(unsigned short *)(data.data() + localOffset + 28);
+            if (localOffset + 30 + nameLen > (unsigned)fileSize) continue;
+            unsigned int lhExtraLen = *(const unsigned short *)(base + localOffset + 28);
             unsigned int fileStart = localOffset + 30 + nameLen + lhExtraLen;
 
             if (method == 0) {
-                raw = data.mid(fileStart, ucSz);
+                if (fileStart + ucSz > (unsigned)fileSize) continue;
+                raw = QByteArray::fromRawData(
+                    reinterpret_cast<const char *>(base + fileStart), ucSz);
             } else if (method == 8) {
-                QByteArray compressed = data.mid(fileStart, compSz);
+                if (fileStart + compSz > (unsigned)fileSize) continue;
+                QByteArray compressed = QByteArray::fromRawData(
+                    reinterpret_cast<const char *>(base + fileStart), compSz);
                 if (!rawInflate(compressed, raw, ucSz)) continue;
             } else continue;
 
@@ -817,6 +929,7 @@ void LaunchManager::doLaunch()
                 mc_info("[Launch] Extracted native: %s", outPath.toUtf8().constData());
             }
         }
+        if (mapped) f.unmap(const_cast<uchar *>(mapped));
     }
 
     QString nativesDirStr = shortenPath(QString::fromUtf8(nativesDir));
@@ -831,26 +944,29 @@ void LaunchManager::doLaunch()
         s.replace("${version_name}", m_versionId);
         s.replace("${version_type}", QString::fromUtf8(m_vs.ver.type));
         s.replace("${assets_root}", QString::fromUtf8(assetsDir));
-        s.replace("${game_directory}", m_mcDir);
+        s.replace("${game_directory}", gameDir);
         s.replace("${assets_index_name}", QString::fromUtf8(m_vs.ver.assets));
         s.replace("${natives_directory}", nativesDirStr);
         s.replace("${user_properties}", "{}");
         QString session = QString("token:%1:%2").arg(accessToken, uuid);
         s.replace("${auth_session}", session);
         s.replace("${game_assets}", QString::fromUtf8(assetsDir));
-        s.replace("${classpath}", classpath.join(';'));
+        s.replace("${classpath}", classpath.join(QDir::listSeparator()));
         s.replace("${library_directory}", QDir(m_mcDir).filePath("libraries"));
-        s.replace("${classpath_separator}", ";");
+        s.replace("${classpath_separator}", QString(QDir::listSeparator()));
         s.replace("${launcher_name}", "beacon");
         s.replace("${launcher_version}", "1.0.0");
+        s.replace("${resolution_width}", QString::number(m_resolutionW));
+        s.replace("${resolution_height}", QString::number(m_resolutionH));
         return s;
     };
 
     // Parse arguments.jvm from version JSON with rules evaluation
     // Launcher feature flags for rules evaluation
+    bool customResolution = m_resolutionW > 0 && m_resolutionH > 0;
     struct { const char *key; bool val; } features[] = {
         {"is_demo_user", false},
-        {"has_custom_resolution", false},
+        {"has_custom_resolution", customResolution},
         {"has_quick_plays_support", false},
         {"is_quick_play_singleplayer", false},
         {"is_quick_play_multiplayer", false},
@@ -875,7 +991,9 @@ void LaunchManager::doLaunch()
             if (rule.contains("os")) {
                 auto os = rule["os"].toObject();
                 if (os.contains("name"))
-                    matches = (os["name"].toString().compare("windows", Qt::CaseInsensitive) == 0);
+                    matches = (os["name"].toString().compare(
+                                   QString::fromUtf8(mc_platform_get()),
+                                   Qt::CaseInsensitive) == 0);
                 if (matches && os.contains("arch"))
                     matches = (os["arch"].toString().compare("x86", Qt::CaseInsensitive) == 0)
 #if defined(_M_AMD64) || defined(__x86_64__)
@@ -910,7 +1028,7 @@ void LaunchManager::doLaunch()
     QStringList shortClasspath;
     for (auto &cp : classpath)
         shortClasspath << shortenPath(cp);
-    QString classpathStr = shortClasspath.join(';');
+    QString classpathStr = shortClasspath.join(QDir::listSeparator());
 
     // Parse arguments.jvm from version JSON first (before building final args)
     // to detect module path (-p) and filter incompatible flags
@@ -981,11 +1099,11 @@ void LaunchManager::doLaunch()
     }
 
     // Write legacyClassPath.file for Forge's BootstrapLauncher
-    QString cpFilePath = m_mcDir + "/classpath.txt";
+    QString cpFilePath = gameDir + "/classpath.txt";
     {
         QFile cf(cpFilePath);
         if (cf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            cf.write(QString(classpathStr).replace(';', '\n').toUtf8());
+            cf.write(QString(classpathStr).replace(QDir::listSeparator(), '\n').toUtf8());
             cf.close();
         }
     }
@@ -1028,7 +1146,7 @@ void LaunchManager::doLaunch()
             if (!hasStandardArgs) {
                 gameArgs << "--username" << username;
                 gameArgs << "--version" << m_versionId;
-                gameArgs << "--gameDir" << m_mcDir;
+                gameArgs << "--gameDir" << gameDir;
                 gameArgs << "--assetsDir" << QString::fromUtf8(assetsDir);
                 gameArgs << "--assetIndex" << QString::fromUtf8(m_vs.ver.assets);
                 gameArgs << "--uuid" << uuid;
@@ -1056,17 +1174,14 @@ void LaunchManager::doLaunch()
             }
         }
     } else if (m_vs.ver.minecraft_arguments[0]) {
-        // Properly split minecraftArguments using Windows CommandLineToArgvW
-        // to handle paths with spaces after placeholder substitution
+        // Split minecraftArguments after placeholder substitution, handling
+        // paths with spaces (QProcess::splitCommand is cross-platform).
         QString substituted = substPlaceholders(QString::fromUtf8(m_vs.ver.minecraft_arguments));
-        int argc = 0;
-        wchar_t **argv = CommandLineToArgvW((LPCWSTR)substituted.utf16(), &argc);
-        if (argv) {
-            for (int i = 0; i < argc; ++i)
-                gameArgs << QString::fromWCharArray(argv[i]);
-            LocalFree(argv);
-        }
+        gameArgs << QProcess::splitCommand(substituted);
     }
+
+    if (m_fullscreen)
+        gameArgs << "--fullscreen";
 
     QStringList allArgs = jvmArgs + gameArgs;
 
@@ -1078,17 +1193,19 @@ void LaunchManager::doLaunch()
     m_process = new QProcess(this);
     m_process->setProgram(m_javaPath);
     m_process->setArguments(allArgs);
-    m_process->setWorkingDirectory(m_mcDir);
+    m_process->setWorkingDirectory(gameDir);
     m_process->setProcessChannelMode(QProcess::MergedChannels);
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     m_process->setProcessEnvironment(env);
+#ifdef Q_OS_WIN
     m_process->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
         args->flags |= CREATE_NO_WINDOW;
     });
+#endif
 
     // Open game output log file
-    QString gameLogPath = m_mcDir + "/game_output.log";
+    QString gameLogPath = gameDir + "/game_output.log";
     QFile *gameLog = new QFile(gameLogPath);
     if (gameLog->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
         mc_info("[Launch] Game output log: %s", gameLogPath.toUtf8().constData());
@@ -1142,7 +1259,7 @@ void LaunchManager::doLaunch()
     m_process->start();
 
     // Save full command line for debugging
-    QFile cmdFile(m_mcDir + "/mclaunch_cmdline.txt");
+    QFile cmdFile(gameDir + "/mclaunch_cmdline.txt");
     if (cmdFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
         cmdFile.write(cmdLine.toUtf8());
 

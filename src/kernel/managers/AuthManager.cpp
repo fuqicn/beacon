@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #include "AuthManager.h"
 #include <mc_log.h>
 #include <QDir>
@@ -7,6 +25,7 @@
 #include <QJsonArray>
 #include <QCryptographicHash>
 #include <QHostInfo>
+#include <QPointer>
 
 AuthManager::AuthManager(QObject *parent) : QObject(parent)
 {
@@ -168,8 +187,13 @@ void AuthManager::addMicrosoftAccount()
     auto *result = new McAuthSession;
     mc_auth_init(result);
 
-    std::thread([this, result]() {
+    QPointer<AuthManager> guard(this);
+    std::thread([this, result, guard]() {
         int ret = mc_auth_msa_login(result);
+        if (!guard) {
+            delete result;
+            return;
+        }
         QMetaObject::invokeMethod(this, [this, result, ret]() {
             m_loggingIn = false;
             emit loggingInChanged();

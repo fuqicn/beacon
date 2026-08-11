@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -29,6 +47,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         kernel.applyThemeMode(Theme.themeMode)
+        refreshMcRunning()
     }
     readonly property string _uiFont: Qt.platform.os === "osx" ? "PingFang SC" : Qt.platform.os === "linux" ? "Noto Sans CJK SC" : "Microsoft YaHei"
     font.family: _uiFont
@@ -38,10 +57,10 @@ ApplicationWindow {
     property string subPageTitle: ""
 
     readonly property var navModel: [
-        { label: "启动", icon: "play" },
-        { label: "下载", icon: "download" },
-        { label: "设置", icon: "gear" },
-        { label: "工具", icon: "wrench" }
+        { labelKey: "nav.launch", icon: "play" },
+        { labelKey: "nav.download", icon: "download" },
+        { labelKey: "nav.settings", icon: "gear" },
+        { labelKey: "nav.tools", icon: "wrench" }
     ]
 
     function navigateTo(index) {
@@ -89,7 +108,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: modelData.label
+                                text: I18n.tr(modelData.labelKey)
                                 font.pixelSize: 11
                                 font.weight: index === window.navIndex ? Font.DemiBold : Font.Normal
                                 color: index === window.navIndex
@@ -120,7 +139,7 @@ ApplicationWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 20
-                    text: subPageTitle !== "" ? subPageTitle : window.navModel[window.navIndex].label
+                    text: subPageTitle !== "" ? subPageTitle : I18n.tr(window.navModel[window.navIndex].labelKey)
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
                     color: palette.text
@@ -177,7 +196,9 @@ ApplicationWindow {
                         for (var i = 0; i < parent.children.length; i++) {
                             var l = parent.children[i]
                             if (!l.hasOwnProperty("pageIndex")) continue
-                            if (!l.enabled && l.active) {
+                            // Keep DownloadPage (mods stack) alive so browsing state
+                            // (search results / detail versions) survives page switches.
+                            if (l.pageIndex !== 1 && !l.enabled && l.active) {
                                 l.active = false
                                 unloaded = true
                             }
@@ -259,6 +280,30 @@ ApplicationWindow {
                     Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
                     sourceComponent: InstanceSettingsPage { anchors.fill: parent }
                 }
+                Loader {
+                    id: page6
+                    property int pageIndex: 6
+                    anchors.fill: parent
+                    active: false
+                    asynchronous: true
+                    opacity: 0
+                    enabled: false
+                    Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
+                    Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
+                    sourceComponent: LogViewerPage { anchors.fill: parent }
+                }
+                Loader {
+                    id: page7
+                    property int pageIndex: 7
+                    anchors.fill: parent
+                    active: false
+                    asynchronous: true
+                    opacity: 0
+                    enabled: false
+                    Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
+                    Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
+                    sourceComponent: FileManagerPage { anchors.fill: parent }
+                }
             }
         }
     }
@@ -274,77 +319,83 @@ ApplicationWindow {
         Repeater {
             model: window.navModel
             TabButton {
-                text: modelData.label
+                text: I18n.tr(modelData.labelKey)
                 font.pixelSize: 12
                 onClicked: window.navigateTo(index)
             }
         }
     }
 
-    // Bottom download progress panel
-    DownloadProgressButton {
-        id: downloadFab
-        anchors.left: parent.left
+    // Unified download status card (Minecraft/Java downloads + mod install tasks)
+    DownloadStatusPanel {
+        id: downloadPanel
         anchors.right: parent.right
         anchors.bottom: isCompact ? navBar.top : parent.bottom
-        anchors.leftMargin: isCompact ? 8 : 80
-        anchors.rightMargin: isCompact ? 8 : 24
-        anchors.bottomMargin: isCompact ? 8 : 24
+        anchors.rightMargin: 24
+        anchors.bottomMargin: 24
+        width: 400
         z: 100
     }
 
     // Kill Minecraft floating button
-    Rectangle {
+    Button {
         id: killBtn
         anchors.right: parent.right
-        anchors.bottom: downloadFab.top
+        anchors.bottom: downloadPanel.top
         anchors.rightMargin: 24
         anchors.bottomMargin: 8
-        width: 40; height: 40; radius: Theme.shapeFull
-        color: palette.highlight
+        width: 40; height: 40
         visible: mcRunning
         z: 101
+        focusPolicy: Qt.NoFocus
 
-        AppIcon {
+        onClicked: kernel.killAllMinecraft()
+        ToolTip.visible: hovered
+        ToolTip.delay: 500
+        ToolTip.text: "关闭所有正在运行的 Minecraft"
+
+        background: Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: palette.highlight
+            Rectangle {
+                anchors.fill: parent; radius: parent.radius
+                color: killBtn.down ? Qt.rgba(0,0,0,0.2) : (killBtn.hovered ? Qt.rgba(0,0,0,0.1) : "transparent")
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+        }
+
+        contentItem: AppIcon {
             anchors.centerIn: parent
             iconName: "power"
             iconSize: 20
-        }
-
-        Rectangle {
-            anchors.fill: parent; radius: parent.radius
-            color: killMa.pressed ? Qt.rgba(0,0,0,0.2) : (killMa.hovered ? Qt.rgba(0,0,0,0.1) : "transparent")
-            Behavior on color { ColorAnimation { duration: 150 } }
-        }
-
-        MouseArea {
-            id: killMa
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: kernel.killAllMinecraft()
-        }
-        ToolTip {
-            parent: killBtn
-            visible: killMa.hovered
-            delay: 500
-            text: "关闭所有正在运行的 Minecraft"
         }
     }
 
     property bool mcRunning: false
 
+    function refreshMcRunning() {
+        mcRunning = kernel.launchManager.running || kernel.isAnyMinecraftRunning()
+    }
+
     Timer {
         interval: 3000
-        running: true
+        running: kernel.launchManager.running || kernel.isAnyMinecraftRunning()
         repeat: true
-        onTriggered: mcRunning = kernel.isAnyMinecraftRunning()
+        onTriggered: refreshMcRunning()
+    }
+
+    Connections {
+        target: kernel.launchManager
+        function onRunningChanged() {
+            refreshMcRunning()
+        }
     }
 
     Connections {
         target: kernel
         function onMinecraftRunningChanged() {
-            mcRunning = kernel.isAnyMinecraftRunning()
+            refreshMcRunning()
         }
     }
 }

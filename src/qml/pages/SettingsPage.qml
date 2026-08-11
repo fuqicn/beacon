@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -9,7 +27,22 @@ Item {
     Component.onCompleted: {
         javaPathInput.text = kernel.settingsManager.value("java/path", "")
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
-        langCombo.currentIndex = kernel.settingsManager.value("language/index", 0)
+        dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 8)
+        langCombo.currentIndex = kernel.settingsManager.value("language/index", -1) + 1
+        var dlSource = kernel.settingsManager.value("download/source", "auto")
+        for (var i = 0; i < dlSourceCombo.model.length; ++i) {
+            if (dlSourceCombo.model[i].key === dlSource) {
+                dlSourceCombo.currentIndex = i
+                break
+            }
+        }
+        var isoPolicy = kernel.settingsManager.value("launch/isolationPolicy", "off")
+        for (var j = 0; j < isoPolicyCombo.model.length; ++j) {
+            if (isoPolicyCombo.model[j].key === isoPolicy) {
+                isoPolicyCombo.currentIndex = j
+                break
+            }
+        }
     }
 
     Flickable {
@@ -88,16 +121,155 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 12
-                        Text { text: "最大内存"; color: palette.placeholderText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("settings.memory") + " (MB)"; color: palette.placeholderText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         SpinBox {
                             id: memorySetting
                             from: 512; to: 65536; stepSize: 512
                             value: 4096
                             onValueChanged: kernel.settingsManager.setValue("java/memory", value)
+                            HoverHandler { id: memHintHover }
+                            ToolTip.visible: memHintHover.hovered
+                            ToolTip.delay: 500
+                            ToolTip.text: I18n.tr("settings.memoryHint")
                         }
-                        Text { text: "MB"; color: palette.placeholderText; font.pixelSize: 14 }
                     }
+            }
+
+            // Download settings
+            Text {
+                text: "下载"
+                font.pixelSize: 18; font.weight: Font.Medium
+                color: palette.text
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: dlInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: Qt.alpha(palette.placeholderText, 0.05)
+                RowLayout {
+                    id: dlInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+                    Text { text: I18n.tr("download.threads"); color: palette.placeholderText; font.pixelSize: 14 }
+                    Item { Layout.fillWidth: true }
+                    SpinBox {
+                        id: dlThreadsSetting
+                        from: 1; to: 64; stepSize: 1
+                        value: 32
+                        onValueChanged: {
+                            kernel.settingsManager.setValue("download/threads", value)
+                            kernel.setDownloadThreads(value)
+                        }
+                        HoverHandler { id: dlThreadsHover }
+                        ToolTip.visible: dlThreadsHover.hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: I18n.tr("download.parallelHint")
+                    }
+                }
+            }
+
+            // Download source
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: dlSourceInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: Qt.alpha(palette.placeholderText, 0.05)
+                RowLayout {
+                    id: dlSourceInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+                    Text { text: I18n.tr("download.source"); color: palette.placeholderText; font.pixelSize: 14 }
+                    Item { Layout.fillWidth: true }
+                    ComboBox {
+                        id: dlSourceCombo
+                        model: [
+                            { text: I18n.tr("download.source.auto"), key: "auto" },
+                            { text: I18n.tr("download.source.official"), key: "mojang" },
+                            { text: I18n.tr("download.source.bmclapi"), key: "bmclapi" },
+                            { text: I18n.tr("download.source.mcimirror"), key: "mcimirror" },
+                            { text: I18n.tr("download.source.mcbbs"), key: "mcbbs" }
+                        ]
+                        textRole: "text"
+                        valueRole: "key"
+                        onActivated: {
+                            kernel.settingsManager.setValue("download/source", currentValue)
+                            kernel.setDownloadSource(currentValue)
+                        }
+                        HoverHandler { id: dlSourceHover }
+                        ToolTip.visible: dlSourceHover.hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: I18n.tr("download.source.hint")
+                    }
+                }
+            }
+
+            // Version isolation (global default)
+            Text {
+                text: I18n.tr("settings.isolation")
+                font.pixelSize: 18; font.weight: Font.Medium
+                color: palette.text
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: isoInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                HoverHandler { id: isoHover }
+
+                RowLayout {
+                    id: isoInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: I18n.tr("settings.isolation")
+                            font.pixelSize: 14
+                            color: palette.text
+                        }
+                        Text {
+                            text: I18n.tr("settings.isolationDesc")
+                            font.pixelSize: 11
+                            color: palette.placeholderText
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            lineHeight: 1.35
+                        }
+                        Text {
+                            text: I18n.tr("settings.isolationHint")
+                            font.pixelSize: 11
+                            color: palette.placeholderText
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            lineHeight: 1.35
+                        }
+                    }
+
+                    ComboBox {
+                        id: isoPolicyCombo
+                        model: [
+                            { text: I18n.tr("settings.isolationOff"), key: "off" },
+                            { text: I18n.tr("settings.isolationLoader"), key: "loader" },
+                            { text: I18n.tr("settings.isolationAll"), key: "all" }
+                        ]
+                        textRole: "text"
+                        valueRole: "key"
+                        Layout.preferredWidth: 170
+                        onActivated: kernel.settingsManager.setValue("launch/isolationPolicy", currentValue)
+                        HoverHandler { id: isoPolicyHover }
+                        ToolTip.visible: isoPolicyHover.hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: I18n.tr("settings.isolationPolicyHint")
+                    }
+                }
             }
 
             // Theme settings
@@ -118,17 +290,12 @@ Item {
                     anchors.margins: 16
                     spacing: 12
                     Text {
-                        text: Theme.themeMode === "system" ? "主题（跟随系统）"
-                              : (Theme.darkMode ? "深色模式" : "浅色模式")
+                        text: Theme.themeMode === "system" ? I18n.tr("theme.system")
+                              : (Theme.darkMode ? I18n.tr("theme.dark") : I18n.tr("theme.light"))
                         color: palette.placeholderText
                         font.pixelSize: 14
                     }
                     Item { Layout.fillWidth: true }
-                    Text {
-                        text: "跟随系统"
-                        color: palette.placeholderText
-                        font.pixelSize: 13
-                    }
                     Switch {
                         id: themeFollowSwitch
                         checked: Theme.themeMode === "system"
@@ -138,6 +305,10 @@ Item {
                             else
                                 Theme.setThemeMode(Theme.darkMode ? "dark" : "light")
                         }
+                        HoverHandler { id: themeFollowHover }
+                        ToolTip.visible: themeFollowHover.hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: I18n.tr("theme.followSystem")
                     }
                     Rectangle {
                         width: 48; height: 28; radius: Theme.shapeLarge
@@ -235,22 +406,26 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 16
                     spacing: 12
-                    Text { text: "界面语言"; color: palette.placeholderText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("settings.language"); color: palette.placeholderText; font.pixelSize: 14 }
                     Item { Layout.fillWidth: true }
                     ComboBox {
                         id: langCombo
-                        model: ["中文", "English", "日本語", "Français"]
-                        Layout.preferredWidth: 120
+                        model: [I18n.tr("settings.language.followSystem"), "中文", "English", "日本語", "Français"]
+                        Layout.preferredWidth: 130
                         onCurrentIndexChanged: {
-                            kernel.settingsManager.setValue("language/index", currentIndex)
+                            kernel.settingsManager.setValue("language/index", currentIndex - 1)
                         }
+                        HoverHandler { id: langHover }
+                        ToolTip.visible: langHover.hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: I18n.tr("settings.languageNote")
                     }
                 }
             }
 
             // About
             Text {
-                text: "关于"
+                text: I18n.tr("settings.about")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }

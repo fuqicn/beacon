@@ -1,0 +1,28 @@
+[
+  {
+    "name": "bmclapi",
+    "base_url": "https://bmclapi2.bangbang93.com",
+    "rules": [
+      { "match": "libraries.minecraft.net", "prefix": "/maven" },
+      { "match": "resources.download.minecraft.net", "prefix": "/assets" },
+      { "match": "maven.fabricmc.net", "prefix": "/maven" },
+      { "match": "maven.minecraftforge.net", "prefix": "/maven" },
+      { "match": "maven.neoforged.net", "prefix": "/maven" },
+      { "match": "meta.fabricmc.net", "prefix": "/fabric-meta" },
+      { "match": "meta.quiltmc.org", "prefix": "/quilt-meta" }
+    ]
+  },
+  {
+    "name": "mcbbs",
+    "base_url": "https://download.mcbbs.net",
+    "rules": [
+      { "match": "libraries.minecraft.net", "prefix": "/maven" },
+      { "match": "maven.fabricmc.net", "prefix": "/maven" },
+      { "match": "maven.minecraftforge.net", "prefix": "/maven" },
+      { "match": "maven.neoforged.net", "prefix": "/maven" },
+      { "match": "resources.download.minecraft.net", "prefix": "/assets" },
+      { "match": "meta.fabricmc.net", "prefix": "/fabric-meta" },
+      { "match": "meta.quiltmc.org", "prefix": "/quilt-meta" }
+    ]
+  }
+]

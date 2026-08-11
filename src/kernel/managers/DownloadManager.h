@@ -1,8 +1,27 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #ifndef DOWNLOADMANAGER_H
 #define DOWNLOADMANAGER_H
 
 #include <QObject>
 #include <QThread>
+#include <QPointer>
 #include <QStringList>
 #include <QElapsedTimer>
 
@@ -30,6 +49,7 @@ public:
     int totalFiles() const { return m_totalFiles; }
     int completedFiles() const { return m_completedFiles; }
     double speedBytes() const { return m_speedBytes; }
+    QString lastDownloadDir() const { return m_lastDownloadDir; }
 
     Q_INVOKABLE void startDownload(const QString &versionId, const QString &dir);
     Q_INVOKABLE void downloadAll(const QString &versionId, const QString &dir,
@@ -68,9 +88,15 @@ private:
     int m_totalFiles = 0;
     int m_completedFiles = 0;
     double m_speedBytes = 0.0;
+    QString m_lastDownloadDir;
 
     QThread *m_workerThread = nullptr;
-    DownloadWorker *m_activeWorker = nullptr;
+    QPointer<DownloadWorker> m_activeWorker;
+    // True when *this* manager requested a global download cancellation.
+    // Used to pair mc_qt_download_set_cancel(true) with a matching false only
+    // after our worker actually finishes, so we never clear another module's
+    // in-flight cancellation (shared global cancel flag).
+    bool m_cancelPending = false;
 };
 
 #endif

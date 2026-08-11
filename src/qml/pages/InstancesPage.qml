@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,10 +29,22 @@ Item {
 
     FolderDialog {
         id: folderDialog
-        currentFolder: "file:///" + kernel.mcDir
+        currentFolder: "file:///" + (kernel.instanceManager.currentRootDir || kernel.mcDir)
         onAccepted: {
             if (selectedFolder)
-                kernel.instanceManager.addRootDir(selectedFolder)
+                kernel.instanceManager.addRootDir(selectedFolder.toString().replace(/^file:\/\//, ""))
+        }
+    }
+
+    FileDialog {
+        id: importDialog
+        title: "导入整合包(.mrpack)"
+        nameFilters: ["Modrinth 整合包(*.mrpack)", "所有文件(*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            var src = selectedFile.toString().replace(/^file:\/\//, "")
+            kernel.modpackManager.installFromFile(
+                src, kernel.instanceManager.currentRootDir)
         }
     }
 
@@ -29,14 +59,14 @@ Item {
             spacing: 12
 
             Button {
-                text: "\u2190  返回"
+                text: "\u2190  " + I18n.tr("back")
                 flat: true
                 font.weight: Font.Normal
                 onClicked: window.navigateToPage(0, "")
             }
 
             Text {
-                text: "实例管理"
+                text: I18n.tr("instanceManage")
                 font.pixelSize: 20
                 font.weight: Font.Bold
                 color: palette.text
@@ -55,9 +85,15 @@ Item {
             }
 
             Button {
-                text: "添加文件夹"
+                text: I18n.tr("instances.addFolder")
                 font.weight: Font.Normal
                 onClicked: folderDialog.open()
+            }
+
+            Button {
+                text: I18n.tr("instances.import")
+                font.weight: Font.Normal
+                onClicked: importDialog.open()
             }
         }
 
@@ -74,7 +110,7 @@ Item {
             spacing: 8
 
             Text {
-                text: "扫描目录:"
+                text: I18n.tr("instances.scanDirs")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -82,10 +118,13 @@ Item {
             Repeater {
                 model: kernel.instanceManager.rootDirs
                 delegate: Rectangle {
+                    id: dirChip
                     Layout.preferredWidth: rootDirText.implicitWidth + 24
                     Layout.preferredHeight: 28
                     radius: Theme.shapeLarge
-                    color: Qt.alpha(palette.highlight, 0.1)
+                    color: modelData === kernel.instanceManager.currentRootDir
+                           ? Qt.alpha(palette.highlight, 0.18)
+                           : Qt.alpha(palette.highlight, 0.1)
 
                     Row {
                         anchors.centerIn: parent
@@ -95,6 +134,7 @@ Item {
                             id: rootDirText
                             text: modelData.split("/").pop() || modelData
                             font.pixelSize: 12
+                            font.weight: modelData === kernel.instanceManager.currentRootDir ? Font.DemiBold : Font.Normal
                             color: palette.highlight
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -123,7 +163,8 @@ Item {
                         id: maDir
                         anchors.fill: parent
                         hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: kernel.instanceManager.setCurrentRootDir(modelData)
                     }
                 }
 
@@ -133,7 +174,7 @@ Item {
 
         // Instance count
         Text {
-            text: kernel.instanceManager.instances.length + " 个实例"
+            text: kernel.instanceManager.instances.length + " " + I18n.tr("instances.count")
             font.pixelSize: 13
             color: palette.placeholderText
         }
@@ -169,25 +210,27 @@ Item {
                     anchors.margins: 16
                     spacing: 16
 
-                    // Version type icon
+                    // Instance icon (real image; PCL-style block/loader icon or
+                    // a custom/modpack cover saved alongside the version)
                     Rectangle {
-                        width: 48; height: 48; radius: Theme.shapeMedium
-                        color: {
-                            var t = modelData.type || "release"
-                            if (t === "release") return Qt.alpha(palette.highlight, 0.15)
-                            if (t === "snapshot") return Qt.alpha("#FFA050", 0.15)
-                            return Qt.alpha(palette.placeholderText, 0.1)
-                        }
+                        Layout.preferredWidth: 48
+                        Layout.preferredHeight: 48
+                        radius: Theme.shapeMedium
+                        color: Qt.alpha(palette.placeholderText, 0.05)
+                        clip: true
 
-                        AppIcon {
-                            anchors.centerIn: parent
-                            iconName: {
-                                var t = modelData.type || "release"
-                                if (t === "release") return "play"
-                                if (t === "snapshot") return "star"
-                                return "xmark"
-                            }
-                            iconSize: 18
+                        Image {
+                            id: iconImg
+                            anchors.fill: parent
+                            source: modelData.customIcon
+                                    ? "file:///" + modelData.customIcon.replace(/\\/g, "/")
+                                    : "qrc:/icons/instances/" + (modelData.iconKey || "grass") + ".png"
+                            asynchronous: true
+                            fillMode: Image.PreserveAspectFit
+                            sourceSize.width: 48
+                            sourceSize.height: 48
+                            mipmap: true
+                            smooth: true
                         }
                     }
 
@@ -212,10 +255,11 @@ Item {
                             Text {
                                 text: {
                                     var t = modelData.type || "release"
-                                    if (t === "release") return "正式版"
-                                    if (t === "snapshot") return "快照"
-                                    if (t === "old_beta") return "旧测试版"
-                                    if (t === "old_alpha") return "旧版本"
+                                    var k = "type." + t
+                                    if (t === "release") return I18n.tr("type.release")
+                                    if (t === "snapshot") return I18n.tr("type.snapshot")
+                                    if (t === "old_beta") return I18n.tr("type.old_beta")
+                                    if (t === "old_alpha") return I18n.tr("type.old_alpha")
                                     return t
                                 }
                                 font.pixelSize: 12
@@ -257,7 +301,7 @@ Item {
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.RightButton) {
                             kernel.selectInstance(modelData.id, modelData.rootDir)
-                            window.navigateToPage(5, "实例设置")
+                            window.navigateToPage(5, "瀹炰緥璁剧疆")
                         } else {
                             kernel.selectInstance(modelData.id, modelData.rootDir)
                             window.navigateTo(0)
@@ -305,7 +349,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 kernel.selectInstance(modelData.id, modelData.rootDir)
-                                window.navigateToPage(5, "实例设置")
+                                window.navigateToPage(5, "瀹炰緥璁剧疆")
                             }
                         }
                     }
@@ -350,7 +394,7 @@ Item {
         // Empty state
         Text {
             Layout.fillWidth: true
-            text: "未找到实例\n请确保目录下存在 versions 文件夹且包含有效的版本 JSON"
+            text: I18n.tr("instances.empty")
             font.pixelSize: 14
             color: palette.placeholderText
             horizontalAlignment: Text.AlignHCenter
@@ -384,14 +428,14 @@ Item {
             spacing: 20
 
             Text {
-                text: "删除实例"
+                text: I18n.tr("instances.deleteTitle")
                 font.pixelSize: 20
                 font.weight: Font.Bold
                 color: palette.text
             }
 
             Text {
-                text: "确认删除 \"" + deleteConfirmPopup.instanceName + "\"？将永久删除版本文件夹的所有文件，此操作不可恢复。"
+                text: I18n.tr("instances.deleteConfirm").replace("%1", deleteConfirmPopup.instanceName)
                 font.pixelSize: 13
                 color: palette.placeholderText
                 wrapMode: Text.WordWrap
@@ -405,18 +449,92 @@ Item {
                 Layout.alignment: Qt.AlignRight
 
                 Button {
-                    text: "取消"
+                    text: I18n.tr("cancel")
                     font.weight: Font.Normal
                     onClicked: deleteConfirmPopup.close()
                 }
 
                 Button {
-                    text: "删除"
+                    text: I18n.tr("delete")
                     font.weight: Font.Normal
                     highlighted: true
                     onClicked: {
                         kernel.instanceManager.removeInstance(deleteConfirmPopup.instanceId)
                         deleteConfirmPopup.close()
+                    }
+                }
+            }
+        }
+    }
+
+    // Name input dialog (copy / rename)
+    Popup {
+        id: namePopup
+
+        property string instanceId: ""
+        property string titleText: ""
+        property string okText: ""
+        property string action: "copy"
+
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: Math.min(parent.width - 64, 420)
+        padding: 24
+
+        onOpened: nameField.forceActiveFocus()
+
+        background: Rectangle {
+            radius: Theme.shapeLarge
+            color: palette.window
+            border.color: palette.mid
+            border.width: 1
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 20
+
+            Text {
+                text: namePopup.titleText
+                font.pixelSize: 20
+                font.weight: Font.Bold
+                color: palette.text
+            }
+
+            TextField {
+                id: nameField
+                Layout.fillWidth: true
+                placeholderText: I18n.tr("instances.newName")
+                selectByMouse: true
+                onAccepted: nameOkButton.clicked()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                Layout.alignment: Qt.AlignRight
+
+                Button {
+                    text: I18n.tr("cancel")
+                    font.weight: Font.Normal
+                    onClicked: namePopup.close()
+                }
+
+                Button {
+                    id: nameOkButton
+                    text: namePopup.okText
+                    font.weight: Font.Normal
+                    highlighted: true
+                    onClicked: {
+                        var newName = nameField.text.trim()
+                        if (newName.length === 0) return
+                        if (namePopup.action === "copy")
+                            kernel.instanceManager.copyInstance(namePopup.instanceId, newName)
+                        else
+                            kernel.instanceManager.renameInstance(namePopup.instanceId, newName)
+                        namePopup.close()
                     }
                 }
             }

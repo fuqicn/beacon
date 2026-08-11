@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #include "DownloadWorker.h"
 #include <mc_log.h>
 #include <mc_path.h>
@@ -21,26 +39,6 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
-
-// PCLCE-style download: try BMCLAPI first, then official URL, with up to 3 retry attempts and random delay
-static bool mc_download_pclce(const char *url, const char *path, const char *sha1, long size, int timeout) {
-    char mirrorUrl[2048];
-    const char *urls[2];
-    QByteArray mirrorBuf;
-    if (mc_download_translate_mojang_url(url, mirrorUrl, sizeof(mirrorUrl), "bmclapi") && mirrorUrl[0]) {
-        mirrorBuf = QByteArray(mirrorUrl);
-        urls[0] = mirrorBuf.constData();
-    } else {
-        urls[0] = url;
-    }
-    urls[1] = url;
-    bool ok = false;
-    for (int r = 0; r < 3 && !ok; ++r) {
-        QThread::msleep(200 + (std::rand() % (100 + r * 200)));
-        ok = mc_qt_download_file_multi(urls, 2, path, sha1, size, timeout);
-    }
-    return ok;
-}
 
 DownloadWorker::DownloadWorker(const QString &versionId, const QString &dir)
     : QObject(nullptr), m_versionId(versionId), m_dir(dir)
@@ -78,99 +76,92 @@ void DownloadWorker::translateUrl(const char *origUrl, char *out, size_t outSize
 }
 
 int DownloadWorker::batchDownloadWithRetry(QStringList &urls, QStringList &paths,
-                                            QStringList &sha1s, int timeoutMs,
-                                            QStringList *fallbackUrls)
+                                            QStringList &sha1s, QList<long> &sizes,
+                                            int timeoutMs, QStringList *fallbackUrls)
 {
-    const int maxRetries = 3;
     const int chunkSize = 512;
-    QStringList pendingUrls = urls;
-    QStringList pendingPaths = paths;
-    QStringList pendingSha1s = sha1s;
-    QStringList pendingOrig = fallbackUrls ? *fallbackUrls : urls;
+    int count = urls.size();
 
-    m_totalFiles += pendingUrls.size();
+    m_totalFiles += count;
     emit totalFilesChanged(m_totalFiles);
     m_lastEmit.start();
 
-    mc_info("[DL-W]   batchDownloadWithRetry: maxRetries=%d chunkSize=%d total=%d",
-            maxRetries, chunkSize, pendingUrls.size());
-    for (int attempt = 1; attempt <= maxRetries; ++attempt) {
-        if (m_cancelled) return pendingUrls.size();
-        int count = pendingUrls.size();
-        if (count == 0) break;
-        mc_info("[DL-W]   Attempt %d/%d: %d remaining", attempt, maxRetries, count);
+    mc_info("[DL-W]   batchDownloadWithRetry: chunkSize=%d total=%d",
+            chunkSize, count);
 
-        QStringList failUrls, failPaths, failSha1s, failOrig;
-        int chunkStart = 0;
-        while (chunkStart < count) {
-            if (m_cancelled) return pendingUrls.size();
-            int chunkEnd = std::min(chunkStart + chunkSize, count);
-            int chunkCount = chunkEnd - chunkStart;
+    // Single pass: every file carries its own ordered sources
+    // ([mirror, official]) so a failed source only affects that file.
+    int failures = 0;
+    int chunkStart = 0;
+    while (chunkStart < count) {
+        if (m_cancelled) return count - chunkStart;
+        int chunkEnd = std::min(chunkStart + chunkSize, count);
+        int chunkCount = chunkEnd - chunkStart;
 
-            setSubTask(attempt == 1
-                ? QString("Downloading %1-%2/%3").arg(chunkStart + 1).arg(chunkEnd).arg(count)
-                : QString("Retrying %1-%2/%3").arg(chunkStart + 1).arg(chunkEnd).arg(count));
+        setSubTask(QString("Downloading %1-%2/%3")
+                       .arg(chunkStart + 1).arg(chunkEnd).arg(count));
 
-            for (int i = chunkStart; i < chunkEnd; ++i) {
-                char dir[1024];
-                mc_path_dirname(pendingPaths[i].toUtf8().constData(), dir, sizeof(dir));
-                mc_path_mkdir_p(dir);
-            }
-
-            std::vector<const char *> cUrls, cPaths, cSha1s;
-            std::vector<QByteArray> urlBa, pathBa, sha1Ba;
-            urlBa.reserve(chunkCount); pathBa.reserve(chunkCount); sha1Ba.reserve(chunkCount);
-            cUrls.reserve(chunkCount); cPaths.reserve(chunkCount); cSha1s.reserve(chunkCount);
-
-            for (int i = chunkStart; i < chunkEnd; ++i) {
-                const QString &useUrl = (attempt == 1) ? pendingUrls[i] : pendingOrig[i];
-                urlBa.push_back(useUrl.toUtf8());
-                pathBa.push_back(pendingPaths[i].toUtf8());
-                cUrls.push_back(urlBa[i - chunkStart].constData());
-                cPaths.push_back(pathBa[i - chunkStart].constData());
-                if (pendingSha1s[i].isEmpty()) {
-                    sha1Ba.push_back(QByteArray());
-                    cSha1s.push_back(nullptr);
-                } else {
-                    sha1Ba.push_back(pendingSha1s[i].toUtf8());
-                    cSha1s.push_back(sha1Ba[i - chunkStart].constData());
-                }
-            }
-
-            std::vector<long> sizes(chunkCount, 0);
-            std::vector<int> results(chunkCount, 0);
-            mc_info("[DL-W]   Chunk %d-%d/%d (tm=%d)...", chunkStart + 1, chunkEnd, count, timeoutMs);
-            mc_qt_download_batch(cUrls.data(), cPaths.data(), cSha1s.data(),
-                                 sizes.data(), chunkCount, timeoutMs, results.data());
-
-            for (int i = chunkStart; i < chunkEnd; ++i) {
-                if (results[i - chunkStart]) {
-                    m_completedFiles++;
-                } else {
-                    failUrls << pendingUrls[i];
-                    failPaths << pendingPaths[i];
-                    failSha1s << pendingSha1s[i];
-                    failOrig << pendingOrig[i];
-                    m_totalFiles--;
-                }
-            }
-            updateSpeed();
-            chunkStart = chunkEnd;
+        for (int i = chunkStart; i < chunkEnd; ++i) {
+            char dir[1024];
+            mc_path_dirname(paths[i].toUtf8().constData(), dir, sizeof(dir));
+            mc_path_mkdir_p(dir);
         }
 
-        if (failUrls.isEmpty()) break;
-        mc_info("[DL-W]   Attempt %d: %d/%d ok, %d left", attempt, count - failUrls.size(), count, failUrls.size());
+        std::vector<std::vector<QByteArray>> srcBa(chunkCount);
+        std::vector<std::vector<const char *>> srcLists(chunkCount);
+        std::vector<QByteArray> pathBa, sha1Ba;
+        pathBa.reserve(chunkCount); sha1Ba.reserve(chunkCount);
+        std::vector<McQtBatchItem> items;
+        items.reserve(chunkCount);
 
-        pendingUrls = failUrls;
-        pendingPaths = failPaths;
-        pendingSha1s = failSha1s;
-        pendingOrig = failOrig;
+        for (int i = chunkStart; i < chunkEnd; ++i) {
+            int k = i - chunkStart;
+            pathBa.push_back(paths[i].toUtf8());
+
+            auto &sb = srcBa[k];
+            if (fallbackUrls && i < fallbackUrls->size() &&
+                !fallbackUrls->at(i).isEmpty() && fallbackUrls->at(i) != urls[i])
+                sb.push_back(fallbackUrls->at(i).toUtf8());
+            sb.push_back(urls[i].toUtf8());
+            auto &sl = srcLists[k];
+            sl.reserve(sb.size());
+            for (const auto &b : sb) sl.push_back(b.constData());
+
+            const char *sha = nullptr;
+            if (!sha1s[i].isEmpty()) {
+                sha1Ba.push_back(sha1s[i].toUtf8());
+                sha = sha1Ba.back().constData();
+            }
+
+            McQtBatchItem it{};
+            it.urls = sl.data();
+            it.url_count = (int)sl.size();
+            it.path = pathBa.back().constData();
+            it.sha1 = sha;
+            it.size = (i < sizes.size()) ? sizes[i] : 0;
+            items.push_back(it);
+        }
+
+        std::vector<int> results(chunkCount, 0);
+        mc_info("[DL-W]   Chunk %d-%d/%d (tm=%d)...", chunkStart + 1, chunkEnd, count, timeoutMs);
+        mc_qt_download_batch_ex(items.data(), chunkCount, timeoutMs, results.data());
+
+        for (int i = chunkStart; i < chunkEnd; ++i) {
+            if (results[i - chunkStart]) {
+                m_completedFiles++;
+                m_bytesDone += items[i - chunkStart].size;
+            } else {
+                m_totalFiles--;
+                failures++;
+            }
+        }
+        updateSpeed();
+        emit completedFilesChanged(m_completedFiles);
+        emit totalFilesChanged(m_totalFiles);
+        chunkStart = chunkEnd;
     }
 
-    // Final flush
-    emit completedFilesChanged(m_completedFiles);
-    emit totalFilesChanged(m_totalFiles);
-    return pendingUrls.size();
+    return failures;
 }
 
 void DownloadWorker::emitProgress()
@@ -186,9 +177,9 @@ void DownloadWorker::updateSpeed()
 {
     qint64 elapsed = m_speedTimer.elapsed();
     if (elapsed > 500) {
-        int newBytes = m_completedFiles * 1024 * 100;
-        m_speedBytes = (double)(newBytes - m_lastBytes) / (elapsed / 1000.0);
-        m_lastBytes = newBytes;
+        double secs = elapsed / 1000.0;
+        m_speedBytes = (double)(m_bytesDone - m_lastBytes) / secs;
+        m_lastBytes = m_bytesDone;
         m_speedTimer.restart();
         emit speedBytesChanged(m_speedBytes);
         emitProgress();
@@ -205,6 +196,7 @@ void DownloadWorker::run()
     m_speedBytes = 0.0;
     m_speedTimer.start();
     m_lastBytes = 0;
+    m_bytesDone = 0;
 
     mc_version_init(&m_ver);
     m_verOwned = false;
@@ -220,7 +212,7 @@ void DownloadWorker::doStartDownload()
 
     m_attemptCount++;
     if (m_attemptCount <= MaxAttempts)
-        m_mirror = "bmclapi";
+        m_mirror = QString::fromUtf8(mc_download_effective_mirror());
     else {
         finish(false);
         return;
@@ -303,7 +295,7 @@ void DownloadWorker::stepDownloadAll()
             dlOriginalUrls << QString::fromUtf8(m_ver.client_url);
             dlPaths << QString::fromUtf8(m_verJar);
             dlSha1s << QString::fromUtf8(m_ver.client_sha1);
-            dlSizes << 0;
+            dlSizes << m_ver.client_size;
         }
     }
 
@@ -356,7 +348,7 @@ void DownloadWorker::stepDownloadAll()
                     dlUrls << QString::fromUtf8(nativeUrl);
                     dlOriginalUrls << QString::fromUtf8(lib.classifier_url);
                     dlSha1s << QString::fromUtf8(lib.classifier_sha1);
-                    dlSizes << 0;
+                    dlSizes << lib.classifier_size;
                 } else {
                     okCount++;
                 }
@@ -464,7 +456,7 @@ void DownloadWorker::stepDownloadAll()
                             dlUrls << QString::fromUtf8(nativeUrl);
                             dlOriginalUrls << QString::fromUtf8(plib.classifier_url);
                             dlSha1s << QString::fromUtf8(plib.classifier_sha1);
-                            dlSizes << 0;
+                            dlSizes << plib.classifier_size;
                         } else {
                             okCount++;
                         }
@@ -517,7 +509,9 @@ void DownloadWorker::stepDownloadAll()
                 continue;
             }
 
-            dlUrls << QString::fromUtf8(objUrl);
+            char mirrorUrl[2048];
+            translateUrl(objUrl, mirrorUrl, sizeof(mirrorUrl));
+            dlUrls << QString::fromUtf8(mirrorUrl[0] ? mirrorUrl : objUrl);
             dlOriginalUrls << QString::fromUtf8(objUrl);
             dlPaths << QString::fromUtf8(objPath);
             dlSha1s << QString::fromUtf8(obj.hash);
@@ -534,7 +528,12 @@ void DownloadWorker::stepDownloadAll()
     // ── 5. Download everything in one batch ────────────────────
     if (!dlPaths.isEmpty()) {
         setProgress(0.5, "Downloading libraries & assets...");
-        batchDownloadWithRetry(dlUrls, dlPaths, dlSha1s, 30000, &dlOriginalUrls);
+        int failed = batchDownloadWithRetry(dlUrls, dlPaths, dlSha1s, dlSizes, 30000, &dlOriginalUrls);
+        if (failed > 0) {
+            mc_info("[DL-W]   %d/%d files failed to download", failed, dlPaths.size());
+            retryOrFinish(false);
+            return;
+        }
     }
 
     // ── 6. Logging config ──────────────────────────────────────
@@ -573,7 +572,18 @@ void DownloadWorker::stepDownloadLogging()
     translateUrl(m_ver.logging_client_url, url, sizeof(url));
     mc_info("[DL-W] Step 5: Download logging config");
 
-    int ok = mc_download_pclce(m_ver.logging_client_url, logPath, m_ver.logging_client_sha1, 0, 30000);
+    const char *srcs[2];
+    QByteArray mirrorBuf(url);
+    srcs[0] = mirrorBuf.constData();
+    srcs[1] = m_ver.logging_client_url;
+    McQtBatchItem item{};
+    item.urls = srcs;
+    item.url_count = (mc_stricmp(url, m_ver.logging_client_url) == 0) ? 1 : 2;
+    item.path = logPath;
+    item.sha1 = m_ver.logging_client_sha1[0] ? m_ver.logging_client_sha1 : nullptr;
+    item.size = 0;
+    int ok = 0;
+    mc_qt_download_batch_ex(&item, 1, 30000, &ok);
     mc_info("[DL-W]   result=%d", ok);
 
     if (ok) {
@@ -587,6 +597,10 @@ void DownloadWorker::stepDownloadLogging()
 void DownloadWorker::retryOrFinish(bool ok)
 {
     mc_info("[DL-W] retryOrFinish: ok=%d attempt=%d/%d", ok, m_attemptCount, MaxAttempts);
+    if (m_cancelled) {
+        finish(false);
+        return;
+    }
     if (!ok && m_attemptCount < MaxAttempts) {
         if (m_verOwned) {
             mc_version_free(&m_ver);

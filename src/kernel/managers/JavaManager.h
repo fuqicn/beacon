@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #ifndef JAVAMANAGER_H
 #define JAVAMANAGER_H
 
@@ -6,6 +24,8 @@
 #include <QVariantMap>
 #include <mc_java.h>
 #include <mc_java_dl.h>
+
+class QThread;
 
 class JavaManager : public QObject
 {
@@ -38,12 +58,12 @@ signals:
 
 private:
     void doFindJava();
-    void doDownloadJava(int majorVersion);
     void addBundledJava();
 
     QVariantList m_runtimes;
     bool m_searching = false;
     QString m_runtimeDir;
+    QThread *m_workerThread = nullptr;
 };
 
 #endif

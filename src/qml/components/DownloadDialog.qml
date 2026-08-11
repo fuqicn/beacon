@@ -1,16 +1,49 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Popup {
     id: root
 
     property string versionId: ""
     property string versionType: ""
+    property string downloadDir: ""
 
     // True while downloading post-install files (libraries + assets)
     property bool postInstallDownload: false
     property string installedLoaderVersionId: ""
+
+    onOpened: {
+        root.downloadDir = kernel.instanceManager.currentRootDir || kernel.mcDir
+    }
+
+    FolderDialog {
+        id: dirDialog
+        currentFolder: "file:///" + (root.downloadDir || kernel.mcDir)
+        onAccepted: {
+            if (selectedFolder)
+                root.downloadDir = selectedFolder.toString().replace(/^file:\/\//, "")
+        }
+    }
 
     modal: true
     focus: true
@@ -48,6 +81,33 @@ Popup {
             font.pixelSize: 13
             color: palette.placeholderText
             visible: text !== "" && !postInstallDownload
+        }
+
+        // Download directory picker
+        RowLayout {
+            spacing: 12
+            visible: !postInstallDownload
+
+            Text {
+                text: "下载目录"
+                font.pixelSize: 14
+                color: palette.placeholderText
+            }
+
+            Text {
+                id: downloadDirText
+                text: root.downloadDir
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+                font.pixelSize: 13
+                color: palette.text
+            }
+
+            Button {
+                text: "选择..."
+                font.weight: Font.Normal
+                onClicked: dirDialog.open()
+            }
         }
 
         // Install mode UI (loader selection)
@@ -239,7 +299,7 @@ Popup {
                 onClicked: {
                     var loader = loaderCombo.model.get(loaderCombo.currentIndex).loader
                     if (loader === "") {
-                        kernel.downloadManager.startDownload(root.versionId, kernel.mcDir)
+                        kernel.downloadManager.startDownload(root.versionId, root.downloadDir)
                         root.close()
                     } else {
                         var lver = ""
@@ -249,7 +309,7 @@ Popup {
                         cancelBtn.enabled = false
                         installSpinner.visible = true
                         installStatus.text = "正在安装 " + loader + "..."
-                        kernel.installManager.installLoader(root.versionId, loader, lver, "", kernel.mcDir)
+                        kernel.installManager.installLoader(root.versionId, loader, lver, "", root.downloadDir)
                     }
                 }
             }
@@ -279,7 +339,7 @@ Popup {
             cancelBtn.enabled = true
             root.installedLoaderVersionId = versionId
             root.postInstallDownload = true
-            kernel.downloadManager.startDownload(versionId, kernel.mcDir)
+            kernel.downloadManager.startDownload(versionId, root.downloadDir)
         }
         function onErrorOccurred(msg) {
             installStatus.text = "错误: " + msg
@@ -298,6 +358,9 @@ Popup {
     Connections {
         target: kernel.downloadManager
         function onAllCompleted(success) {
+            // Register the download target as an instance root and refresh the list
+            if (root.downloadDir.length > 0)
+                kernel.instanceManager.addRootDir(root.downloadDir)
             if (root.postInstallDownload) {
                 if (success)
                     installStatus.text = "下载完成"

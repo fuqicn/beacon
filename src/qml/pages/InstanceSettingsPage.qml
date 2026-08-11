@@ -1,6 +1,25 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "../components"
 
 Item {
@@ -8,19 +27,72 @@ Item {
 
     property string instanceId: ""
     property var instanceData: ({})
+    property var installedMods: []
+    property string gameDir: ""
+    readonly property bool isWindows: (Qt.platform.os === "windows")
+
+    function formatBytes(n) {
+        if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MB"
+        if (n >= 1024) return (n / 1024).toFixed(1) + " KB"
+        return n + " B"
+    }
+
+    function readInstanceSetting(key, def) {
+        if (!instanceId) return def
+        kernel.settingsManager.setInstance(instanceId)
+        var v = kernel.settingsManager.value(key, def)
+        kernel.settingsManager.endInstance()
+        return v
+    }
+
+    function writeInstanceSetting(key, val) {
+        if (!instanceId) return
+        kernel.settingsManager.setInstance(instanceId)
+        kernel.settingsManager.setValue(key, val)
+        kernel.settingsManager.endInstance()
+    }
+
+    function reloadMods() {
+        if (gameDir)
+            installedMods = kernel.modManager.listInstalledMods(gameDir)
+        else
+            installedMods = []
+    }
 
     function loadInstance() {
         var sel = kernel.instanceManager.getSelectedInstance()
         if (sel && sel.id) {
             instanceId = sel.id
             instanceData = sel
+            gameDir = kernel.gameDirFor(sel.rootDir, sel.id)
+            reloadMods()
+            updateIsolationUI()
         }
+    }
+
+    function updateIsolationUI() {
+        if (!instanceId) return
+        var hasOverride = root.readInstanceSetting("launch/isolationOverride", false)
+        var eff = kernel.instanceIsolationEffective(root.instanceData.rootDir, instanceId)
+        if (hasOverride)
+            isoCombo.currentIndex = root.readInstanceSetting("launch/isolation", false) ? 1 : 2
+        else
+            isoCombo.currentIndex = 0
+        isoEffText.text = eff ? I18n.tr("instances.isolationEffOn") : I18n.tr("instances.isolationEffOff")
+        isoDirText.text = eff && gameDir ? gameDir : ""
     }
 
     Component.onCompleted: loadInstance()
     Connections {
         target: kernel.instanceManager
         function onSelectedChanged() { loadInstance() }
+    }
+    Connections {
+        target: kernel.modManager
+        function onInstallCompleted(success, path) {
+            if (success)
+                root.reloadMods()
+        }
     }
 
     Flickable {
@@ -65,38 +137,79 @@ Item {
                 opacity: 0.3
             }
 
-            // Version isolation toggle
+            // Version isolation (per-instance override)
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: inner.implicitHeight + 32
+                implicitHeight: isoInner.implicitHeight + 32
                 radius: Theme.shapeMedium
                 color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
                 HoverHandler { id: isoHover }
 
-                RowLayout {
-                    id: inner
+                ColumnLayout {
+                    id: isoInner
                     anchors.fill: parent
                     anchors.margins: 16
-                    spacing: 12
+                    spacing: 10
 
-                    ColumnLayout {
-                        spacing: 2
-                        Text {
-                            text: "版本隔离"
-                            font.pixelSize: 14
-                            color: palette.text
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: I18n.tr("instances.isolation")
+                                font.pixelSize: 14
+                                color: palette.text
+                            }
+                            Text {
+                                text: I18n.tr("instances.isolationDesc")
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                                lineHeight: 1.35
+                            }
                         }
-                        Text {
-                            text: "独立运行配置，互不干扰"
-                            font.pixelSize: 11
-                            color: palette.placeholderText
+
+                        ComboBox {
+                            id: isoCombo
+                            model: [
+                                { text: I18n.tr("instances.isolationFollow"), value: -1 },
+                                { text: I18n.tr("instances.isolationOn"), value: 1 },
+                                { text: I18n.tr("instances.isolationOff"), value: 0 }
+                            ]
+                            textRole: "text"
+                            valueRole: "value"
+                            Layout.preferredWidth: 150
+                            onActivated: {
+                                var v = currentValue
+                                var override = (v !== -1)
+                                root.writeInstanceSetting("launch/isolationOverride", override)
+                                root.writeInstanceSetting("launch/isolation", v === 1)
+                                kernel.setInstanceIsolation(root.instanceId, override, v === 1)
+                                root.gameDir = kernel.gameDirFor(root.instanceData.rootDir, root.instanceId)
+                                root.reloadMods()
+                                root.updateIsolationUI()
+                            }
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
-
-                    Switch {
-                        checked: false
+                    Text {
+                        id: isoEffText
+                        font.pixelSize: 11
+                        color: palette.highlight
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        id: isoDirText
+                        font.pixelSize: 11
+                        color: palette.placeholderText
+                        wrapMode: Text.ElideLeft
+                        Layout.fillWidth: true
+                        visible: text !== ""
                     }
                 }
             }
@@ -137,16 +250,206 @@ Item {
 
                         Switch {
                             id: jvmSwitch
-                            checked: false
+                            checked: root.readInstanceSetting("launch/jvmArgsEnabled", false)
+                            onToggled: root.writeInstanceSetting("launch/jvmArgsEnabled", checked)
                         }
                     }
 
                     TextField {
+                        id: jvmField
                         Layout.fillWidth: true
                         visible: jvmSwitch.checked
+                        text: root.readInstanceSetting("launch/jvmArgs", "")
                         placeholderText: "-Xmx2G -XX:+UseG1GC"
                         font.family: "Consolas, monospace"
                         font.pixelSize: 13
+                        onEditingFinished: root.writeInstanceSetting("launch/jvmArgs", text)
+                    }
+                }
+            }
+
+            // Memory
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: memInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: memHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                HoverHandler { id: memHover }
+
+                RowLayout {
+                    id: memInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    ColumnLayout {
+                        spacing: 2
+                        Text {
+                            text: "内存分配"
+                            font.pixelSize: 14
+                            color: palette.text
+                        }
+                        Text {
+                            text: "分配的内存大小（0 = 使用默认值）"
+                            font.pixelSize: 11
+                            color: palette.placeholderText
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    SpinBox {
+                        id: memSpin
+                        from: 0; to: 32768; stepSize: 256
+                        editable: true
+                        value: root.readInstanceSetting("launch/memory", 0)
+                        onValueModified: root.writeInstanceSetting("launch/memory", value)
+                        textFromValue: function(v, locale) { return v === 0 ? "默认" : v + " MB" }
+                        valueFromText: function(t, locale) {
+                            var n = parseInt(t)
+                            return isNaN(n) ? 0 : n
+                        }
+                    }
+                }
+            }
+
+            // Resolution + fullscreen
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: resInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: resHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                HoverHandler { id: resHover }
+
+                ColumnLayout {
+                    id: resInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        ColumnLayout {
+                            spacing: 2
+                            Text {
+                                text: "分辨率"
+                                font.pixelSize: 14
+                                color: palette.text
+                            }
+                            Text {
+                                text: "窗口大小（0 = 跟随当前窗口/系统默认）"
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        SpinBox {
+                            id: resWSpin
+                            from: 0; to: 7680; stepSize: 16
+                            editable: true
+                            value: root.readInstanceSetting("launch/resolutionW", 0)
+                            onValueModified: root.writeInstanceSetting("launch/resolutionW", value)
+                            textFromValue: function(v, locale) { return v === 0 ? "宽:默认" : "宽:" + v }
+                            valueFromText: function(t, locale) { var n = parseInt(t); return isNaN(n) ? 0 : n }
+                        }
+
+                        SpinBox {
+                            id: resHSpin
+                            from: 0; to: 4320; stepSize: 16
+                            editable: true
+                            value: root.readInstanceSetting("launch/resolutionH", 0)
+                            onValueModified: root.writeInstanceSetting("launch/resolutionH", value)
+                            textFromValue: function(v, locale) { return v === 0 ? "高:默认" : "高:" + v }
+                            valueFromText: function(t, locale) { var n = parseInt(t); return isNaN(n) ? 0 : n }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "全屏启动"
+                                font.pixelSize: 14
+                                color: palette.text
+                            }
+                            Text {
+                                text: "以全屏模式启动游戏"
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Switch {
+                            id: fsSwitch
+                            checked: root.readInstanceSetting("launch/fullscreen", false)
+                            onToggled: root.writeInstanceSetting("launch/fullscreen", checked)
+                        }
+                    }
+                }
+            }
+
+            // Java path
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: javaInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: javaHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                HoverHandler { id: javaHover }
+
+                ColumnLayout {
+                    id: javaInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "自定义 Java"
+                                font.pixelSize: 14
+                                color: palette.text
+                            }
+                            Text {
+                                text: "留空 = 自动检测"
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        TextField {
+                            id: javaField
+                            Layout.fillWidth: true
+                            text: root.readInstanceSetting("launch/javaPath", "")
+                            placeholderText: root.isWindows ? "javaw.exe 路径" : "java 路径"
+                            font.pixelSize: 12
+                            onEditingFinished: root.writeInstanceSetting("launch/javaPath", text)
+                        }
+
+                        Button {
+                            text: "选择"
+                            font.weight: Font.Normal
+                            onClicked: javaFileDialog.open()
+                        }
                     }
                 }
             }
@@ -216,7 +519,7 @@ Item {
                             color: palette.text
                         }
                         Text {
-                            text: (instanceData.rootDir || "") + "/saves"
+                            text: (gameDir || "") + "/saves"
                             font.pixelSize: 11
                             color: palette.placeholderText
                             elide: Text.ElideLeft
@@ -228,8 +531,107 @@ Item {
                         text: "打开"
                         font.weight: Font.Normal
                         onClicked: {
-                            if (instanceData.rootDir)
-                                Qt.openUrlExternally("file:///" + instanceData.rootDir.replace(/\\/g, "/") + "/saves")
+                            if (gameDir)
+                                Qt.openUrlExternally("file:///" + gameDir.replace(/\\/g, "/") + "/saves")
+                        }
+                    }
+                }
+            }
+
+            // Installed mods
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: modsCol.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: modsHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                HoverHandler { id: modsHover }
+
+                ColumnLayout {
+                    id: modsCol
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "已安装模组"
+                                font.pixelSize: 14
+                                color: palette.text
+                            }
+                            Text {
+                                text: installedMods.length === 0 ? "尚未安装任何模组" : "共 " + installedMods.length + " 个模组"
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: "打开文件夹"
+                            font.weight: Font.Normal
+                            onClicked: {
+                                if (gameDir)
+                                    kernel.modManager.openModsFolder(gameDir)
+                            }
+                        }
+                    }
+
+                    ListView {
+                        id: installedModsList
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(installedMods.length, 4) * 42
+                        spacing: 4
+                        clip: true
+                        model: installedMods
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                            width: 8
+                        }
+
+                        delegate: Rectangle {
+                            width: installedModsList.width
+                            height: 38
+                            radius: Theme.shapeSmall
+                            color: Qt.alpha(palette.placeholderText, 0.05)
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.fileName || ""
+                                    font.pixelSize: 12
+                                    color: palette.text
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    text: formatBytes(modelData.size || 0)
+                                    font.pixelSize: 10
+                                    color: palette.placeholderText
+                                }
+
+                                Button {
+                                    text: "删除"
+                                    font.weight: Font.Normal
+                                    flat: true
+                                    onClicked: {
+                                        if (gameDir && modelData.fileName)
+                                            kernel.modManager.removeMod(gameDir, modelData.fileName)
+                                        reloadMods()
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -348,6 +750,21 @@ Item {
         ScrollBar.vertical: ScrollBar {
             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
             width: 8
+        }
+    }
+
+    // Java executable picker
+    FileDialog {
+        id: javaFileDialog
+        title: "选择 Java 可执行文件"
+        nameFilters: root.isWindows
+                   ? ["Java 可执行文件 (*.exe)", "所有文件 (*)"]
+                   : ["Java 可执行文件 (*)", "所有文件 (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            var p = selectedFile.toString().replace(/^file:\/\//, "")
+            javaField.text = p
+            root.writeInstanceSetting("launch/javaPath", p)
         }
     }
 }

@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -21,7 +39,7 @@ Item {
             spacing: 16
 
             Text {
-                text: "工具"
+                text: I18n.tr("tools")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -32,14 +50,25 @@ Item {
 
                 Repeater {
                 model: [
-                    { name: "Mod 搜索", desc: "在 Modrinth 上搜索 Mod", icon: "magnifying-glass" },
-                    { name: "Java 管理", desc: "扫描并下载 Java 运行时", icon: "coffee" },
-                    { name: "文件管理", desc: "浏览 .minecraft 目录", icon: "folder" },
-                    { name: "日志查看", desc: "查看启动日志", icon: "file-lines" }
+                    { name: I18n.tr("tools.modSearch"), desc: I18n.tr("tools.modSearchDesc"), icon: "magnifying-glass", page: 1, sub: "" },
+                    { name: I18n.tr("tools.javaManage"), desc: I18n.tr("tools.javaManageDesc"), icon: "coffee", page: 1, sub: "" },
+                    { name: I18n.tr("tools.fileManage"), desc: I18n.tr("tools.fileManageDesc"), icon: "folder", page: 7, sub: "文件管理" },
+                    { name: I18n.tr("tools.logView"), desc: I18n.tr("tools.logViewDesc"), icon: "file-lines", page: 6, sub: "日志查看" }
                 ]
 
                 Frame {
                     width: 220; height: 120
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (modelData.page === 1)
+                                window.navigateTo(1)
+                            else
+                                window.navigateToPage(modelData.page, modelData.sub)
+                        }
+                    }
 
                     Column {
                         anchors.fill: parent
@@ -72,7 +101,7 @@ Item {
 
             // Download Java section
             Text {
-                text: "下载 Java"
+                text: I18n.tr("java.download")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
                 Layout.topMargin: 24
@@ -89,7 +118,7 @@ Item {
                     anchors.margins: 16
                     spacing: 12
 
-                    Text { text: "Java 版本"; color: palette.placeholderText; font.pixelSize: 14 }
+                    Text { text: I18n.tr("java.version"); color: palette.placeholderText; font.pixelSize: 14 }
                     Item { Layout.fillWidth: true }
                     ComboBox {
                         id: javaVerCombo
@@ -97,13 +126,13 @@ Item {
                         currentIndex: 2
                     }
                     Button {
-                        text: kernel.downloadManager.busy ? "下载中..." : "下载"
+                        text: kernel.downloadManager.busy ? I18n.tr("java.downloading") : I18n.tr("java.downloadBtn")
                         enabled: !kernel.downloadManager.busy
                         highlighted: true
                         font.weight: Font.Normal
                         onClicked: {
                             var ver = parseInt(javaVerCombo.currentText)
-                            kernel.downloadManager.downloadJava(ver, kernel.launchManager.dir || "")
+                            kernel.downloadManager.downloadJava(ver, kernel.instanceManager.currentRootDir || kernel.mcDir)
                         }
                     }
                 }
@@ -141,7 +170,7 @@ Item {
         target: kernel.downloadManager
         function onJavaDownloaded(majorVersion, javaPath) {
             kernel.javaManager.addBundledJava();
-            javaStatusText.text = "Java " + majorVersion + " 下载完成"
+            javaStatusText.text = I18n.tr("java.downloaded").replace("%1", majorVersion)
         }
         function onErrorOccurred(message) {
             if (message.indexOf("Java") >= 0)

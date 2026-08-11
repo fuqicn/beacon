@@ -1,9 +1,13 @@
 # Build output
 build/
+build-gdb/
 dist/
 test-tmp/
+cmake-build-*/
+CMakeFiles/
 
-# Packager generated artifacts (keep packager/*.c and *.rc source)
+# Packager / installer tooling (keep main.c / beacon.rc sources, ignore generated)
+packer.ps1
 packager/*.exe
 packager/*.res
 packager/*.zip
@@ -18,10 +22,42 @@ packager/dbg_*.txt
 *.zip
 *.pdb
 *.ilk
+*.a
+*.lib
+*.exp
+*.so
+*.dylib
 
-# Runtime data
+# IDE / project files
+.vs/
+.vscode/
+.idea/
+CMakeLists.txt.user*
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.pro
+*.pro.user
+
+# Temp / runtime data
 settings.ini
 *.log
+*.tmp
+*.bak
+*.orig
+*.autosave
+Thumbs.db
+.DS_Store
+qtdebug.log
+
+# Scratch planning documents (transient, not source)
+CROSS_PLATFORM_AUDIT.md
+修复计划.txt
 
 # Stray temp file
 Untitled.ico

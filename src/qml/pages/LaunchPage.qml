@@ -1,3 +1,21 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -8,6 +26,29 @@ Item {
 
     property string selectedVersion: ""
     property string selectedJavaPath: ""
+    readonly property bool launchActive: kernel.launchManager.running ||
+                                         kernel.launchManager.verifying ||
+                                         kernel.javaDownloading
+
+    function updateStatus() {
+        if (kernel.launchManager.running) {
+            launchStatus.text = I18n.tr("launch.active")
+            return
+        }
+        if (kernel.launchManager.verifying) {
+            launchStatus.text = kernel.launchManager.verifyTask +
+                " (" + Math.round(kernel.launchManager.verifyProgress * 100) + "%)"
+            return
+        }
+        if (kernel.javaDownloading) {
+            launchStatus.text = I18n.tr("launch.downloadingJava")
+            return
+        }
+        if (kernel.authManager.loggingIn) {
+            launchStatus.text = I18n.tr("account.loggingIn")
+            return
+        }
+    }
 
     Component.onCompleted: {
         var sel = kernel.instanceManager.getSelectedInstance()
@@ -38,30 +79,52 @@ Item {
     Connections {
         target: kernel.launchManager
         function onLaunchStarted() {
-            launchStatus.text = "游戏已启动"
+            launchStatus.text = I18n.tr("launch.active")
         }
         function onLaunchCompleted(exitCode) {
-            launchStatus.text = "游戏已退出 (代码: " + exitCode + ")"
+            launchStatus.text = I18n.tr("launch.exit").replace("%1", exitCode)
         }
         function onVerifyProgressChanged() {
-            if (kernel.launchManager.verifying) {
-                launchStatus.text = kernel.launchManager.verifyTask +
-                    " (" + Math.round(kernel.launchManager.verifyProgress * 100) + "%)"
-            }
+            if (kernel.launchManager.verifying)
+                updateStatus()
         }
         function onErrorOccurred(msg) {
             launchStatus.text = msg
         }
     }
 
-    ColumnLayout {
+    Connections {
+        target: kernel
+        function onJavaDownloadingChanged() {
+            updateStatus()
+        }
+    }
+
+    Connections {
+        target: kernel.authManager
+        function onLoggingInChanged() {
+            updateStatus()
+        }
+    }
+
+    Flickable {
+        id: pageFlickable
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 16
+        clip: true
+        contentHeight: contentColumn.implicitHeight + 48
+        flickableDirection: Flickable.VerticalFlick
+
+        ColumnLayout {
+            id: contentColumn
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 24
+            spacing: 16
 
         // Account cards
         Text {
-            text: "账户"
+            text: I18n.tr("account")
             font.pixelSize: 13
             font.weight: Font.Medium
             color: palette.placeholderText
@@ -144,7 +207,7 @@ Item {
                         }
 
                         Text {
-                            text: modelData.type === 2 ? "Microsoft 正版" : "离线模式"
+                            text: modelData.type === 2 ? I18n.tr("account.microsoft") : I18n.tr("account.offline")
                             font.pixelSize: 11
                             color: modelData.type === 2 ? palette.highlight : palette.placeholderText
                         }
@@ -152,7 +215,7 @@ Item {
 
                     // Current indicator / switch button
                     Button {
-                        text: kernel.authManager.currentAccountIndex === index ? "当前" : "切换"
+                        text: kernel.authManager.currentAccountIndex === index ? I18n.tr("account.current") : I18n.tr("account.switch")
                         font.weight: Font.Normal
                         enabled: kernel.authManager.currentAccountIndex !== index
                         onClicked: kernel.authManager.switchAccount(index)
@@ -198,7 +261,7 @@ Item {
                 }
 
                 Text {
-                    text: "正在登录 Microsoft... 请在浏览器中完成验证"
+                    text: I18n.tr("account.loggingIn")
                     font.pixelSize: 13
                     color: palette.highlight
                 }
@@ -208,7 +271,7 @@ Item {
         // Add accounts section
         Button {
             Layout.fillWidth: true
-            text: "添加 Microsoft 账户"
+            text: I18n.tr("account.addMicrosoft")
             highlighted: true
             font.weight: Font.Normal
             enabled: !kernel.authManager.loggingIn
@@ -222,12 +285,12 @@ Item {
             TextField {
                 id: offlineNameField
                 Layout.fillWidth: true
-                placeholderText: "输入离线用户名"
+                placeholderText: I18n.tr("account.offlinePlaceholder")
                 text: "Player"
             }
 
             Button {
-                text: "添加离线"
+                text: I18n.tr("account.addOffline")
                 font.weight: Font.Normal
                 enabled: !kernel.authManager.loggingIn
                 onClicked: kernel.authManager.addOfflineAccount(offlineNameField.text)
@@ -236,38 +299,68 @@ Item {
 
         Rectangle { Layout.fillWidth: true; height: 1; color: palette.mid; opacity: 0.3 }
 
+        Rectangle { Layout.fillWidth: true; height: 1; color: palette.mid; opacity: 0.3 }
+
         // Selected instance
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
 
+            // Instance icon
+            Rectangle {
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 44
+                radius: Theme.shapeMedium
+                color: Qt.alpha(palette.placeholderText, 0.05)
+                clip: true
+
+                Image {
+                    id: launchIconImg
+                    anchors.fill: parent
+                    source: {
+                        var sel = kernel.instanceManager.getSelectedInstance()
+                        if (sel && sel.customIcon)
+                            return "file:///" + sel.customIcon.replace(/\\/g, "/")
+                        if (sel && sel.iconKey)
+                            return "qrc:/icons/instances/" + sel.iconKey + ".png"
+                        return "qrc:/icons/instances/grass.png"
+                    }
+                    asynchronous: true
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize.width: 44
+                    sourceSize.height: 44
+                    mipmap: true
+                    smooth: true
+                }
+            }
+
             Column {
                 Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
                 spacing: 4
                 Text {
-                    text: "当前实例"
+                    text: I18n.tr("currentInstance")
                     font.pixelSize: 13; color: palette.placeholderText
                 }
                 Text {
                     id: instanceName
-                    text: selectedVersion || "未选择"
+                    text: selectedVersion || I18n.tr("noInstance")
                     font.pixelSize: 16; font.weight: Font.Medium
                     color: palette.text
                 }
             }
 
             Button {
-                text: "选择实例"
+                text: I18n.tr("selectInstance")
                 font.weight: Font.Normal
                 onClicked: window.navigateToPage(4, "实例管理")
             }
             Button {
-                text: "实例设置"
+                text: I18n.tr("instanceSettings")
                 font.weight: Font.Normal
                 onClicked: {
                     var sel = kernel.instanceManager.getSelectedInstance()
                     if (sel && sel.id)
-                        window.navigateToPage(5, "实例设置")
+                        window.navigateToPage(5, "瀹炰緥璁剧疆")
                 }
             }
         }
@@ -290,18 +383,24 @@ Item {
         // Launch button
         Button {
             Layout.fillWidth: true
-            text: {
-                if (kernel.launchManager.running) return "运行中..."
-                if (kernel.launchManager.verifying) return kernel.launchManager.verifyTask
-                return "启动游戏"
-            }
+            text: root.launchActive ? I18n.tr("cancel") : I18n.tr("launchGame")
             highlighted: true
             font.weight: Font.Normal
-            enabled: !kernel.launchManager.running && !kernel.launchManager.verifying && !kernel.javaDownloading && selectedVersion !== ""
+            enabled: root.launchActive || (selectedVersion !== "")
             onClicked: {
-                launchStatus.text = "正在验证文件..."
-                kernel.launchGame(4096)
+                if (root.launchActive) {
+                    kernel.cancelLaunch()
+                } else {
+                    launchStatus.text = I18n.tr("launch.verifying")
+                    kernel.launchGame(4096)
+                }
             }
+        }
+        }
+
+        ScrollBar.vertical: ScrollBar {
+            policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
+            width: 8
         }
     }
 }

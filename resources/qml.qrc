@@ -1,4 +1,15 @@
 <RCC>
+    <qresource prefix="/icons/instances">
+        <file alias="grass.png">../src/icons/instances/Grass.png</file>
+        <file alias="commandblock.png">../src/icons/instances/CommandBlock.png</file>
+        <file alias="cobblestone.png">../src/icons/instances/CobbleStone.png</file>
+        <file alias="anvil.png">../src/icons/instances/Anvil.png</file>
+        <file alias="neoforge.png">../src/icons/instances/NeoForge.png</file>
+        <file alias="fabric.png">../src/icons/instances/Fabric.png</file>
+        <file alias="grasspath.png">../src/icons/instances/GrassPath.png</file>
+        <file alias="goldblock.png">../src/icons/instances/GoldBlock.png</file>
+        <file alias="redstoneblock.png">../src/icons/instances/RedstoneBlock.png</file>
+    </qresource>
     <qresource prefix="/icons">
         <file alias="play.svg">../src/icons/play.svg</file>
         <file alias="home.svg">../src/icons/home.svg</file>
@@ -17,5 +28,11 @@
         <file alias="trash.svg">../src/icons/trash.svg</file>
         <file alias="refresh.svg">../src/icons/refresh.svg</file>
         <file alias="power.svg">../src/icons/power.svg</file>
+    </qresource>
+    <qresource prefix="/i18n">
+        <file alias="zh.json">../src/qml/i18n/zh.json</file>
+        <file alias="en.json">../src/qml/i18n/en.json</file>
+        <file alias="ja.json">../src/qml/i18n/ja.json</file>
+        <file alias="fr.json">../src/qml/i18n/fr.json</file>
     </qresource>
 </RCC>

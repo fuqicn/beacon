@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg Widgets)
+find_package(ZLIB QUIET)
 
-set(KERNEL_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../launcher-kernel")
+set(KERNEL_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel")
 
 set(KERNEL_SRC
     ${KERNEL_SRC_DIR}/libmcbase/src/mc_str.cpp
@@ -48,12 +49,16 @@ set(MANAGER_SRC
     src/kernel/managers/DownloadManager.cpp
     src/kernel/managers/DownloadWorker.h
     src/kernel/managers/DownloadWorker.cpp
+    src/kernel/managers/JavaDownloadWorker.h
+    src/kernel/managers/JavaDownloadWorker.cpp
     src/kernel/managers/AuthManager.h
     src/kernel/managers/AuthManager.cpp
     src/kernel/managers/JavaManager.h
     src/kernel/managers/JavaManager.cpp
     src/kernel/managers/ModManager.h
     src/kernel/managers/ModManager.cpp
+    src/kernel/managers/ModpackManager.h
+    src/kernel/managers/ModpackManager.cpp
     src/kernel/managers/InstallManager.h
     src/kernel/managers/InstallManager.cpp
     src/kernel/managers/LaunchManager.h
@@ -64,18 +69,34 @@ set(MANAGER_SRC
     src/kernel/managers/SettingsManager.cpp
     src/kernel/managers/SkinManager.h
     src/kernel/managers/SkinManager.cpp
+    src/kernel/managers/I18nManager.h
+    src/kernel/managers/I18nManager.cpp
     src/kernel/platform/WindowEffects.h
     src/kernel/platform/WindowEffects.cpp
     resources/qml.qrc
-    resources/app.rc
 )
+
+if(WIN32)
+    list(APPEND MANAGER_SRC resources/app.rc)
+endif()
 
 add_library(libmckernel STATIC ${KERNEL_SRC})
 target_include_directories(libmckernel PUBLIC ${KERNEL_INCLUDES})
-target_link_libraries(libmckernel PUBLIC Qt6::Core Qt6::Network)
+target_link_libraries(libmckernel PUBLIC Qt6::Core Qt6::Network Qt6::Gui)
 target_compile_definitions(libmckernel PRIVATE QT_DISABLE_DEPRECATED_BEFORE=0x060000)
 
-qt_add_executable(Beacon WIN32 ${MANAGER_SRC})
+if(WIN32)
+    qt_add_executable(Beacon WIN32 ${MANAGER_SRC})
+elseif(APPLE)
+    qt_add_executable(Beacon MACOSX_BUNDLE ${MANAGER_SRC})
+    set_target_properties(Beacon PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER "org.beacon.launcher"
+        MACOSX_BUNDLE_BUNDLE_NAME "Beacon"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0")
+else()
+    qt_add_executable(Beacon ${MANAGER_SRC})
+endif()
 target_include_directories(Beacon PRIVATE
     ${KERNEL_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
@@ -89,12 +110,17 @@ target_link_libraries(Beacon PRIVATE
     Qt6::QuickControls2
     Qt6::QuickDialogs2
     Qt6::Svg
-    -lz
+    Qt6::Widgets
 )
+if(ZLIB_FOUND)
+    target_link_libraries(Beacon PRIVATE ZLIB::ZLIB)
+else()
+    # MinGW/macOS ship zlib, MSVC via vcpkg provides ZLIB_FOUND.
+    target_link_libraries(Beacon PRIVATE z)
+endif()
 
 set(QML_SOURCES
     src/qml/main.qml
-    src/qml/SplashScreen.qml
     src/qml/theme/Theme.qml
     src/qml/pages/LaunchPage.qml
     src/qml/pages/InstancesPage.qml
@@ -102,9 +128,16 @@ set(QML_SOURCES
     src/qml/pages/SettingsPage.qml
     src/qml/pages/ToolsPage.qml
     src/qml/pages/InstanceSettingsPage.qml
+    src/qml/pages/LogViewerPage.qml
+    src/qml/pages/FileManagerPage.qml
     src/qml/components/AppIcon.qml
+    src/qml/components/DownloadCard.qml
     src/qml/components/DownloadDialog.qml
-    src/qml/components/DownloadProgressButton.qml
+    src/qml/components/DownloadStatusPanel.qml
+    src/qml/components/ModsSearchPage.qml
+    src/qml/components/ModDetailPage.qml
+    src/qml/components/ModpackSearchPage.qml
+    src/qml/components/ModpackDetailPage.qml
 )
 
 # Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged
@@ -127,7 +160,7 @@ qt_add_qml_module(Beacon
 # Copy mirrors.json to build directory
 add_custom_command(TARGET Beacon POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/../launcher-kernel/mirrors.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json"
         "$<TARGET_FILE_DIR:Beacon>/mirrors.json"
     COMMENT "Copying mirrors.json to build directory"
 )

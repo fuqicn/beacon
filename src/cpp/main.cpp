@@ -1,8 +1,27 @@
+/*
+ * Beacon - a cross-platform Minecraft launcher.
+ *
+ * Copyright (C) 2024-2026 fuqicn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #include <QGuiApplication>
 #include <QCoreApplication>
+#include <QApplication>
+#include <QWidget>
 #include <QFont>
 #include <QQmlApplicationEngine>
-#include <QQuickView>
 #include <QQuickWindow>
 #include <QQmlContext>
 #include <QQmlComponent>
@@ -12,23 +31,74 @@
 #include <QDateTime>
 #include <QSvgRenderer>
 #include <QPainter>
+#include <QPixmap>
 #include <QQuickImageProvider>
+#include <QQuickAsyncImageProvider>
+#include <QQuickImageResponse>
+#include <QQuickTextureFactory>
 #include <QSettings>
 #include <QStyleHints>
 #include <QThreadPool>
+#include <QVector>
 #include <QFile>
 #include <QPixmapCache>
+#include <QCache>
 #include <QTimer>
+#include <QLocale>
+#include <QSemaphore>
+#include <QCryptographicHash>
+#include <QPointer>
+#include <mc_log.h>
+#include <mc_mod.h>
+#include <mc_download_qt.h>
+
+class SplashWidget : public QWidget
+{
+public:
+    explicit SplashWidget(const QPixmap &pixmap)
+        : m_pixmap(pixmap)
+    {
+        // Transparent background so the rounded-rect pixmap's corners are
+        // visibly rounded from the very first frame instead of showing a
+        // square window until the content is painted.
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setFixedSize(pixmap.size() / pixmap.devicePixelRatio());
+    }
+
+    void setPixmap(const QPixmap &pixmap)
+    {
+        m_pixmap = pixmap;
+        setFixedSize(pixmap.size() / pixmap.devicePixelRatio());
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.drawPixmap(0, 0, m_pixmap);
+    }
+
+private:
+    QPixmap m_pixmap;
+};
 
 #include "KernelBridge.h"
+#include "I18nManager.h"
 #include <mc_download.h>
+#include <mc_http.h>
+#include <mc_mod.h>
+#include "ModManager.h"
 #include <mc_log.h>
 
 class TintedIconProvider : public QQuickImageProvider
 {
 public:
     TintedIconProvider()
-        : QQuickImageProvider(QQuickImageProvider::Image) {}
+        : QQuickImageProvider(QQuickImageProvider::Image)
+    {
+        m_cache.setMaxCost(64);
+    }
 
     QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override
     {
@@ -43,24 +113,24 @@ public:
             );
         }
 
-        // Simple icon cache keyed on name+tint
-        QString cacheKey = name + "/" + QString::number(color.rgba(), 16);
-        auto it = m_cache.find(cacheKey);
-        if (it != m_cache.end()) {
-            QImage cached = *it;
-            if (size) *size = cached.size();
-            return cached;
+        QSize s = requestedSize.isValid() ? requestedSize : QSize(24, 24);
+
+        // Simple icon cache keyed on name+tint+size (size mismatch causes blurry scaling)
+        QString cacheKey = name + "/" + QString::number(color.rgba(), 16)
+            + "/" + QString::number(s.width()) + "x" + QString::number(s.height());
+        if (QImage *cached = m_cache.object(cacheKey)) {
+            if (size) *size = cached->size();
+            return *cached;
         }
 
         QSvgRenderer renderer(QStringLiteral(":/icons/%1.svg").arg(name));
         if (!renderer.isValid()) {
             if (size) *size = QSize(1, 1);
             QImage empty(1, 1, QImage::Format_ARGB32_Premultiplied);
-            m_cache.insert(cacheKey, empty);
+            m_cache.insert(cacheKey, new QImage(empty));
             return empty;
         }
 
-        QSize s = requestedSize.isValid() ? requestedSize : QSize(24, 24);
         QImage image(s, QImage::Format_ARGB32_Premultiplied);
         image.fill(Qt::transparent);
 
@@ -85,19 +155,157 @@ public:
         }
 
         if (size) *size = s;
-        m_cache.insert(cacheKey, image);
-        if (m_cache.size() > 64) {
-            auto oldest = m_cache.begin();
-            while (oldest != m_cache.end() && oldest != m_cache.find(cacheKey))
-                ++oldest;
-            if (oldest != m_cache.begin())
-                m_cache.erase(m_cache.begin());
-        }
+        m_cache.insert(cacheKey, new QImage(image));
         return image;
     }
 
 private:
-    QHash<QString, QImage> m_cache;
+    QCache<QString, QImage> m_cache;
+};
+
+class ModIconResponse : public QQuickImageResponse
+{
+public:
+    ModIconResponse(const QString &url)
+        : m_url(url), m_cancelled(false)
+    {
+    }
+
+    QQuickTextureFactory *textureFactory() const override
+    {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
+
+    void cancel() override
+    {
+        m_cancelled = true;
+    }
+
+    void deliver(const QImage &image)
+    {
+        if (m_cancelled)
+            return;
+        m_image = image;
+        emit finished();
+    }
+
+    QString url() const { return m_url; }
+    bool cancelled() const { return m_cancelled; }
+
+private:
+    QString m_url;
+    QImage m_image;
+    bool m_cancelled;
+};
+
+class ModIconProvider : public QQuickAsyncImageProvider
+{
+public:
+    ModIconProvider()
+    {
+        m_memCache.setMaxCost(512);
+        m_pool.setMaxThreadCount(8);
+        m_pool.setExpiryTimeout(30000);
+    }
+
+    void setIconsDir(const QString &dir)
+    {
+        m_iconsDir = dir;
+        QDir().mkpath(m_iconsDir);
+    }
+
+    QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize) override
+    {
+        Q_UNUSED(requestedSize);
+        QByteArray decoded = QByteArray::fromBase64(id.toUtf8());
+        QString url = QString::fromUtf8(decoded);
+        if (url.isEmpty())
+            return new ModIconResponse(url);
+
+        if (QImage *cached = m_memCache.object(url)) {
+            ModIconResponse *r = new ModIconResponse(url);
+            QTimer::singleShot(0, r, [r, cached]() { r->deliver(*cached); });
+            return r;
+        }
+
+        QString cacheKey = QString::fromLatin1(
+            QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
+        QString cachePath = m_iconsDir + QLatin1String("/") + cacheKey + QLatin1String(".png");
+        if (QFile::exists(cachePath)) {
+            QImage img(cachePath);
+            if (!img.isNull()) {
+                m_memCache.insert(url, new QImage(img));
+                ModIconResponse *r = new ModIconResponse(url);
+                QTimer::singleShot(0, r, [r, img]() { r->deliver(img); });
+                return r;
+            }
+        }
+
+        ModIconResponse *r = new ModIconResponse(url);
+        startDownload(r, url, cachePath);
+        return r;
+    }
+
+private:
+    void startDownload(ModIconResponse *resp, const QString &url, const QString &cachePath)
+    {
+        QPointer<ModIconResponse> guard(resp);
+        m_pool.start([guard, url, cachePath, this]() {
+            QImage image = fetch(url, cachePath);
+            if (!guard.isNull()) {
+                QMetaObject::invokeMethod(guard.data(), [guard, image, this]() {
+                    if (guard.isNull())
+                        return;
+                    if (!image.isNull())
+                        m_memCache.insert(guard->url(), new QImage(image));
+                    guard->deliver(image);
+                }, Qt::QueuedConnection);
+            }
+        });
+    }
+
+    static QImage tryFetch(const char *target)
+    {
+        McHttpClient client;
+        mc_http_init(&client);
+        mc_http_set_timeout(&client, 8000);
+        McHttpResponse *resp = mc_http_get(&client, target);
+        QImage image;
+        if (resp && resp->success && resp->data && resp->data_len > 0)
+            image = QImage::fromData(reinterpret_cast<const uchar *>(resp->data), int(resp->data_len));
+        mc_http_response_free(resp);
+        return image;
+    }
+
+    static void saveCache(const QImage &image, const QString &cachePath)
+    {
+        if (image.isNull()) return;
+        QFile out(cachePath);
+        if (out.open(QIODevice::WriteOnly)) {
+            image.save(&out, "PNG");
+            out.close();
+        }
+    }
+
+    static QImage fetch(const QString &url, const QString &cachePath)
+    {
+        QByteArray urlBytes = url.toUtf8();
+        char mirrored[1024];
+        const char *direct = urlBytes.constData();
+        const char *target = direct;
+        if (mc_mod_translate_download_url(urlBytes.constData(), mirrored, sizeof(mirrored)) > 0)
+            target = mirrored;
+
+        QImage image = tryFetch(target);
+        if (image.isNull() && target != direct)
+            image = tryFetch(direct);
+        saveCache(image, cachePath);
+        return image;
+    }
+
+    QCache<QString, QImage> m_memCache;
+    QString m_iconsDir;
+    QThreadPool m_pool;
 };
 
 #ifdef Q_OS_WIN
@@ -110,17 +318,21 @@ static LONG WINAPI crashHandler(EXCEPTION_POINTERS *exInfo) {
                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile != INVALID_HANDLE_VALUE) {
         DWORD written;
-        char buf[4096];
+        char buf[8192];
 
         DWORD code = exInfo->ExceptionRecord->ExceptionCode;
         PVOID addr = exInfo->ExceptionRecord->ExceptionAddress;
+        DWORD tid = GetCurrentThreadId();
+        DWORD pid = GetCurrentProcessId();
 
         int len = snprintf(buf, sizeof(buf),
             "=== CRASH at %s ===\n"
+            "pid=%lu tid=%lu\n"
             "Exception code: 0x%08lX\n"
             "Exception address: %p\n"
             "RIP: %p\n",
             QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss").toUtf8().constData(),
+            (unsigned long)pid, (unsigned long)tid,
             (unsigned long)code,
             addr,
 #ifdef _WIN64
@@ -130,6 +342,19 @@ static LONG WINAPI crashHandler(EXCEPTION_POINTERS *exInfo) {
 #endif
         );
         WriteFile(hFile, buf, len, &written, NULL);
+
+        // Best-effort backtrace of the faulting thread (addresses only).
+        void *frames[64];
+        int nf = CaptureStackBackTrace(0, 64, frames, nullptr);
+        if (nf > 0) {
+            char line[64];
+            int l = snprintf(line, sizeof(line), "BT depth=%d\n", nf);
+            WriteFile(hFile, line, l, &written, NULL);
+            for (int i = 0; i < nf; i++) {
+                l = snprintf(line, sizeof(line), "BT%03d 0x%p\n", i, frames[i]);
+                WriteFile(hFile, line, l, &written, NULL);
+            }
+        }
         CloseHandle(hFile);
     }
     return EXCEPTION_CONTINUE_SEARCH;
@@ -155,25 +380,83 @@ static void signalHandler(int sig) {
 }
 #endif
 
+// Headless download repro (--test-dl): replicates ModpackWorker by running the
+// download on a worker QThread and reporting progress via a queued signal.
+class DlWorker : public QObject {
+    Q_OBJECT
+public:
+    DlWorker(QString url, QString mirror, QString path, QString sha1, long size)
+        : m_url(std::move(url)), m_mirror(std::move(mirror)), m_path(std::move(path)),
+          m_sha1(std::move(sha1)), m_size(size) {}
+public slots:
+    void run() {
+        QByteArray urlBa = m_url.toUtf8();
+        QByteArray mirrorBa = m_mirror.toUtf8();
+        const char *urls[2];
+        int urlCount = 1;
+        urls[0] = urlBa.constData();
+        if (!mirrorBa.isEmpty()) {
+            urls[0] = mirrorBa.constData();
+            urls[1] = urlBa.constData();
+            urlCount = 2;
+        }
+        QByteArray sha1Ba;
+        const char *sha1c = nullptr;
+        if (!m_sha1.isEmpty()) { sha1Ba = m_sha1.toUtf8(); sha1c = sha1Ba.constData(); }
+        struct Ctx { qreal last = -1; DlWorker *self = nullptr; };
+        Ctx ctx;
+        ctx.self = this;
+        auto cb = [](const char *, long long received, long long total, void *userdata) {
+            auto *c = static_cast<Ctx *>(userdata);
+            long long base = total > 0 ? total : (received > 0 ? received * 2 : 0);
+            if (base <= 0) return;
+            qreal p = qBound<qreal>(0.0, (qreal)received / (qreal)base, 1.0);
+            if (c->last < 0 || p - c->last > 0.005) {
+                c->last = p;
+                if (c->self) c->self->notifyProgress(p);
+            }
+        };
+        QByteArray pathBa = m_path.toUtf8();
+        mc_info("[TESTDL] sources=%d path=%s", urlCount, pathBa.constData());
+        int ok = mc_qt_download_multi_progress(urls, urlCount, pathBa.constData(),
+                                               sha1c, m_size, 120000, cb, &ctx);
+        mc_info("[TESTDL] result=%d", ok);
+        emit finished(ok != 0);
+    }
+    void notifyProgress(qreal p) { emit progress(p); }
+signals:
+    void progress(qreal p);
+    void finished(bool ok);
+private:
+    QString m_url, m_mirror, m_path, m_sha1;
+    long m_size;
+};
+
 int main(int argc, char *argv[])
 {
 #ifdef Q_OS_WIN
     bool debugMode = false;
     int downloadJavaVersion = 0;
+    QString downloadVersionId;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) { debugMode = true; }
         if (strcmp(argv[i], "--download-java") == 0 && i + 1 < argc) {
             downloadJavaVersion = atoi(argv[i + 1]);
             i++;
         }
+        if (strcmp(argv[i], "--download-version") == 0 && i + 1 < argc) {
+            downloadVersionId = QString::fromUtf8(argv[i + 1]);
+            i++;
+        }
     }
     if (downloadJavaVersion > 0) {
-        // Log to file for capture
-        mc_log_set_file((QCoreApplication::applicationDirPath() + "/java-test.log").toUtf8().constData());
-
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
         app.setApplicationVersion("1.0.0");
+        (void)QLocale::system(); // init system locale before worker threads start
+
+        // Log to file for capture
+        mc_log_set_file((QCoreApplication::applicationDirPath() + "/java-test.log").toUtf8().constData());
 
         QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
@@ -216,6 +499,352 @@ int main(int argc, char *argv[])
         KernelBridge::shutdown();
         return 0;
     }
+    if (!downloadVersionId.isEmpty()) {
+        QCoreApplication app(argc, argv);
+        app.setApplicationName("Beacon");
+        app.setApplicationVersion("1.0.0");
+        (void)QLocale::system(); // init system locale before worker threads start
+
+        // Log to file for capture
+        mc_log_set_file((QCoreApplication::applicationDirPath() + "/version-test.log").toUtf8().constData());
+
+        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        KernelBridge::initialize("zh", mcDir);
+        mc_log_set_level(MC_LOG_DEBUG); // override after KernelBridge::initialize resets it
+        auto *dl = KernelBridge::instance()->downloadManager();
+
+        QObject::connect(dl, &DownloadManager::allCompleted, [&](bool ok) {
+            mc_info("[TEST] Version %s download %s",
+                    downloadVersionId.toUtf8().constData(), ok ? "SUCCEEDED" : "FAILED");
+            QCoreApplication::quit();
+        });
+        QObject::connect(dl, &DownloadManager::errorOccurred, [&](const QString &msg) {
+            mc_info("[TEST] Error: %s", msg.toUtf8().constData());
+        });
+        QObject::connect(dl, &DownloadManager::progressChanged, [&](qreal p, const QString &task) {
+            if (!task.isEmpty())
+                mc_info("[TEST] %.0f%% - %s", p * 100.0, task.toUtf8().constData());
+        });
+
+        mc_info("[TEST] Starting version %s download to %s",
+                downloadVersionId.toUtf8().constData(), mcDir.toUtf8().constData());
+        QTimer::singleShot(100, [dl, downloadVersionId, mcDir]() {
+            dl->startDownload(downloadVersionId, mcDir);
+        });
+
+        app.exec();
+
+        // Close log file and dump to stdout for parent capture
+        mc_log_set_file(nullptr);
+        QFile dumpFile(QCoreApplication::applicationDirPath() + "/version-test.log");
+        if (dumpFile.open(QIODevice::ReadOnly)) {
+            QByteArray data = dumpFile.readAll();
+            printf("%s", data.constData());
+            fflush(stdout);
+            dumpFile.close();
+        }
+
+        KernelBridge::shutdown();
+        return 0;
+    }
+    bool testMod = false;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--test-mod") == 0) { testMod = true; }
+    }
+    if (testMod) {
+        QCoreApplication app(argc, argv);
+        app.setApplicationName("Beacon");
+        app.setApplicationVersion("1.0.0");
+        (void)QLocale::system(); // init system locale before worker threads start
+
+        mc_log_set_file((QCoreApplication::applicationDirPath() + "/mod-test.log").toUtf8().constData());
+
+        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        KernelBridge::initialize("zh", mcDir);
+        mc_log_set_level(MC_LOG_DEBUG);
+        auto *mm = KernelBridge::instance()->modManager();
+
+        QString rootDir = QCoreApplication::applicationDirPath() + "/.modtest";
+
+        auto quit = [&]() {
+            QTimer::singleShot(0, &app, &QCoreApplication::quit);
+        };
+
+        QObject::connect(mm, &ModManager::errorOccurred, [&](const QString &msg) {
+            mc_info("[MODTEST] Error: %s", msg.toUtf8().constData());
+        });
+
+        QObject::connect(mm, &ModManager::searchCompleted, [&](const QVariantList &results) {
+            mc_info("[MODTEST] Search returned %d results", results.size());
+            for (const QVariant &r : results) {
+                QVariantMap m = r.toMap();
+mc_info("[MODTEST]   - %s (%s) downloads=%s",
+        m.value("name").toString().toUtf8().constData(),
+        m.value("id").toString().toUtf8().constData(),
+        m.value("downloadCount").toString().toUtf8().constData());
+            }
+            if (!results.isEmpty()) {
+                mm->getProject(results.first().toMap().value("id").toString());
+            } else {
+                quit();
+            }
+        });
+
+        QObject::connect(mm, &ModManager::projectLoaded, [&](const QVariantMap &project) {
+            mc_info("[MODTEST] Project loaded: %s (%s)",
+                    project.value("name").toString().toUtf8().constData(),
+                    project.value("id").toString().toUtf8().constData());
+            mm->getVersions(project.value("id").toString());
+        });
+
+        QObject::connect(mm, &ModManager::versionsLoaded, [&](const QVariantList &versions) {
+            mc_info("[MODTEST] Versions returned %d", versions.size());
+            int installed = 0;
+            for (const QVariant &v : versions) {
+                if (installed >= 3) break;
+                QVariantMap vm = v.toMap();
+                if (vm.value("fileName").toString().endsWith(".jar")) {
+                    mc_info("[MODTEST] Enqueue %s", vm.value("fileName").toString().toUtf8().constData());
+                    mm->installMod(vm, rootDir);
+                    installed++;
+                }
+            }
+            if (installed == 0) { quit(); return; }
+            mc_info("[MODTEST] Enqueued %d mods", installed);
+        });
+
+        QObject::connect(mm, &ModManager::tasksChanged, [&]() {
+            static QString lastLog;
+            const auto tasks = mm->tasks();
+            QString line;
+            for (const QVariant &t : tasks) {
+                QVariantMap m = t.toMap();
+                line += QString("%1:%2(%3%%) ")
+                        .arg(m.value("fileName").toString())
+                        .arg(m.value("status").toString())
+                        .arg(qRound(m.value("progress").toDouble() * 100));
+            }
+            if (line != lastLog) {
+                mc_info("[MODTEST] tasks: %s", line.toUtf8().constData());
+                lastLog = line;
+            }
+        });
+
+        int completed = 0;
+        QObject::connect(mm, &ModManager::installCompleted, [&](bool ok, const QString &path) {
+            completed++;
+            mc_info("[MODTEST] Install #%d %s -> %s", completed, ok ? "SUCCEEDED" : "FAILED",
+                    path.toUtf8().constData());
+            if (completed < 3) return;
+            auto mods = mm->listInstalledMods(rootDir);
+            mc_info("[MODTEST] Installed mods in dir: %d", mods.size());
+            for (const QVariant &m : mods) {
+                QVariantMap vm = m.toMap();
+                mc_info("[MODTEST]   - %s (%s bytes)",
+                        vm.value("fileName").toString().toUtf8().constData(),
+                        vm.value("size").toString().toUtf8().constData());
+            }
+            for (const QVariant &m : mods) {
+                QString fn = m.toMap().value("fileName").toString();
+                bool removed = mm->removeMod(rootDir, fn);
+                mc_info("[MODTEST] removeMod(%s) = %s", fn.toUtf8().constData(), removed ? "true" : "false");
+            }
+            mods = mm->listInstalledMods(rootDir);
+            mc_info("[MODTEST] After removal, mods left: %d", mods.size());
+            QDir(rootDir).removeRecursively();
+            quit();
+        });
+
+        mc_info("[MODTEST] Starting search for 'sodium'");
+        QTimer::singleShot(100, [mm]() {
+            mm->search(QStringLiteral("sodium"), QStringLiteral("relevance"), 3);
+        });
+
+        app.exec();
+
+        mc_log_set_file(nullptr);
+        QFile dumpFile(QCoreApplication::applicationDirPath() + "/mod-test.log");
+        if (dumpFile.open(QIODevice::ReadOnly)) {
+            QByteArray data = dumpFile.readAll();
+            printf("%s", data.constData());
+            fflush(stdout);
+            dumpFile.close();
+        }
+
+        KernelBridge::shutdown();
+        return 0;
+    }
+    // ── Headless download test: --test-dl <url> <out> [--dl-sha1 <hex>] [--dl-size <bytes>] [--dl-mirror <url>]
+    QString testDlUrl, testDlPath, testDlSha1, testDlMirror;
+    long testDlSize = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--test-dl") == 0 && i + 2 < argc) {
+            testDlUrl = QString::fromUtf8(argv[i + 1]);
+            testDlPath = QString::fromUtf8(argv[i + 2]);
+            i += 2;
+        } else if (strcmp(argv[i], "--dl-sha1") == 0 && i + 1 < argc) {
+            testDlSha1 = QString::fromUtf8(argv[i + 1]);
+            i++;
+        } else if (strcmp(argv[i], "--dl-size") == 0 && i + 1 < argc) {
+            testDlSize = atol(argv[i + 1]);
+            i++;
+        } else if (strcmp(argv[i], "--dl-mirror") == 0 && i + 1 < argc) {
+            testDlMirror = QString::fromUtf8(argv[i + 1]);
+            i++;
+        }
+    }
+    if (!testDlUrl.isEmpty()) {
+        QCoreApplication app(argc, argv);
+        app.setApplicationName("Beacon");
+        app.setApplicationVersion("1.0.0");
+        (void)QLocale::system();
+
+        mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
+
+        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        KernelBridge::initialize("zh", mcDir);
+        mc_log_set_level(MC_LOG_DEBUG);
+
+        QByteArray mirrorBa;
+        {
+            QByteArray urlBa = testDlUrl.toUtf8();
+            char translated[2048] = "";
+            if (!testDlMirror.isEmpty()) {
+                mirrorBa = testDlMirror.toUtf8();
+            } else if (mc_mod_translate_download_url(urlBa.constData(), translated, sizeof(translated))) {
+                mirrorBa = QByteArray(translated);
+            }
+        }
+
+        auto *worker = new DlWorker(testDlUrl, QString::fromUtf8(mirrorBa), testDlPath, testDlSha1, testDlSize);
+        auto *thread = new QThread;
+        worker->moveToThread(thread);
+        QObject::connect(thread, &QThread::started, worker, &DlWorker::run, Qt::DirectConnection);
+        QObject::connect(worker, &DlWorker::progress, [](qreal p) {
+            mc_info("[TESTDL] %d%%", qRound(p * 100));
+        });
+        bool finishedFlag = false;
+        QObject::connect(worker, &DlWorker::finished, [&]() {
+            finishedFlag = true;
+            QCoreApplication::quit();
+        });
+        thread->start();
+        app.exec();
+        thread->quit();
+        thread->wait(8000);
+        delete worker;
+        delete thread;
+        mc_info("[TESTDL] final finishedFlag=%d", (int)finishedFlag);
+        mc_log_set_file(nullptr);
+        QFile dumpFile(QCoreApplication::applicationDirPath() + "/dl-test.log");
+        if (dumpFile.open(QIODevice::ReadOnly)) {
+            QByteArray data = dumpFile.readAll();
+            printf("%s", data.constData());
+            fflush(stdout);
+            dumpFile.close();
+        }
+        KernelBridge::shutdown();
+        return 0;
+    }
+    // ── Headless batch test: --test-batch <url> <outdir> <count> [--batch] [--tb-size <bytes>]
+    // Exercises the two install download paths: mc_qt_download_batch_ex (ModpackManager,
+    // QThread::create worker pool) and mc_qt_download_batch (InstallManager engine).
+    QString testBatchUrl, testBatchOutDir;
+    int testBatchCount = 0;
+    bool testBatchUseEngine = false;
+    long testBatchSize = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--test-batch") == 0 && i + 3 < argc) {
+            testBatchUrl = QString::fromUtf8(argv[i + 1]);
+            testBatchOutDir = QString::fromUtf8(argv[i + 2]);
+            testBatchCount = atoi(argv[i + 3]);
+            i += 3;
+        } else if (strcmp(argv[i], "--batch") == 0) {
+            testBatchUseEngine = true;
+        } else if (strcmp(argv[i], "--tb-size") == 0 && i + 1 < argc) {
+            testBatchSize = atol(argv[i + 1]);
+            i++;
+        }
+    }
+    if (!testBatchUrl.isEmpty() && testBatchCount > 0) {
+        QCoreApplication app(argc, argv);
+        app.setApplicationName("Beacon");
+        app.setApplicationVersion("1.0.0");
+        (void)QLocale::system();
+
+        mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
+
+        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        KernelBridge::initialize("zh", mcDir);
+        mc_log_set_level(MC_LOG_DEBUG);
+
+        QDir outDir(testBatchOutDir);
+        if (!outDir.exists()) outDir.mkpath(".");
+
+        QVector<long> sizes;
+        QVector<QByteArray> pathBas;
+        int n = qMin(testBatchCount, 256);
+        for (int i = 0; i < n; i++) {
+            QString p = QString("%1/%2.bin").arg(testBatchOutDir).arg(i + 1, 5, 10, QLatin1Char('0'));
+            pathBas.append(p.toUtf8());
+            sizes.append(testBatchSize);
+        }
+        QVector<const char *> paths;
+        for (auto &b : pathBas) paths.append(b.constData());
+
+        auto *bw = new QObject;
+        auto *thread = new QThread;
+        bw->moveToThread(thread);
+        int resultFlag = -1;
+        QObject::connect(thread, &QThread::started, bw, [=, &resultFlag, &paths]() {
+            QByteArray urlBa = testBatchUrl.toUtf8();
+            const char *srcs[1] = { urlBa.constData() };
+            int results[256];
+            int ok = 0;
+            if (testBatchUseEngine) {
+                QVector<const char *> urls, sha1s;
+                for (int i = 0; i < n; i++) { urls.append(srcs[0]); sha1s.append(nullptr); }
+                ok = mc_qt_download_batch(urls.data(), paths.data(), sha1s.data(),
+                                          sizes.constData(), n, 120000, results);
+                mc_info("[TESTB] engine ok=%d/%d", ok, n);
+            } else {
+                QVector<const char *> itemUrls;
+                for (int i = 0; i < n; i++) itemUrls.append(srcs[0]);
+                QVector<McQtBatchItem> items;
+                for (int i = 0; i < n; i++) {
+                    McQtBatchItem it;
+                    it.urls = itemUrls.constData() + i;
+                    it.url_count = 1;
+                    it.path = paths[i];
+                    it.sha1 = nullptr;
+                    it.size = sizes[i];
+                    items.append(it);
+                }
+                ok = mc_qt_download_batch_ex(items.constData(), n, 120000, results);
+                mc_info("[TESTB] batch_ex ok=%d/%d", ok, n);
+            }
+            for (int i = 0; i < n; i++) mc_info("[TESTB] file %d -> %d", i + 1, results[i]);
+            resultFlag = ok;
+            QCoreApplication::quit();
+        }, Qt::DirectConnection);
+        thread->start();
+        app.exec();
+        thread->quit();
+        thread->wait(8000);
+        delete bw;
+        delete thread;
+        mc_info("[TESTB] final resultFlag=%d", resultFlag);
+        mc_log_set_file(nullptr);
+        QFile dumpFile(QCoreApplication::applicationDirPath() + "/dl-test.log");
+        if (dumpFile.open(QIODevice::ReadOnly)) {
+            QByteArray data = dumpFile.readAll();
+            printf("%s", data.constData());
+            fflush(stdout);
+            dumpFile.close();
+        }
+        KernelBridge::shutdown();
+        return 0;
+    }
     if (debugMode) {
         if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
             freopen("CONOUT$", "w", stdout);
@@ -226,10 +855,100 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     app.setApplicationName("Beacon");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("Beacon");
+    (void)QLocale::system(); // init system locale before worker threads start
+
+    qint64 tProc = QDateTime::currentMSecsSinceEpoch();
+
+    // Log to file next to the executable for GUI-mode diagnosis
+    mc_log_set_file((QCoreApplication::applicationDirPath() + "/launcher.log").toUtf8().constData());
+
+    mc_info("[Startup] t0=0ms (after QApplication ctor)");
+
+    // Lightweight QWidget splash shown immediately after QApplication
+    // construction, before font/threadpool/mirror/ini/kernel/QML init,
+    // so a window appears within a few ms of process start.
+    QPixmap splashPixmap(420, 280);
+    splashPixmap.fill(Qt::transparent);
+    SplashWidget splash(splashPixmap);
+    splash.setWindowFlags(Qt::SplashScreen | Qt::FramelessWindowHint);
+
+    {
+        // Render at the screen's device pixel ratio so the pixmap is not
+        // upscaled (which would blur / alias the text on HiDPI displays).
+        const qreal dpr = splash.devicePixelRatioF();
+        QPixmap painted(QSize(qRound(420 * dpr), qRound(280 * dpr)));
+        painted.setDevicePixelRatio(dpr);
+        painted.fill(Qt::transparent);
+        QPainter p(&painted);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::TextAntialiasing);
+        const QPalette pal = app.palette();
+        p.setBrush(pal.color(QPalette::Window));
+        p.setPen(QPen(pal.color(QPalette::Mid), 1));
+        p.drawRoundedRect(QRectF(0.5, 0.5, 419, 279), 12, 12);
+
+        // QPainter on a pixmap with devicePixelRatio works in logical
+        // coordinates (420x280) and maps to physical pixels automatically,
+        // so font sizes and the layout must use logical units only.
+        p.setPen(pal.color(QPalette::Highlight));
+        QFont title = app.font();
+        title.setPixelSize(36);
+        title.setBold(true);
+        p.setFont(title);
+        const QFontMetricsF tm = p.fontMetrics();
+        const qreal titleH = tm.height();
+
+        p.setPen(pal.color(QPalette::PlaceholderText));
+        QFont sub = app.font();
+        sub.setPixelSize(14);
+        p.setFont(sub);
+        const QFontMetricsF sm = p.fontMetrics();
+        const qreal subH = sm.height();
+
+        // Center the two lines as one block vertically.
+        const qreal gap = 10;
+        const qreal blockH = titleH + gap + subH;
+        const qreal top = (280 - blockH) / 2.0;
+
+        p.setPen(pal.color(QPalette::Highlight));
+        p.setFont(title);
+        p.drawText(QRectF(0, top, 420, titleH),
+                   Qt::AlignCenter, QStringLiteral("Beacon"));
+
+        p.setPen(pal.color(QPalette::PlaceholderText));
+        p.setFont(sub);
+        p.drawText(QRectF(0, top + titleH + gap, 420, subH),
+                   Qt::AlignCenter, QStringLiteral("正在启动"));
+        p.end();
+        splash.setPixmap(painted);
+    }
+    mc_info("[Startup] splash content painted in %lldms",
+            QDateTime::currentMSecsSinceEpoch() - tProc);
+
+    // Paint first, then show: with the content already in place the very first
+    // frame is already the rounded-rect card (no square flash).
+    splash.show();
+    app.processEvents();
+    mc_info("[Startup] splash window shown in %lldms",
+            QDateTime::currentMSecsSinceEpoch() - tProc);
+
+    // TEMP DEBUG: capture all Qt messages (incl. QML console.log / Image errors)
+    static FILE *qtDbgFile = nullptr;
+    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
+        if (!qtDbgFile)
+            qtDbgFile = fopen("qtdebug.log", "w");
+        if (qtDbgFile) {
+            fprintf(qtDbgFile, "[%d] %s (%s:%d)\n", (int)type, qPrintable(msg),
+                    ctx.file ? ctx.file : "?", ctx.line);
+            fflush(qtDbgFile);
+        }
+    });
+
+    mc_info("[Startup] splash shown in %lldms", QDateTime::currentMSecsSinceEpoch() - tProc);
 
     QPixmapCache::setCacheLimit(2048); // 2MB image cache limit
 
@@ -295,6 +1014,10 @@ int main(int argc, char *argv[])
 
     engine.addImageProvider("tinted", new TintedIconProvider);
 
+    ModIconProvider *modIconProvider = new ModIconProvider;
+    modIconProvider->setIconsDir(QCoreApplication::applicationDirPath() + "/cache/icons");
+    engine.addImageProvider("modicon", modIconProvider);
+
     QQmlComponent themeComponent(&engine, QUrl("qrc:///qml/theme/Theme.qml"));
     QObject *theme = themeComponent.create();
     if (themeComponent.isError())
@@ -310,28 +1033,40 @@ int main(int argc, char *argv[])
             scheme == "dark" ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light);
     }
 
-    QQuickView splashView;
-    splashView.setFlags(Qt::SplashScreen | Qt::FramelessWindowHint);
-    splashView.setSource(QUrl("qrc:///qml/SplashScreen.qml"));
-    if (splashView.status() == QQuickView::Ready) {
-        splashView.show();
-        app.processEvents();
-    }
+    I18nManager *i18n = new I18nManager(QCoreApplication::applicationDirPath());
+    engine.rootContext()->setContextProperty("I18n", i18n);
+    qWarning("I18N currentLang=%s", qPrintable(i18n->currentLangKey()));
 
+    qint64 tStart = QDateTime::currentMSecsSinceEpoch();
+    mc_info("[Startup] kernel/theme/i18n init done in %lldms",
+            QDateTime::currentMSecsSinceEpoch() - tStart);
+
+    mc_info("[Startup] loading main.qml...");
     engine.load(QUrl("qrc:///qml/main.qml"));
 
-    if (engine.rootObjects().isEmpty())
+    if (engine.rootObjects().isEmpty()) {
+        splash.close();
         return -1;
+    }
 
-    splashView.close();
-    // Release the splash scene graph / object tree (close() only hides it)
-    splashView.setSource(QUrl());
+    mc_info("[Startup] main.qml loaded in %lldms", QDateTime::currentMSecsSinceEpoch() - tStart);
 
-    if (auto *mainWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0))) {
+    auto *mainWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
+    if (!mainWindow)
+        splash.close();
+
+    if (mainWindow) {
         auto *kb = KernelBridge::instance();
         kb->setMainWindow(mainWindow);
         kb->applyWindowTransparency(
             kb->settingsManager()->value("system/transparency", true).toBool());
+        QObject::connect(mainWindow, &QQuickWindow::frameSwapped, mainWindow,
+            [tStart, &splash]() {
+                mc_info("[Startup] first frame rendered in %lldms",
+                        QDateTime::currentMSecsSinceEpoch() - tStart);
+                splash.close();
+            },
+            Qt::SingleShotConnection);
     }
 
     // Periodically reclaim transient JS allocations and unused compiled caches
@@ -347,3 +1082,5 @@ int main(int argc, char *argv[])
     KernelBridge::shutdown();
     return ret;
 }
+
+#include "main.moc"

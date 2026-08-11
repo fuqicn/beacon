@@ -1,5 +1,7 @@
 # Beacon
 
+[简体中文](README_zh.md)
+
 A cross-platform Minecraft launcher built with Qt 6 Quick/QML, powered by the
 [minecraft-launcher-kernel](third_party/minecraft-launcher-kernel) engine.
 

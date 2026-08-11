@@ -1,5 +1,6 @@
 # Build output
 build/
+build-*/
 build-gdb/
 dist/
 test-tmp/

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Beacon
+GenericName=Minecraft Launcher
+Comment=A cross-platform Minecraft launcher
+Exec=Beacon
+Icon=io.github.fuqicn.beacon
+Categories=Game;AdventureGame;SimulationGame;
+Terminal=false
+StartupWMClass=Beacon
+Keywords=minecraft;mc;launcher;game;

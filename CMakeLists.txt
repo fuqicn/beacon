@@ -105,6 +105,9 @@ target_include_directories(Beacon PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel/managers
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel/platform
 )
+set_target_properties(Beacon PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
 target_link_libraries(Beacon PRIVATE
     libmckernel
     Qt6::Quick
@@ -177,4 +180,9 @@ install(TARGETS Beacon
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/beacon
+)
+
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/Untitled.svg"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+    RENAME io.github.fuqicn.beacon.svg
 )

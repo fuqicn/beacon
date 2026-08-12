@@ -989,7 +989,8 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
 #elif defined(Q_OS_MACOS)
     QQuickStyle::setStyle("macOS");
 #elif defined(Q_OS_LINUX)
-    QQuickStyle::setStyle("Fusion");
+    // Let Qt auto-detect platform theme (Breeze on KDE, generic on others)
+    // Do not force Fusion - platform theme handles styling
 #endif
 
     // Load mirror configuration from mirrors.json next to the executable

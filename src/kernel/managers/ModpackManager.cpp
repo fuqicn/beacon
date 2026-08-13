@@ -145,16 +145,23 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
                            const QString &iconUrl, QString *errorOut,
                            const std::function<void(qreal, const QString &)> &progress)
 {
-    auto fail = [errorOut](const QString &msg) -> QString {
+    QString tmp = QDir(rootDir).filePath("versions/.mrpack_tmp");
+    QString verDir;   // the pack's instance dir; only removed if we created it
+    auto fail = [errorOut, &tmp, &verDir](const QString &msg) -> QString {
         mc_error("[Pack] ERROR: %s", msg.toUtf8().constData());
         if (errorOut) *errorOut = msg;
+        // A failed install must not leave partial folders behind: leftover
+        // extraction / instance dirs confuse later scans and force a retry to
+        // pick a "-2"/"-3" duplicate instead of reusing the intended id.
+        removeDirRecursively(tmp);
+        if (!verDir.isEmpty())
+            removeDirRecursively(verDir);
         return QString();
     };
 
     mc_info("[Pack] === START mrpack=%s root=%s", mrpackPath.toUtf8().constData(),
             rootDir.toUtf8().constData());
 
-    QString tmp = QDir(rootDir).filePath("versions/.mrpack_tmp");
     removeDirRecursively(tmp);
     QDir().mkpath(tmp);
 
@@ -210,7 +217,7 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
     // it up front and let the two download halves (Minecraft base + pack files)
     // run concurrently inside the global persistent download pool.
     QString instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
-    QString verDir = QDir(rootDir).filePath("versions/" + instanceId);
+    verDir = QDir(rootDir).filePath("versions/" + instanceId);
     QDir().mkpath(verDir);
 
     // Minimal instance JSON inheriting from the loader version
@@ -314,11 +321,14 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
         mc_qt_download_batch_ex(items.constData(), total, 60000, res.data());
 
         int doneCount = 0;
+        bool cancelled = false;
         for (int i = 0; i < total; ++i) {
             if (res[i]) { ++doneCount; continue; }
+            if (mc_qt_download_cancel()) { cancelled = true; break; }
             PackFile &pf = packFiles[i];
             bool rOk = false;
-            for (int r = 0; r < 3 && !rOk; ++r) {
+            for (int r = 0; r < 3 && !rOk && !cancelled; ++r) {
+                if (mc_qt_download_cancel()) { cancelled = true; break; }
                 QThread::msleep(200 + r * 300);
                 rOk = mc_qt_download_file_multi(pf.urls.data(), pf.urls.size(),
                                                 pf.pathBuf.constData(),
@@ -331,8 +341,10 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
             packP = (qreal)doneCount / (qreal)total;
             reportCombined(QString("下载整合包文件 (%1/%2)").arg(doneCount).arg(total));
         }
-        packP = 1.0;
-        reportCombined(QString("下载整合包文件 (%1/%2)").arg(total).arg(total));
+        if (!cancelled) {
+            packP = 1.0;
+            reportCombined(QString("下载整合包文件 (%1/%2)").arg(total).arg(total));
+        }
     });
 
     // Minecraft base download (jar / libraries incl. natives / assets / logging)
@@ -436,13 +448,15 @@ public slots:
         else
             error = "整合包下载失败: " + url;
 
-        QFile::remove(mrpackPath);
-        QDir().rmdir(tmpDir);
-
         if (id.isEmpty())
             emit errorOccurred(error);
         else
             emit installCompleted(id);
+
+        // Remove the whole temp dir (not just the main file): a failed ranged
+        // download leaves .chunk.N / .PCLDownloading partials that would defeat
+        // QDir().rmdir and pollute the next install with stale pieces.
+        removeDirRecursively(tmpDir);
     }
 
 signals:
@@ -486,18 +500,31 @@ void ModpackManager::stopWorkerThread()
     mc_qt_download_set_cancel(1);
     m_workerThread->quit();
     // Cancellation makes every in-flight download bail within ~100ms (the
-    // download loops poll the cancel flag), so the worker thread and the
-    // packWorker it joins must stop within a couple of seconds. Wait it out
-    // for up to 30s instead of detaching: abandoning a still-running QThread
-    // child means ~ModpackManager destroys it while running -> SIGSEGV/abort.
+    // download loops poll the cancel flag), and the pack-file retry loop in
+    // installPack() also breaks out as soon as the flag is set, so the worker
+    // thread and the packWorker std::thread it joins stop within a couple of
+    // seconds. Wait it out for up to 30s instead of detaching: abandoning a
+    // still-running QThread child means ~ModpackManager destroys it while
+    // running -> SIGSEGV/abort.
     for (int i = 0; i < 150; ++i) {
         if (m_workerThread->wait(200)) break;
     }
     if (m_workerThread->isRunning()) {
-        mc_error("[Pack] worker thread still running after 30s, terminating");
+        mc_error("[Pack] worker still running after 30s of cooperative cancel; "
+                 "abandoning it (never terminate: killing the thread would free "
+                 "installPack()'s stack under its running pack-file std::thread "
+                 "-> use-after-free)");
         m_workerThread->requestInterruption();
-        m_workerThread->terminate();
-        m_workerThread->wait(3000);
+        // Unparent so ~ModpackManager cannot destroy a still-running QThread.
+        m_workerThread->setParent(nullptr);
+        // The worker will still finish on its own once the pool honours cancel;
+        // its late installCompleted/errorOccurred are dropped because we reset
+        // m_worker below, so clear busy ourselves to keep the manager usable.
+        m_busy = false;
+        emit busyChanged();
+        m_workerThread = nullptr;
+        m_worker = nullptr;
+        return;
     }
     mc_qt_download_set_cancel(0);
     m_workerThread = nullptr;

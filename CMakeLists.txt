@@ -106,7 +106,7 @@ target_include_directories(Beacon PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel/platform
 )
 set_target_properties(Beacon PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 target_link_libraries(Beacon PRIVATE
     libmckernel

@@ -48,6 +48,9 @@ struct ModTaskState {
     std::atomic<int> cancelled{0};
     std::atomic<long long> received{0};
     std::atomic<long long> total{0};
+    // Main-thread-only download-speed bookkeeping (not atomic).
+    long long lastSampleReceived = 0;
+    qreal speedBytes = 0.0;
     QThread *thread = nullptr;       // owned via finished -> deleteLater
 };
 

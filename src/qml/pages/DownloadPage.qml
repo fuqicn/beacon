@@ -293,6 +293,25 @@ Item {
                     stackView: modsStack
                 }
                 focus: true
+
+                // Slide the covered page out, fading it during the second half
+                // of the slide so the transition does not linger fully opaque.
+                pushExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
+                    SequentialAnimation {
+                        PauseAnimation { duration: 160 }
+                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
+                    }
+                }
+                popExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
+                    SequentialAnimation {
+                        PauseAnimation { duration: 160 }
+                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
+                    }
+                }
             }
 
             // ---------------- 整合包下载 ----------------
@@ -302,6 +321,23 @@ Item {
                     stackView: packsStack
                 }
                 focus: true
+
+                pushExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
+                    SequentialAnimation {
+                        PauseAnimation { duration: 160 }
+                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
+                    }
+                }
+                popExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
+                    SequentialAnimation {
+                        PauseAnimation { duration: 160 }
+                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
+                    }
+                }
             }
         }
     }

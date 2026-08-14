@@ -50,6 +50,8 @@
 #include <QPointer>
 #include <QLocalServer>
 #include <QMessageBox>
+#include <cstdlib>
+#include <exception>
 #include <mc_log.h>
 #include <mc_mod.h>
 #include <mc_download_qt.h>
@@ -1008,6 +1010,21 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
         signal(SIGABRT, signalHandler);
         signal(SIGFPE, signalHandler);
         signal(SIGILL, signalHandler);
+        // Backstop for hard terminates (uncaught exceptions, noexcept violations)
+        // that never reach the SEH filter / signal handlers. This is what the
+        // "crashed right after a download finished" reports produced: an empty
+        // crash.log means the death bypassed both handlers.
+        std::set_terminate([]() {
+            HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
+                                       CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hFile != INVALID_HANDLE_VALUE) {
+                DWORD written;
+                const char *buf = "=== std::terminate ===\n";
+                WriteFile(hFile, buf, (DWORD)strlen(buf), &written, NULL);
+                CloseHandle(hFile);
+            }
+            abort();
+        });
         HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
                                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile != INVALID_HANDLE_VALUE) {
@@ -1130,6 +1147,7 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
     // the leftover download/network threads; TerminateProcess skips all of that
     // and guarantees immediate termination.
     TerminateProcess(GetCurrentProcess(), (UINT)ret);
+    return 0;   // unreachable; keeps the compiler happy that qMain always returns
 }
 
 #include "main.moc"

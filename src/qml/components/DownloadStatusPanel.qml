@@ -53,7 +53,7 @@ Rectangle {
     }
 
     // --- mod task helpers ---
-    readonly property real modRowHeight: 46
+    readonly property real modRowHeight: 58
     readonly property real modListHeight: Math.min(4, root.modTasks.length) * root.modRowHeight
 
     readonly property int activeModCount: {
@@ -139,6 +139,12 @@ Rectangle {
         return bytesPerSec.toFixed(0) + " B/s"
     }
 
+    function formatBytes(bytes) {
+        if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+        if (bytes >= 1024) return (bytes / 1024).toFixed(0) + " KB"
+        return bytes + " B"
+    }
+
     ColumnLayout {
         id: content
         anchors.fill: parent
@@ -222,8 +228,12 @@ Rectangle {
                     width: taskListView.width
                     dense: true
                     title: modelData.name || modelData.fileName || ""
+                    subtitle: (modelData.status === "downloading" && (modelData.total || 0) > 0)
+                              ? root.formatBytes(modelData.received || 0) + " / " + root.formatBytes(modelData.total)
+                              : ""
                     progress: modelData.progress || 0
                     indeterminate: false
+                    speedText: root.formatSpeed(modelData.speedBytes || 0)
                     statusText: root.statusText(modelData.status, modelData.progress, modelData.received, modelData.total)
                     statusColor: root.statusColor(modelData.status)
                     showCancel: modelData.status === "queued" || modelData.status === "downloading"

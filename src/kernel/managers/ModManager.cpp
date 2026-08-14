@@ -33,6 +33,7 @@
 #include <QUuid>
 
 static const int kMaxConcurrent = 4;
+static const int kTickMs = 150;   // UI progress/speed polling interval
 
 static int sortFromString(const QString &s)
 {
@@ -241,7 +242,7 @@ ModManager::ModManager(QObject *parent) : QObject(parent)
         emit errorOccurred(msg);
     });
 
-    m_tickTimer.setInterval(200);
+    m_tickTimer.setInterval(kTickMs);
     m_tickTimer.setObjectName("modTaskTick");
     connect(&m_tickTimer, &QTimer::timeout, this, &ModManager::tick);
 }
@@ -352,6 +353,7 @@ QString ModManager::installMod(const QVariantMap &file, const QString &rootDir)
     t["progress"] = 0.0;
     t["received"] = (qlonglong)0;
     t["total"] = (qlonglong)0;
+    t["speedBytes"] = (qlonglong)0;
     t["error"] = "";
     m_tasks.append(t);
     st->modelIndex = (int)m_tasks.size() - 1;
@@ -387,12 +389,15 @@ void ModManager::startTask(const std::shared_ptr<ModTaskState> &st)
     st->cancelled = 0;
     st->received = 0;
     st->total = 0;
+    st->lastSampleReceived = 0;
+    st->speedBytes = 0.0;
 
     QVariantMap t = m_tasks[st->modelIndex].toMap();
     t["status"] = "downloading";
     t["progress"] = 0.0;
     t["received"] = (qlonglong)0;
     t["total"] = (qlonglong)0;
+    t["speedBytes"] = (qlonglong)0;
     t["error"] = "";
     m_tasks[st->modelIndex] = t;
     emit tasksChanged();
@@ -472,30 +477,48 @@ void ModManager::tick()
         if (total > 0) {
             prog = qBound(0.0, (qreal)received / (qreal)total, 1.0);
         }
+
+        // Instant speed from the last sample, EWMA-smoothed to avoid jitter.
+        qreal speed = 0.0;
+        long long delta = received - st->lastSampleReceived;
+        st->lastSampleReceived = received;
+        if (delta > 0) {
+            qreal inst = (qreal)delta * (1000.0 / kTickMs);
+            st->speedBytes = st->speedBytes > 0 ? (st->speedBytes * 0.7) + (inst * 0.3) : inst;
+        } else if (received <= 0) {
+            st->speedBytes = 0.0;
+        }
+        speed = st->speedBytes;
+
         if (t.value("progress").toDouble() != prog ||
             t.value("received").toLongLong() != received ||
-            t.value("total").toLongLong() != total) {
+            t.value("total").toLongLong() != total ||
+            t.value("speedBytes").toLongLong() != (qlonglong)speed) {
             t["progress"] = prog;
             t["received"] = (qlonglong)received;
             t["total"] = (qlonglong)total;
+            t["speedBytes"] = (qlonglong)speed;
             changed = true;
         }
 
         if (!st->started.load() && st->done.load() != 0) {
             if (st->cancelled.load()) {
                 t["status"] = "cancelled";
+                t["speedBytes"] = (qlonglong)0;
                 QFile::remove(QDir(modsDir(st->rootDir)).filePath(st->fileName));
                 changed = true;
             } else if (st->done.load() == 1) {
                 t["status"] = "success";
                 t["progress"] = 1.0;
                 t["received"] = (qlonglong)st->received.load();
+                t["speedBytes"] = (qlonglong)0;
                 changed = true;
                 emit installCompleted(true,
                     QDir(modsDir(st->rootDir)).filePath(st->fileName));
             } else {
                 t["status"] = "failed";
                 t["error"] = "下载失败";
+                t["speedBytes"] = (qlonglong)0;
                 changed = true;
                 emit installCompleted(false, QString());
             }
@@ -542,17 +565,20 @@ void ModManager::retryTask(int index)
     if (status != "failed" && status != "cancelled")
         return;
 
-    auto st = m_taskStates[index];
+            auto st = m_taskStates[index];
     st->started = 0;
     st->done = 0;
     st->cancelled = 0;
     st->received = 0;
     st->total = 0;
+    st->lastSampleReceived = 0;
+    st->speedBytes = 0.0;
 
     t["status"] = "queued";
     t["progress"] = 0.0;
     t["received"] = (qlonglong)0;
     t["total"] = (qlonglong)0;
+    t["speedBytes"] = (qlonglong)0;
     t["error"] = "";
     m_tasks[index] = t;
     emit tasksChanged();

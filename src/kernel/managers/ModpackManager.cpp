@@ -410,6 +410,11 @@ public:
 public slots:
     void doInstallFile(const QString &filePath, const QString &rootDir)
     {
+        // Never pump the shared Qt event loop from this worker thread while the
+        // GUI thread runs its own (concurrent processEvents is UB and crashes
+        // inside Qt6Core, see mc_download_qt.cpp). The download APIs block on
+        // the global pool's futures; the pool threads own their event loops.
+        mc_qt_download_thread_no_pump(1);
         QString error;
         QString id = installPack(filePath, rootDir, QString(), &error,
                                  [this](qreal p, const QString &s) {
@@ -423,12 +428,15 @@ public slots:
 
     void doInstallProject(const QVariantMap &file, const QString &rootDir)
     {
+        mc_qt_download_thread_no_pump(1);
         QString fileName = file.value("fileName").toString();
         QString url = file.value("downloadUrl").toString();
         QString sha1 = file.value("sha1").toString();
         qint64 size = file.value("size").toLongLong();
         QString iconUrl = file.value("iconUrl").toString();
 
+        mc_info("[Pack] doInstallProject: %s (%lldB)", fileName.toUtf8().constData(),
+                (long long)size);
         emit progressReported(0.01, "下载整合包");
         QString tmpDir = QDir(rootDir).filePath("versions/.mrpack_dl");
         QDir().mkpath(tmpDir);
@@ -446,17 +454,28 @@ public slots:
                 QThread::msleep(500);
             }
             emit progressReported(0.01, QString("下载整合包 (%1/3)").arg(attempt));
+            // Map the real byte progress (0..1) of the mrpack download into the
+            // 0.01..0.45 window of the overall install, so the status panel no
+            // longer sits frozen at 1% for the whole (possibly minutes-long)
+            // download.
             ok = downloadFile(url, mrpackPath, sha1, size,
-                              [this](qreal) { emit progressReported(0.01, "下载整合包"); });
+                              [this](qreal p) {
+                                  emit progressReported(0.01 + 0.44 * p, "下载整合包");
+                              });
         }
 
         QString error;
         QString id;
-        if (ok)
+        if (ok) {
+            mc_info("[Pack] mrpack downloaded, starting install: %s",
+                    mrpackPath.toUtf8().constData());
+            // installPack reports 0..1; shift it into the 0.45..1.0 window so
+            // the overall bar keeps rising after the download phase.
             id = installPack(mrpackPath, rootDir, iconUrl, &error,
                              [this](qreal p, const QString &s) {
-                                 emit progressReported(p, s);
+                                 emit progressReported(0.45 + 0.55 * p, s);
                              });
+        }
         else
             error = "整合包下载失败: " + url;
 

@@ -59,7 +59,7 @@ Rectangle {
     radius: Theme.shapeSmall
     color: "transparent"
 
-    implicitHeight: root.dense ? 46 : contentCol.implicitHeight + 20
+    implicitHeight: root.dense ? 56 : contentCol.implicitHeight + 20
 
     readonly property real fill: root.indeterminate ? 1.0 : Math.min(root.progress, 1.0)
 
@@ -117,18 +117,18 @@ Rectangle {
                     font.pixelSize: 11
                     color: palette.placeholderText
                     elide: Text.ElideRight
-                    visible: !root.dense && text !== ""
+                    visible: text !== ""
                 }
             }
 
             Text {
                 Layout.alignment: Qt.AlignVCenter
                 text: root.speedText
-                font.pixelSize: 12
+                font.pixelSize: root.dense ? 10 : 12
                 font.weight: Font.DemiBold
                 color: palette.highlight
                 font.italic: true
-                visible: !root.dense && text !== ""
+                visible: text !== ""
             }
 
             Text {

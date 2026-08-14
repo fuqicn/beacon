@@ -180,6 +180,21 @@ Popup {
                         font.weight: Font.Medium
                     }
                 }
+
+                Button {
+                    id: retryVersionsBtn
+                    visible: false
+                    text: "重试"
+                    onClicked: {
+                        retryVersionsBtn.visible = false
+                        loaderVersionCombo.model.clear()
+                        loaderVersionCombo.model.append({ text: "正在获取...", value: "" })
+                        loaderVersionCombo.currentIndex = 0
+                        kernel.installManager.fetchLoaderVersions(
+                                    root.versionId,
+                                    loaderCombo.model.get(loaderCombo.currentIndex).loader)
+                    }
+                }
             }
 
             Rectangle {
@@ -329,8 +344,15 @@ Popup {
             for (var i = 0; i < versions.length; i++) {
                 loaderVersionCombo.model.append({ text: versions[i], value: versions[i] })
             }
-            if (versions.length > 0)
+            if (versions.length > 0) {
                 loaderVersionCombo.currentIndex = 0
+                retryVersionsBtn.visible = false
+            } else {
+                // Empty result (e.g. network reset); offer a retry instead of a blank box
+                loaderVersionCombo.model.append({ text: "获取失败，请重试", value: "" })
+                loaderVersionCombo.currentIndex = 0
+                retryVersionsBtn.visible = true
+            }
         }
         function onInstallCompleted(versionId) {
             installStatus.text = "安装完成，正在下载资源文件..."

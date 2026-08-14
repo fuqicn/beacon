@@ -36,9 +36,12 @@
 #include <QFileInfo>
 #include <QCoreApplication>
 #include <QThread>
+#include <QProcess>
+#include <QEventLoop>
 #include <QXmlStreamReader>
 #include <cstdlib>
 #include <functional>
+#include "KernelBridge.h"
 
 // PCLCE-style download: try BMCLAPI first, then official URL, with up to 4 retry attempts and random delay
 static bool isMojangUrl(const QString &url) {
@@ -222,7 +225,16 @@ static QStringList forgeVersionsFromMaven(const QString &mcVersion)
     QStringList versions;
     QString prefix = mcVersion + "-";
     QString mavenUrl = QString("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml");
-    QByteArray xmlData = httpGetRaw(mavenUrl);
+    // The metadata XML is large and the server is occasionally flaky; retry with
+    // a small backoff instead of giving up on the first network reset.
+    QByteArray xmlData;
+    for (int attempt = 1; attempt <= 3 && xmlData.isEmpty(); ++attempt) {
+        xmlData = httpGetRaw(mavenUrl);
+        if (xmlData.isEmpty()) {
+            mc_warn("[Install] Forge maven-metadata fetch attempt %d/3 failed", attempt);
+            QThread::msleep(500 * attempt);
+        }
+    }
     if (xmlData.isEmpty()) return versions;
 
     QXmlStreamReader xml(xmlData);
@@ -348,6 +360,26 @@ static QJsonObject forgeProfileFromInstaller(const QByteArray &jarData)
     return QJsonObject();
 }
 
+// Locate a usable JVM for the official Forge installer: bundled runtimes first,
+// then JAVA_HOME. Returns an empty string if none is available.
+static QString findJavaForInstall(const QString &mcDir)
+{
+    QStringList candidates;
+    candidates << QDir(mcDir).filePath("../.runtime/java-17/bin/java.exe")
+               << QDir(mcDir).filePath("../.runtime/java-11/bin/java.exe")
+               << QDir(mcDir).filePath("../.runtime/java-21/bin/java.exe")
+               << QDir(mcDir).filePath("../.runtime/java-8/bin/java.exe");
+    const char *jh = getenv("JAVA_HOME");
+    if (jh && jh[0])
+        candidates << QString::fromUtf8(jh) + "/bin/java.exe";
+    for (const QString &c : candidates) {
+        QFileInfo fi(c);
+        if (fi.exists() && fi.isFile() && fi.size() > 0)
+            return QDir::cleanPath(c);
+    }
+    return QString();
+}
+
 // ─── Synchronous loader installer (shared by InstallWorker + ModpackManager) ───
 
 bool installLoaderSync(const QString &mcVersion, const QString &loader,
@@ -355,7 +387,6 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
                        const QString &dir, QString *errorOut, QString *outVerId,
                        const std::function<void(qreal, const QString&)> &progress)
 {
-    Q_UNUSED(javaPath);
     auto fail = [errorOut](const QString &msg) -> bool {
         mc_error("[Install] ERROR: %s", msg.toUtf8().constData());
         if (errorOut) *errorOut = msg;
@@ -836,6 +867,113 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
         }
     }
 
+    // Step 4.5: Forge — run the official installer (--installClient) so its
+    // "processors" generate the recompiled/remapped client jars (client-*-srg.jar,
+    // client-*-extra.jar, forge-*-client.jar) and write the canonical version
+    // JSON. The lite install above only downloads the libraries.
+    if (loader == "forge" && !forgeInstallerJar.isEmpty()) {
+        progress(0.62, "Running official Forge installer");
+        mc_info("[Install] Step 4.5: running official Forge installer for %s", verId.toUtf8().constData());
+
+        QString javaExe = javaPath;
+        if (javaExe.isEmpty() || !QFileInfo::exists(javaExe))
+            javaExe = findJavaForInstall(mcDir);
+
+        if (javaExe.isEmpty()) {
+            mc_warn("[Install] No Java found for official Forge installer; skipped "
+                    "(Forge client jars may be missing until a game is launched)");
+        } else {
+            // Pre-seed the vanilla client jar via the mirror so the installer
+            // does not depend on Mojang's CDN for the recompilation step.
+            QString ts;
+            for (const auto &l : profile["libraries"].toArray()) {
+                QString n = l.toObject()["name"].toString();
+                if (n.startsWith("net.minecraft:client:")) {
+                    ts = n.mid(QString("net.minecraft:client:").length());
+                    break;
+                }
+            }
+            if (!ts.isEmpty()) {
+                char rel[MC_PATH_MAX];
+                QString libName = "net.minecraft:client:" + ts;
+                mc_library_resolve_path(libName.toUtf8().constData(), rel, sizeof(rel));
+                QString seedPath = QDir(libsDir).filePath(QString::fromUtf8(rel));
+                if (!(QFileInfo::exists(seedPath) && QFileInfo(seedPath).size() > 0)) {
+                    QDir().mkpath(QFileInfo(seedPath).absolutePath());
+                    QString seedUrl = QString("https://bmclapi2.bangbang93.com/version/%1/client").arg(inheritsFrom);
+                    mc_info("[Install] Pre-seeding client jar for installer: %s", seedUrl.toUtf8().constData());
+                    mc_download_pclce(seedUrl.toUtf8().constData(), seedPath.toUtf8().constData(), nullptr, 0, 30000);
+                    if (!(QFileInfo::exists(seedPath) && QFileInfo(seedPath).size() > 0)) {
+                        mc_warn("[Install] Client jar pre-seed failed; installer will try Mojang");
+                        QFile::remove(seedPath);
+                    }
+                }
+            }
+
+            QString installerPath = QDir::temp().filePath(QString("forge-%1-installer.jar").arg(verId));
+            {
+                QFile f(installerPath);
+                if (f.open(QIODevice::WriteOnly))
+                    f.write(forgeInstallerJar);
+            }
+
+            // The official installer refuses a directory without a launcher
+            // profile marker ("There is no minecraft launcher profile").
+            {
+                QString lpFile = QDir(mcDir).filePath("launcher_profiles.json");
+                if (!QFileInfo::exists(lpFile)) {
+                    QJsonObject prof;
+                    prof["name"] = "test";
+                    prof["lastVersionId"] = inheritsFrom;
+                    QJsonObject profiles;
+                    profiles["test"] = prof;
+                    QJsonObject root;
+                    root["profiles"] = profiles;
+                    root["selectedProfile"] = "test";
+                    root["clientToken"] = "00000000-0000-0000-0000-000000000000";
+                    QJsonObject lv;
+                    lv["name"] = "1.0";
+                    lv["format"] = 21;
+                    root["launcherVersion"] = lv;
+                    QFile f(lpFile);
+                    if (f.open(QIODevice::WriteOnly)) {
+                        f.write(QJsonDocument(root).toJson());
+                        mc_info("[Install] Created launcher_profiles.json (needed by Forge installer)");
+                    }
+                }
+            }
+
+            if (QFileInfo::exists(installerPath) && QFileInfo(installerPath).size() > 0) {
+                QProcess proc;
+                proc.setProgram(javaExe);
+                proc.setArguments(QStringList() << "-jar" << installerPath
+                                   << "--installClient" << mcDir);
+                proc.setProcessChannelMode(QProcess::MergedChannels);
+                proc.start();
+                if (proc.waitForStarted(15000)) {
+                    if (!proc.waitForFinished(600000))
+                        proc.kill();
+                    QByteArray out = proc.readAll();
+                    for (const QString &line : QString::fromUtf8(out).split('\n'))
+                        if (!line.trimmed().isEmpty())
+                            mc_info("[ForgeInstaller] %s", line.toUtf8().constData());
+                    if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0) {
+                        mc_info("[Install] Official Forge installer completed OK");
+                    } else {
+                        mc_error("[Install] Official Forge installer exited with code %d",
+                                 proc.exitCode());
+                    }
+                } else {
+                    mc_error("[Install] Failed to start Forge installer: %s",
+                             proc.errorString().toUtf8().constData());
+                }
+                QFile::remove(installerPath);
+            } else {
+                mc_error("[Install] Could not write Forge installer to %s", installerPath.toUtf8().constData());
+            }
+        }
+    }
+
     // Step 5: Ensure base version files
     if (!inheritsFrom.isEmpty()) {
         progress(0.70, "Ensuring base version");
@@ -880,7 +1018,22 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
             McVersion *bv = new McVersion; mc_version_init(bv);
             if (mc_version_parse_file(bv, bvJson.toUtf8().constData()) && bv->client_url[0]) {
                 mc_download_pclce(bv->client_url, bvJar.toUtf8().constData(),
-                                  bv->client_sha1, 0, 20000);
+                                  bv->client_sha1, bv->client_size, 30000);
+                // A 0-byte (or SHA1-mismatched) jar must never pass as "installed":
+                // the Forge processors and ModLauncher both rely on a real client jar.
+                bool jarGood = QFileInfo::exists(bvJar) && QFileInfo(bvJar).size() > 0;
+                if (jarGood && bv->client_sha1[0]) {
+                    char existing[64];
+                    jarGood = mc_hash_file_sha1(bvJar.toUtf8().constData(), existing, sizeof(existing)) &&
+                              QString::fromUtf8(existing) == QString::fromUtf8(bv->client_sha1);
+                }
+                if (!jarGood) {
+                    QFile::remove(bvJar);
+                    mc_error("[Install] Base client jar invalid (0 bytes / SHA1 mismatch), removed: %s",
+                             bvJar.toUtf8().constData());
+                    mc_version_free(bv); delete bv;
+                    return fail("原版客户端 jar 下载失败: " + inheritsFrom);
+                }
             }
             mc_version_free(bv); delete bv;
         }
@@ -1038,13 +1191,38 @@ void InstallManager::installLoader(const QString &mcVersion, const QString &load
 
     mc_info("[Install] Creating worker thread for %s %s", loader.toUtf8().constData(), mcVersion.toUtf8().constData());
 
+    // The official Forge installer needs a real JVM; make sure one is available
+    // (bundled auto-download, same as the launch path) before dispatching.
+    QString effectiveJava = javaPath;
+    if (loader == "forge" && effectiveJava.isEmpty()) {
+        if (JavaManager *jm = KernelBridge::instance()->javaManager()) {
+            QVariantMap best = jm->findBest();
+            if (!best.isEmpty()) {
+                effectiveJava = best["path"].toString();
+            } else {
+                mc_info("[Install] No Java found; downloading Java 17 for the Forge installer");
+                m_status = QString("正在准备 Java 17 (Forge 安装器需要)…");
+                emit statusChanged(m_status);
+                QEventLoop loop;
+                auto c1 = QObject::connect(jm, &JavaManager::javaDownloaded, &loop,
+                                           [&](const QString &path, int) { effectiveJava = path; loop.quit(); });
+                auto c2 = QObject::connect(jm, &JavaManager::javaDownloadFailed, &loop,
+                                           [&](int) { loop.quit(); });
+                jm->downloadJava(17);
+                loop.exec();
+                QObject::disconnect(c1);
+                QObject::disconnect(c2);
+            }
+        }
+    }
+
     m_worker = new InstallWorker;
     m_workerThread = new QThread(this);
     m_workerThread->setStackSize(16 * 1024 * 1024);
     m_worker->moveToThread(m_workerThread);
 
-    connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, javaPath, dir]() {
-        w->doInstall(mcVersion, loader, loaderVer, javaPath, dir);
+    connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, effectiveJava, dir]() {
+        w->doInstall(mcVersion, loader, loaderVer, effectiveJava, dir);
     }, Qt::DirectConnection);
 
     connect(m_worker, &InstallWorker::progressReported, this, [this](qreal p, const QString &s) {

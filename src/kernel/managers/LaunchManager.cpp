@@ -428,7 +428,11 @@ void LaunchManager::verifyLibraries()
         }
         if (ok) {
             m_vs.okLibs++;
-        } else if (lib.url[0]) {
+        } else {
+            // Some required libraries (e.g. Forge-generated client-*-srg.jar /
+            // client-*-extra.jar / forge-*-client.jar) have NO download URL.
+            // Report them as missing too so the count is honest; they can only
+            // be fixed by re-running the loader's official installer.
             m_vs.missingLibs << fullPath;
             m_vs.missingLibUrls << QString::fromUtf8(lib.url);
             m_vs.missingLibSha1s << QString::fromUtf8(lib.sha1);
@@ -532,6 +536,21 @@ void LaunchManager::downloadMissingFiles()
     int libsMissing = m_vs.missingLibs.size();
     bool clientMissing = !m_vs.clientJarOk;
 
+    // Generated libraries (no download URL) can never be auto-downloaded; they
+    // are produced by the loader's official installer. If ONLY those are missing,
+    // report clearly instead of silently launching into a broken game.
+    int unrepairable = 0;
+    for (const auto &u : m_vs.missingLibUrls)
+        if (u.isEmpty()) unrepairable++;
+
+    if (libsMissing > 0 && libsMissing == unrepairable && !clientMissing) {
+        mc_info("[Verify] %d missing generated libraries with no source URL (Forge client jars)",
+                unrepairable);
+        emit errorOccurred(QString("缺少 %1 个 Forge 生成文件（client-srg/extra 等）。请删除版本 %2 并重新安装 Forge")
+                               .arg(unrepairable).arg(m_vs.ver.id));
+        return;
+    }
+
     if (libsMissing == 0 && !clientMissing) {
         mc_info("[Verify] All critical files OK, proceeding to launch");
         QTimer::singleShot(0, this, [this]() { doLaunch(); });
@@ -586,6 +605,7 @@ void LaunchManager::downloadMissingFiles()
     // Libraries only (store both mirror and original for retry)
     for (int i = 0; i < m_vs.missingLibs.size(); ++i) {
         const QString &libUrl = m_vs.missingLibUrls[i];
+        if (libUrl.isEmpty()) continue; // Forge-generated jar, no source URL
         QString mirrorUrl;
         // Only translate Mojang URLs to BMCLAPI; Fabric/Forge Maven files don't exist on BMCLAPI
         bool isMojangUrl = libUrl.contains("piston-data.mojang.com") ||
@@ -826,13 +846,9 @@ void LaunchManager::doLaunch()
 
     // Natives dir (needed by substPlaceholders)
     char nativesDir[1024];
-    if (!mc_path_join3(mcDir, "versions", m_vs.ver.id, nativesDir, sizeof(nativesDir))) {
-        mc_error("[Launch] nativesDir path too long");
-        qstrncpy(nativesDir, mcDir, sizeof(nativesDir));
-    }
-    if (!mc_path_join3(nativesDir, m_vs.ver.id, "-natives", nativesDir, sizeof(nativesDir))) {
-        mc_error("[Launch] nativesDir path too long (2)");
-    }
+    QString nativesPath = QDir(QString::fromUtf8(mcDir)).filePath("versions")
+                          + "/" + QString::fromUtf8(m_vs.ver.id) + "/-natives";
+    qstrncpy(nativesDir, nativesPath.toUtf8().constData(), sizeof(nativesDir));
     mc_path_mkdir_p(nativesDir);
 
     // Extract native DLLs from native classifier JARs into natives directory

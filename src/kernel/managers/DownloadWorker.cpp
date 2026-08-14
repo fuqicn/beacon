@@ -231,15 +231,37 @@ void DownloadWorker::stepFetchVersion()
     qstrncpy(m_mcDir, m_dir.toUtf8().constData(), sizeof(m_mcDir));
     mc_info("[DL-W] Step 1: Fetch version JSON (mirror=%s)", m_mirror.toUtf8().constData());
 
-    int ret = mc_version_fetch_by_id_mirror(
-        &m_ver,
-        m_versionId.toUtf8().constData(),
-        m_mirror.toUtf8().constData());
+    // Reset any partially-parsed state from a previous attempt (retrying after
+    // a batch failure would otherwise append duplicate libraries).
+    mc_version_free(&m_ver);
+    mc_version_init(&m_ver);
 
-    if (!ret) {
-        mc_info("[DL-W] Step 1: Failed, will retry");
-        retryOrFinish(false);
-        return;
+    // Loader versions (forge/fabric/quilt/neoforge) are not listed in the
+    // vanilla manifest; their version JSON is already on disk from the loader
+    // install. Prefer the installed file and only fall back to the manifest.
+    bool loaded = false;
+    char diskJson[MC_PATH_MAX];
+    mc_path_join3(m_mcDir, "versions", m_versionId.toUtf8().constData(), diskJson, sizeof(diskJson));
+    char dfn[256];
+    snprintf(dfn, sizeof(dfn), "%s.json", m_versionId.toUtf8().constData());
+    mc_path_join(diskJson, dfn, diskJson, sizeof(diskJson));
+    if (QFileInfo::exists(QString::fromUtf8(diskJson))) {
+        mc_info("[DL-W] Step 1: loading installed version JSON from disk: %s", diskJson);
+        loaded = mc_version_parse_file(&m_ver, diskJson);
+        if (!loaded)
+            mc_info("[DL-W] Step 1: on-disk JSON invalid, falling back to manifest");
+    }
+
+    if (!loaded) {
+        int ret = mc_version_fetch_by_id_mirror(
+            &m_ver,
+            m_versionId.toUtf8().constData(),
+            m_mirror.toUtf8().constData());
+        if (!ret) {
+            mc_info("[DL-W] Step 1: Failed, will retry");
+            retryOrFinish(false);
+            return;
+        }
     }
 
     mc_path_join3(m_mcDir, "versions", m_ver.id, m_verDir, sizeof(m_verDir));
@@ -399,6 +421,14 @@ void DownloadWorker::stepDownloadAll()
         McVersion *parentVer = new McVersion;
         mc_version_init(parentVer);
         if (mc_version_parse_file(parentVer, parentJson)) {
+            // Loader version JSONs usually omit the vanilla assetIndex/assets
+            // (they live on the parent). Inherit them so the asset scan below
+            // downloads the vanilla assets for the loader instance too.
+            if (!m_ver.asset_index.id[0] && parentVer->asset_index.id[0]) {
+                m_ver.asset_index = parentVer->asset_index;
+                if (!m_ver.assets[0] && parentVer->assets[0])
+                    qstrncpy(m_ver.assets, parentVer->assets, sizeof(m_ver.assets));
+            }
             for (int i = 0; i < parentVer->library_count; ++i) {
                 auto &plib = parentVer->libraries[i];
                 if (!plib.is_required) continue;

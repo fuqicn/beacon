@@ -41,6 +41,7 @@
 #include <QThreadPool>
 #include <QVector>
 #include <QFile>
+#include <QFileInfo>
 #include <QPixmapCache>
 #include <QCache>
 #include <QTimer>
@@ -314,53 +315,103 @@ private:
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <dbghelp.h>
+#include <psapi.h>
+
 
 static wchar_t g_crashLogPath[MAX_PATH];
 
 static LONG WINAPI crashHandler(EXCEPTION_POINTERS *exInfo) {
     HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        DWORD written;
-        char buf[8192];
+    if (hFile == INVALID_HANDLE_VALUE)
+        return EXCEPTION_CONTINUE_SEARCH;
+    DWORD written;
+    char buf[4096];
 
-        DWORD code = exInfo->ExceptionRecord->ExceptionCode;
-        PVOID addr = exInfo->ExceptionRecord->ExceptionAddress;
-        DWORD tid = GetCurrentThreadId();
-        DWORD pid = GetCurrentProcessId();
+    DWORD code = exInfo->ExceptionRecord->ExceptionCode;
+    PVOID addr = exInfo->ExceptionRecord->ExceptionAddress;
+    DWORD tid = GetCurrentThreadId();
+    DWORD pid = GetCurrentProcessId();
 
-        int len = snprintf(buf, sizeof(buf),
-            "=== CRASH at %s ===\n"
-            "pid=%lu tid=%lu\n"
-            "Exception code: 0x%08lX\n"
-            "Exception address: %p\n"
-            "RIP: %p\n",
-            QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss").toUtf8().constData(),
-            (unsigned long)pid, (unsigned long)tid,
-            (unsigned long)code,
-            addr,
+    int len = snprintf(buf, sizeof(buf),
+        "=== CRASH at %s ===\n"
+        "pid=%lu tid=%lu\n"
+        "Exception code: 0x%08lX%s\n"
+        "Exception address: %p\n"
+        "RIP: %p\n",
+        QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss").toUtf8().constData(),
+        (unsigned long)pid, (unsigned long)tid,
+        (unsigned long)code,
+        code == 0xC00000FD ? " (STACK OVERFLOW)" : "",
+        addr,
 #ifdef _WIN64
-            (void *)exInfo->ContextRecord->Rip
+        (void *)exInfo->ContextRecord->Rip
 #else
-            (void *)exInfo->ContextRecord->Eip
+        (void *)exInfo->ContextRecord->Eip
 #endif
-        );
-        WriteFile(hFile, buf, len, &written, NULL);
+    );
+    WriteFile(hFile, buf, len, &written, NULL);
 
-        // Best-effort backtrace of the faulting thread (addresses only).
-        void *frames[64];
-        int nf = CaptureStackBackTrace(0, 64, frames, nullptr);
-        if (nf > 0) {
-            char line[64];
-            int l = snprintf(line, sizeof(line), "BT depth=%d\n", nf);
-            WriteFile(hFile, line, l, &written, NULL);
-            for (int i = 0; i < nf; i++) {
-                l = snprintf(line, sizeof(line), "BT%03d 0x%p\n", i, frames[i]);
-                WriteFile(hFile, line, l, &written, NULL);
-            }
-        }
-        CloseHandle(hFile);
+    void *frames[64];
+    int nf = CaptureStackBackTrace(0, 64, frames, nullptr);
+
+    // Symbolize via dbghelp loaded on demand (never hard-linked) so the crash
+    // path itself cannot pull in extra dependencies. Symbol names are
+    // best-effort; the module base + RVA below is always accurate.
+    typedef BOOL(WINAPI *SymInitFn)(HANDLE, LPCSTR, BOOL);
+    typedef BOOL(WINAPI *SymFromAddrFn)(HANDLE, DWORD64, PDWORD64, PSYMBOL_INFO);
+    typedef BOOL(WINAPI *SymCleanupFn)(HANDLE);
+    SymInitFn pSymInit = nullptr;
+    SymFromAddrFn pSymFromAddr = nullptr;
+    SymCleanupFn pSymCleanup = nullptr;
+    HMODULE hDbg = LoadLibraryW(L"dbghelp.dll");
+    if (hDbg) {
+        pSymInit = (SymInitFn)GetProcAddress(hDbg, "SymInitialize");
+        pSymFromAddr = (SymFromAddrFn)GetProcAddress(hDbg, "SymFromAddr");
+        pSymCleanup = (SymCleanupFn)GetProcAddress(hDbg, "SymCleanup");
+        if (pSymInit && !pSymInit(GetCurrentProcess(), nullptr, TRUE))
+            pSymFromAddr = nullptr;
     }
+
+    if (nf > 0) {
+        len = snprintf(buf, sizeof(buf), "BT depth=%d\n", nf);
+        WriteFile(hFile, buf, len, &written, NULL);
+        for (int i = 0; i < nf; i++) {
+            uintptr_t fp = (uintptr_t)frames[i];
+            HMODULE hMod = nullptr;
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCWSTR)fp, &hMod);
+            uintptr_t base = (uintptr_t)hMod;
+            wchar_t modName[MAX_PATH] = L"???";
+            if (hMod)
+                GetModuleBaseNameW(GetCurrentProcess(), hMod, modName, MAX_PATH);
+
+            const char *symName = nullptr;
+            char symRaw[sizeof(SYMBOL_INFO) + 512];
+            PSYMBOL_INFO psi = (PSYMBOL_INFO)symRaw;
+            if (pSymFromAddr) {
+                memset(symRaw, 0, sizeof(symRaw));
+                psi->SizeOfStruct = sizeof(SYMBOL_INFO);
+                psi->MaxNameLen = 512;
+                DWORD64 disp = 0;
+                if (pSymFromAddr(GetCurrentProcess(), (DWORD64)fp, &disp, psi))
+                    symName = psi->Name;
+            }
+            len = snprintf(buf, sizeof(buf), "BT%03d 0x%p  %-16ls +0x%08llX%s%s%s\n",
+                           i, frames[i], modName,
+                           (unsigned long long)(base ? (fp - base) : fp),
+                           symName ? "  " : "", symName ? symName : "",
+                           symName ? "()" : "");
+            WriteFile(hFile, buf, len, &written, NULL);
+        }
+    }
+    if (hDbg) {
+        if (pSymCleanup) pSymCleanup(GetCurrentProcess());
+        FreeLibrary(hDbg);
+    }
+    CloseHandle(hFile);
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -381,6 +432,41 @@ static void signalHandler(int sig) {
         CloseHandle(hFile);
     }
     _exit(1);
+}
+
+static void installCrashHandlers()
+{
+    QString crashLog = QCoreApplication::applicationDirPath() + "/crash.log";
+    crashLog.toWCharArray(g_crashLogPath);
+    g_crashLogPath[crashLog.size()] = L'\0';
+    SetUnhandledExceptionFilter(crashHandler);
+    signal(SIGSEGV, signalHandler);
+    signal(SIGABRT, signalHandler);
+    signal(SIGFPE, signalHandler);
+    signal(SIGILL, signalHandler);
+    // Backstop for hard terminates (uncaught exceptions, noexcept violations)
+    // that never reach the SEH filter / signal handlers. This is what the
+    // "crashed right after a download finished" reports produced: an empty
+    // crash.log means the death bypassed both handlers.
+    std::set_terminate([]() {
+        HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
+                                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            DWORD written;
+            const char *buf = "=== std::terminate ===\n";
+            WriteFile(hFile, buf, (DWORD)strlen(buf), &written, NULL);
+            CloseHandle(hFile);
+        }
+        abort();
+    });
+    HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        const char *marker = "Launcher started, watching for crashes...\n";
+        DWORD written;
+        WriteFile(hFile, marker, (DWORD)strlen(marker), &written, NULL);
+        CloseHandle(hFile);
+    }
 }
 #endif
 
@@ -750,6 +836,85 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
         KernelBridge::shutdown();
         return 0;
     }
+    // ── Headless install repro: --test-install <url> <out> <rootdir> [--dl-sha1 <hex>] [--dl-size <bytes>]
+    // Replicates ModpackManager::doInstallProject (mrpack downloadFile -> installPack)
+    // on the real ModpackWorker thread so a crash in that transition can be
+    // reproduced under a debugger without driving the GUI. When the local file
+    // at <out> already matches --dl-sha1 the download is skipped instantly and
+    // the install step is reached within a second.
+    QString testInstallUrl, testInstallOut, testInstallRoot, testInstallSha1;
+    long testInstallSize = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--test-install") == 0 && i + 3 < argc) {
+            testInstallUrl = QString::fromUtf8(argv[i + 1]);
+            testInstallOut = QString::fromUtf8(argv[i + 2]);
+            testInstallRoot = QString::fromUtf8(argv[i + 3]);
+            i += 3;
+        } else if (strcmp(argv[i], "--dl-sha1") == 0 && i + 1 < argc) {
+            testInstallSha1 = QString::fromUtf8(argv[i + 1]);
+            i++;
+        } else if (strcmp(argv[i], "--dl-size") == 0 && i + 1 < argc) {
+            testInstallSize = atol(argv[i + 1]);
+            i++;
+        }
+    }
+    if (!testInstallUrl.isEmpty()) {
+        QCoreApplication app(argc, argv);
+        app.setApplicationName("Beacon");
+        app.setApplicationVersion("1.0.0");
+        (void)QLocale::system();
+
+        mc_log_set_file((QCoreApplication::applicationDirPath() + "/install-test.log").toUtf8().constData());
+#ifdef Q_OS_WIN
+        installCrashHandlers();
+#endif
+        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        KernelBridge::initialize("zh", mcDir);
+        mc_log_set_level(MC_LOG_DEBUG);
+        mc_info("[TESTINST] url=%s out=%s root=%s", testInstallUrl.toUtf8().constData(),
+                testInstallOut.toUtf8().constData(), testInstallRoot.toUtf8().constData());
+
+        bool done = false;
+        ModpackManager *pm = KernelBridge::instance()->modpackManager();
+        QObject::connect(pm, &ModpackManager::installCompleted, [&done](const QString &id) {
+            mc_info("[TESTINST] installCompleted: %s", id.toUtf8().constData());
+            done = true;
+            QCoreApplication::quit();
+        });
+        QObject::connect(pm, &ModpackManager::errorOccurred, [&done](const QString &msg) {
+            mc_error("[TESTINST] errorOccurred: %s", msg.toUtf8().constData());
+            done = true;
+            QCoreApplication::quit();
+        });
+        // A clean install reaches the long Minecraft-base download phase; stop
+        // before that so a successful repro run exits fast instead of burning
+        // minutes. A crash (if any) happens long before this fires.
+        QTimer::singleShot(30000, []() {
+            mc_info("[TESTINST] 30s timeout, quitting (no crash in the download->install window)");
+            QCoreApplication::quit();
+        });
+
+        QVariantMap file;
+        file["fileName"] = QFileInfo(testInstallOut).fileName();
+        file["downloadUrl"] = testInstallUrl;
+        file["sha1"] = testInstallSha1;
+        file["size"] = (qlonglong)testInstallSize;
+        file["iconUrl"] = "";
+        pm->installFromProject(file, testInstallRoot);
+
+        app.exec();
+        mc_info("[TESTINST] final done=%d", (int)done);
+        mc_log_set_file(nullptr);
+        QFile dumpFile(QCoreApplication::applicationDirPath() + "/install-test.log");
+        if (dumpFile.open(QIODevice::ReadOnly)) {
+            QByteArray data = dumpFile.readAll();
+            printf("%s", data.constData());
+            fflush(stdout);
+            dumpFile.close();
+        }
+        KernelBridge::shutdown();
+        return 0;
+    }
     // ── Headless batch test: --test-batch <url> <outdir> <count> [--batch] [--tb-size <bytes>]
     // Exercises the two install download paths: mc_qt_download_batch_ex (ModpackManager,
     // QThread::create worker pool) and mc_qt_download_batch (InstallManager engine).
@@ -1001,39 +1166,7 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
     }
 
 #ifdef Q_OS_WIN
-    {
-        QString crashLog = QCoreApplication::applicationDirPath() + "/crash.log";
-        crashLog.toWCharArray(g_crashLogPath);
-        g_crashLogPath[crashLog.size()] = L'\0';
-        SetUnhandledExceptionFilter(crashHandler);
-        signal(SIGSEGV, signalHandler);
-        signal(SIGABRT, signalHandler);
-        signal(SIGFPE, signalHandler);
-        signal(SIGILL, signalHandler);
-        // Backstop for hard terminates (uncaught exceptions, noexcept violations)
-        // that never reach the SEH filter / signal handlers. This is what the
-        // "crashed right after a download finished" reports produced: an empty
-        // crash.log means the death bypassed both handlers.
-        std::set_terminate([]() {
-            HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
-                                       CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (hFile != INVALID_HANDLE_VALUE) {
-                DWORD written;
-                const char *buf = "=== std::terminate ===\n";
-                WriteFile(hFile, buf, (DWORD)strlen(buf), &written, NULL);
-                CloseHandle(hFile);
-            }
-            abort();
-        });
-        HANDLE hFile = CreateFileW(g_crashLogPath, GENERIC_WRITE, 0, NULL,
-                                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hFile != INVALID_HANDLE_VALUE) {
-            const char *marker = "Launcher started, watching for crashes...\n";
-            DWORD written;
-            WriteFile(hFile, marker, (DWORD)strlen(marker), &written, NULL);
-            CloseHandle(hFile);
-        }
-    }
+    installCrashHandlers();
 #endif
 
 #if defined(Q_OS_WIN)
@@ -1054,6 +1187,17 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
         mc_mirror_load_config(mirrorPath.toUtf8().constData());
 
     KernelBridge::initialize("zh", QCoreApplication::applicationDirPath() + "/.minecraft");
+
+    // A crash during installPack can leave the mrpack download / extraction
+    // temp dirs behind; sweep them at startup so the next install starts from a
+    // clean slate instead of reusing stale pieces.
+    const QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+    const QStringList staleTemps = {
+        mcDir + "/versions/.mrpack_dl",
+        mcDir + "/versions/.mrpack_tmp"
+    };
+    for (const QString &stale : staleTemps)
+        QDir(stale).removeRecursively();
 
     QQmlApplicationEngine engine;
     engine.addImportPath("qrc:/qml");

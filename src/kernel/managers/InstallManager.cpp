@@ -1040,6 +1040,7 @@ void InstallManager::installLoader(const QString &mcVersion, const QString &load
 
     m_worker = new InstallWorker;
     m_workerThread = new QThread(this);
+    m_workerThread->setStackSize(16 * 1024 * 1024);
     m_worker->moveToThread(m_workerThread);
 
     connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, javaPath, dir]() {

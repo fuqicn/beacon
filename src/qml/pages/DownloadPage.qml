@@ -294,23 +294,30 @@ Item {
                 }
                 focus: true
 
-                // Slide the covered page out, fading it during the second half
-                // of the slide so the transition does not linger fully opaque.
+                // All four transitions share one 320ms timing so the entering
+                // and exiting pages slide in sync (the covered page's visible
+                // sliver keeps fading -> the fade is actually seen), and every
+                // page is restored to x=0 / opacity=1 on reveal (no more page
+                // stuck invisible-but-clickable after a back navigation).
+                pushEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
-                    SequentialAnimation {
-                        PauseAnimation { duration: 160 }
-                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
-                    }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+                popEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
-                    SequentialAnimation {
-                        PauseAnimation { duration: 160 }
-                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
-                    }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
                 }
             }
 
@@ -322,21 +329,25 @@ Item {
                 }
                 focus: true
 
+                pushEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
-                    SequentialAnimation {
-                        PauseAnimation { duration: 160 }
-                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
-                    }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+                popEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
-                    SequentialAnimation {
-                        PauseAnimation { duration: 160 }
-                        NumberAnimation { property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutCubic }
-                    }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
                 }
             }
         }

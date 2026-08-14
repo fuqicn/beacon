@@ -11,7 +11,29 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <string>
 #include <QtZlib/zlib.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <wchar.h>
+
+// Modrinth packs routinely contain non-ASCII (UTF-8) entry names; the narrow
+// fopen() maps them through the ANSI codepage and fails to create such files.
+// Open the output via the UTF-16 path instead.
+static FILE *open_utf8(const char *path, const char *mode) {
+    wchar_t wmode[8];
+    if (MultiByteToWideChar(CP_ACP, 0, mode, -1, wmode, 8) == 0)
+        return NULL;
+    int len = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
+    if (len <= 0) return NULL;
+    std::wstring wpath(len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, &wpath[0], len);
+    return _wfopen(wpath.c_str(), wmode);
+}
+#else
+#define open_utf8 fopen
+#endif
 
 #define ZIP_LOCAL_SIG      0x04034b50
 #define ZIP_CENTRAL_SIG    0x02014b50
@@ -85,7 +107,7 @@ static int read_eocd(FILE *f, EOCD *eocd) {
 }
 
 int mc_zip_extract(const char *archive_path, const char *output_dir) {
-    FILE *f = fopen(archive_path, "rb");
+    FILE *f = open_utf8(archive_path, "rb");
     if (!f) { mc_error("Cannot open archive: %s", archive_path); return 0; }
 
     EOCD eocd;
@@ -144,7 +166,7 @@ int mc_zip_extract(const char *archive_path, const char *output_dir) {
 
         total++;
 
-        FILE *out = fopen(out_path, "wb");
+        FILE *out = open_utf8(out_path, "wb");
         if (!out) {
             mc_error("Cannot create %s", out_path);
             continue;

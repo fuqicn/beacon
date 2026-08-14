@@ -640,6 +640,11 @@ void ModpackManager::installFromFile(const QString &filePath, const QString &roo
     stopWorkerThread();
     m_worker = new ModpackWorker;
     m_workerThread = new QThread(this);
+    // installPack carries a large stack frame under the default (-O0) build;
+    // the 1MB default thread stack overflows inside its prologue
+    // (0xC00000FD right after "mrpack downloaded, starting install"). Give the
+    // worker room before start().
+    m_workerThread->setStackSize(16 * 1024 * 1024);
     startPackInstall(this, m_worker, [w = m_worker, filePath, rootDir]() {
         w->doInstallFile(filePath, rootDir);
     });
@@ -651,6 +656,7 @@ void ModpackManager::installFromProject(const QVariantMap &file, const QString &
     stopWorkerThread();
     m_worker = new ModpackWorker;
     m_workerThread = new QThread(this);
+    m_workerThread->setStackSize(16 * 1024 * 1024);
     startPackInstall(this, m_worker, [w = m_worker, file, rootDir]() {
         w->doInstallProject(file, rootDir);
     });

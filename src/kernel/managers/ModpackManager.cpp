@@ -435,8 +435,20 @@ public slots:
         QString mrpackPath = QDir(tmpDir).filePath(
             fileName.isEmpty() ? "modpack.mrpack" : fileName);
 
-        bool ok = downloadFile(url, mrpackPath, sha1, size,
-                               [this](qreal) { emit progressReported(0.01, "下载整合包"); });
+        // The mirror/CDN can stall a ranged download mid-flight, so retry a few
+        // times (clearing stale .chunk.N pieces each round) before giving up:
+        // a transient stall must not abort the whole install.
+        bool ok = false;
+        for (int attempt = 1; attempt <= 3 && !ok; ++attempt) {
+            if (attempt > 1) {
+                removeDirRecursively(tmpDir);
+                QDir().mkpath(tmpDir);
+                QThread::msleep(500);
+            }
+            emit progressReported(0.01, QString("下载整合包 (%1/3)").arg(attempt));
+            ok = downloadFile(url, mrpackPath, sha1, size,
+                              [this](qreal) { emit progressReported(0.01, "下载整合包"); });
+        }
 
         QString error;
         QString id;

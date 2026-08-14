@@ -48,6 +48,8 @@
 #include <QSemaphore>
 #include <QCryptographicHash>
 #include <QPointer>
+#include <QLocalServer>
+#include <QMessageBox>
 #include <mc_log.h>
 #include <mc_mod.h>
 #include <mc_download_qt.h>
@@ -868,6 +870,42 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
 
     mc_info("[Startup] t0=0ms (after QApplication ctor)");
 
+    // Single-instance guard: multiple launchers sharing one data dir corrupt
+    // each other's chunked downloads (.chunk.N) and .mrpack_dl / versions/
+    // folders, causing install failures and crashes.
+#ifdef Q_OS_WIN
+    // Windows: a kernel mutex is released automatically by the OS when the
+    // owning process dies (even a crash), is atomic against simultaneous
+    // launches, and has no stale-file/timeout takeover semantics.
+    const QString mutexName = "Local\\Beacon-"
+        + QString::fromLatin1(QCryptographicHash::hash(
+            QCoreApplication::applicationDirPath().toUtf8(),
+            QCryptographicHash::Md5).toHex());
+    HANDLE hInstanceMutex = CreateMutexW(nullptr, TRUE,
+                                         (const wchar_t *)mutexName.utf16());
+    DWORD gle = GetLastError();
+    mc_info("[Startup] single-instance guard: h=%p gle=%u name=%s",
+            (void *)hInstanceMutex, (unsigned)gle, qPrintable(mutexName));
+    if (!hInstanceMutex || gle == ERROR_ALREADY_EXISTS) {
+        if (hInstanceMutex) CloseHandle(hInstanceMutex);
+        mc_info("[Startup] another Beacon instance is already running; exiting");
+        QMessageBox::warning(nullptr, "Beacon", QStringLiteral("Beacon 已在运行，请勿重复打开。"));
+        return 0;
+    }
+    // Keep hInstanceMutex open for the whole process; the OS releases it on exit.
+#else
+    QLocalServer ipcServer;
+    const QString ipcName = "Beacon-"
+        + QString::fromLatin1(QCryptographicHash::hash(
+            QCoreApplication::applicationDirPath().toUtf8(),
+            QCryptographicHash::Md5).toHex());
+    if (!ipcServer.listen(ipcName)) {
+        mc_info("[Startup] another Beacon instance is already running; exiting");
+        QMessageBox::warning(nullptr, "Beacon", QStringLiteral("Beacon 已在运行，请勿重复打开。"));
+        return 0;
+    }
+#endif
+
     // Lightweight QWidget splash shown immediately after QApplication
     // construction, before font/threadpool/mirror/ini/kernel/QML init,
     // so a window appears within a few ms of process start.
@@ -1081,7 +1119,17 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
 
     int ret = app.exec();
     KernelBridge::shutdown();
-    return ret;
+    // The QML engine / QApplication teardown that runs after exec() can
+    // deadlock with the (detached) download-pool threads' Qt-network cleanup
+    // and never return, leaving the process in the background after the window
+    // is closed. Everything is already torn down above (all managers cancelled,
+    // worker threads stopped, download pool cleaned up, log flushed), so
+    // terminating here is safe and guarantees a prompt exit.
+    mc_info("[Bridge] Exit (pid=%lu)", (unsigned long)GetCurrentProcessId());
+    // ExitProcess would run DLL detach handlers (Qt6 DllMain) which can hang on
+    // the leftover download/network threads; TerminateProcess skips all of that
+    // and guarantees immediate termination.
+    TerminateProcess(GetCurrentProcess(), (UINT)ret);
 }
 
 #include "main.moc"

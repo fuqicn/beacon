@@ -62,7 +62,7 @@ signals:
 private:
     void doFetchManifest(const QString &mirror);
     bool isAprilFools(const char *id, qint64 releaseTime) const;
-    void buildCategories();
+    QVariantList buildCategories();
     McManifest m_manifest;
     bool m_loading = false;
     QTimer m_delayTimer;

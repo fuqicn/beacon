@@ -14,16 +14,20 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
+
+#define MC_LOG_MAX_BYTES (4 * 1024 * 1024)
 
 static McLogLevel g_level = MC_LOG_INFO;
 static std::ofstream g_file;
 static std::mutex g_log_mtx;
 static int g_progress_active = 0;
 static McOutputMode g_output_mode = MC_OUTPUT_HUMAN;
+static std::string g_file_path;
 
 static const char *level_names[] = { "DEBUG", "INFO", "WARN", "ERROR" };
 
@@ -34,9 +38,30 @@ void mc_log_set_progress(int active) {
     g_progress_active = active;
 }
 
+// Rotate the log file when it exceeds MC_LOG_MAX_BYTES: the current file is
+// renamed to "<path>.old" (overwriting any previous backup) and a fresh file
+// is opened, so the log stays bounded in size.
+static void rotate_log_if_needed(void) {
+    if (!g_file.is_open() || g_file_path.empty()) return;
+    g_file.flush();
+    if ((long long)g_file.tellp() < MC_LOG_MAX_BYTES) return;
+    g_file.close();
+    std::string oldPath = g_file_path + ".old";
+    std::remove(oldPath.c_str());
+    std::rename(g_file_path.c_str(), oldPath.c_str());
+    g_file.open(g_file_path.c_str(), std::ios::app);
+    if (g_file.is_open())
+        g_file << "=== log rotated, previous log saved to " << oldPath
+               << " (limit " << MC_LOG_MAX_BYTES << " bytes) ===\n" << std::flush;
+}
+
 void mc_log_set_file(const char *path) {
+    g_file_path = path ? path : "";
     if (g_file.is_open()) g_file.close();
-    if (path) g_file.open(path, std::ios::app);
+    if (path) {
+        g_file.open(path, std::ios::app);
+        rotate_log_if_needed();
+    }
 }
 
 void mc_output_set_mode(McOutputMode mode) {
@@ -190,6 +215,7 @@ void mc_console_printf(const char *fmt, ...) {
 void mc_log(McLogLevel level, const char *fmt, ...) {
     if (level < g_level) return;
     std::lock_guard<std::mutex> lock(g_log_mtx);
+    rotate_log_if_needed();
     if (g_progress_active)
         std::cout << "\r                                                                                \r" << std::flush;
     time_t now = time(NULL);

@@ -194,46 +194,12 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
     else if (deps.contains("neoforge")) { loader = "neoforge"; loaderVer = deps["neoforge"].toString(); }
     else if (deps.contains("forge")) { loader = "forge"; loaderVer = deps["forge"].toString(); }
 
-    QString loaderVerId;
-    if (loader.isEmpty()) {
-        // 纯原版整合包（仅依赖 minecraft）：跳过加载器安装，直接全量下载原版
-        mc_info("[Pack] Vanilla-only modpack, target=%s", mcVersion.toUtf8().constData());
-        loaderVerId = mcVersion;
-    } else {
-        progress(0.05, "安装加载器 " + loader + " " + mcVersion);
-        {
-            QString err;
-            if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
-                                   [&progress](qreal p, const QString &s) {
-                                       progress(0.05 + 0.45 * p, "安装加载器 " + s);
-                                   }))
-                return fail("加载器安装失败: " + err);
-        }
-        if (loaderVerId.isEmpty())
-            loaderVerId = mcVersion;
-    }
-
     // Instance identity is independent of the base-download outcome, so decide
     // it up front and let the two download halves (Minecraft base + pack files)
     // run concurrently inside the global persistent download pool.
     QString instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
     verDir = QDir(rootDir).filePath("versions/" + instanceId);
     QDir().mkpath(verDir);
-
-    // Minimal instance JSON inheriting from the loader version
-    {
-        QJsonObject v;
-        v["id"] = instanceId;
-        v["inheritsFrom"] = loaderVerId;
-        v["type"] = "release";
-        v["mainClass"] = "";
-        QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-        v["time"] = now;
-        v["releaseTime"] = now;
-        QFile vf(verDir + "/" + instanceId + ".json");
-        if (vf.open(QIODevice::WriteOnly))
-            vf.write(QJsonDocument(v).toJson(QJsonDocument::Indented));
-    }
 
     // Collect modpack files (client-required) into the isolated game dir
     struct PackFile {
@@ -346,6 +312,48 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
             reportCombined(QString("下载整合包文件 (%1/%2)").arg(total).arg(total));
         }
     });
+
+    // Loader install. The pack files are already downloading on the global
+    // pool (the packWorker above), so mods fetch while the loader installer is
+    // downloaded and run, overlapping with the Minecraft base download too.
+    QString loaderVerId;
+    if (loader.isEmpty()) {
+        // 纯原版整合包（仅依赖 minecraft）：跳过加载器安装，直接全量下载原版
+        mc_info("[Pack] Vanilla-only modpack, target=%s", mcVersion.toUtf8().constData());
+        loaderVerId = mcVersion;
+    } else {
+        progress(0.05, "安装加载器 " + loader + " " + mcVersion);
+        {
+            QString err;
+            if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
+                                   [&progress](qreal p, const QString &s) {
+                                       progress(0.05 + 0.45 * p, "安装加载器 " + s);
+                                   })) {
+                // Abort the in-flight mod downloads before failing the install.
+                mc_qt_download_set_cancel(1);
+                packWorker.join();
+                mc_qt_download_set_cancel(0);
+                return fail("加载器安装失败: " + err);
+            }
+        }
+        if (loaderVerId.isEmpty())
+            loaderVerId = mcVersion;
+    }
+
+    // Minimal instance JSON inheriting from the loader version
+    {
+        QJsonObject v;
+        v["id"] = instanceId;
+        v["inheritsFrom"] = loaderVerId;
+        v["type"] = "release";
+        v["mainClass"] = "";
+        QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        v["time"] = now;
+        v["releaseTime"] = now;
+        QFile vf(verDir + "/" + instanceId + ".json");
+        if (vf.open(QIODevice::WriteOnly))
+            vf.write(QJsonDocument(v).toJson(QJsonDocument::Indented));
+    }
 
     // Minecraft base download (jar / libraries incl. natives / assets / logging)
     progress(0.50, "下载原版游戏文件");

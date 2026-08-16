@@ -15,6 +15,7 @@
   "account.offline": "Offline",
   "currentInstance": "Current instance",
   "noInstance": "None selected",
+  "noInstances": "No instances",
   "selectInstance": "Select",
   "instanceSettings": "Instance settings",
   "instanceManage": "Instances",

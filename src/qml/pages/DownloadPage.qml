@@ -31,13 +31,29 @@ Item {
 
     property int modeIndex: 0
 
-    function selectCategory(index) {
+function selectCategory(index) {
         currentCategory = index
         if (index >= 0 && index < root.categories.length) {
             filteredVersions = root.categories[index].versions || []
         } else {
             filteredVersions = []
         }
+    }
+
+    onCurrentCategoryChanged: {
+        if (listContainer && Theme.animationsEnabled) {
+            listContainer.scale = 0.96
+            catSwitchAnim.restart()
+        }
+    }
+
+    NumberAnimation {
+        id: catSwitchAnim
+        target: listContainer
+        property: "scale"
+        to: 1
+        duration: 240
+        easing.type: Easing.OutCubic
     }
 
     Connections {
@@ -74,57 +90,84 @@ Item {
             color: palette.text
         }
 
-        // Mode tabs: 版本下载 / 模组下载
-        RowLayout {
+// Mode tabs: 版本下载 / 模组下载 / 整合包下载.
+        // Fixed tab widths (no implicitWidth timing) + a sliding pill so the
+        // three buttons never overlap and switching reads as an animation.
+        Item {
             Layout.fillWidth: true
-            spacing: 4
+            Layout.leftMargin: 12
+            height: 34
 
-            Repeater {
-                model: [
-                    { label: "版本下载" },
-                    { label: "模组下载" },
-                    { label: "整合包下载" }
-                ]
-                delegate: Rectangle {
-                    id: modeTab
-                    property int idx: index
-                    width: modeLabel.implicitWidth + 40
-                    height: 34
-                    radius: Theme.shapeExtraLarge
-                    color: idx === root.modeIndex
-                           ? Qt.alpha(palette.highlight, 0.15)
-                           : (mtHover.hovered ? Qt.alpha(palette.placeholderText, 0.08) : "transparent")
-                    HoverHandler { id: mtHover }
-
-                    Text {
-                        id: modeLabel
-                        anchors.centerIn: parent
-                        text: modelData.label
-                        font.pixelSize: 14
-                        font.weight: idx === root.modeIndex ? Font.Medium : Font.Normal
-                        color: idx === root.modeIndex ? palette.highlight : palette.placeholderText
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.modeIndex = idx
-                    }
+            Rectangle {
+                id: modePill
+                x: root.modeIndex * 108
+                y: 0
+                width: 100
+                height: 34
+                radius: 17
+                color: Qt.alpha(palette.highlight, 0.15)
+                Behavior on x {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
                 }
             }
 
-            Item { Layout.fillWidth: true }
+            Row {
+                anchors.fill: parent
+                spacing: 8
+
+                Repeater {
+                    model: [
+                        { label: "版本下载" },
+                        { label: "模组下载" },
+                        { label: "整合包下载" }
+                    ]
+                    delegate: Item {
+                        width: 100
+                        height: 34
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 17
+                            color: mtHover.hovered ? Qt.alpha(palette.placeholderText, 0.08) : "transparent"
+                        }
+                        HoverHandler { id: mtHover }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            font.pixelSize: 14
+                            font.weight: index === root.modeIndex ? Font.Medium : Font.Normal
+                            color: index === root.modeIndex ? palette.highlight : palette.placeholderText
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.modeIndex = index
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle { Layout.fillWidth: true; height: 1; color: palette.mid; opacity: 0.3 }
 
-        StackLayout {
+Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: root.modeIndex
+            clip: true
 
             // ---------------- 版本下载 ----------------
             Item {
+                id: versionPage
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.modeIndex === 0 ? 1 : 0
+                x: root.modeIndex === 0 ? 0 : (root.modeIndex < 0 ? -48 : 48)
+                Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 16
@@ -133,30 +176,75 @@ Item {
                         Layout.fillWidth: true
                         spacing: 8
 
-                        Repeater {
-                            id: categoryTabs
-                            delegate: Rectangle {
-                                id: tabBg
-                                width: implicitLabel.implicitWidth + 32
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 12
+                            height: 36
+
+                            // Sliding pill that bounces to the selected category.
+                            Rectangle {
+                                id: catPill
+                                y: 0
                                 height: 36
                                 radius: Theme.shapeExtraLarge
-                                color: index === currentCategory
-                                       ? Qt.alpha(palette.highlight, 0.15)
-                                       : "transparent"
-
-                                Text {
-                                    id: implicitLabel
-                                    anchors.centerIn: parent
-                                    text: modelData.label + " (" + (modelData.versions ? modelData.versions.length : 0) + ")"
-                                    font.pixelSize: 13
-                                    font.weight: index === currentCategory ? Font.Medium : Font.Normal
-                                    color: index === currentCategory ? palette.highlight : palette.placeholderText
+                                color: Qt.alpha(palette.highlight, 0.15)
+                                width: root.currentCategory >= 0 && categoryTabs.count > root.currentCategory
+                                       ? categoryTabs.itemAt(root.currentCategory).width
+                                       : 0
+                                x: root.currentCategory >= 0 && categoryTabs.count > root.currentCategory
+                                   ? categoryTabs.itemAt(root.currentCategory).x
+                                   : 0
+                                Behavior on x {
+                                    enabled: Theme.animationsEnabled
+                                    NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
                                 }
+                                Behavior on width {
+                                    enabled: Theme.animationsEnabled
+                                    NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+                                }
+                            }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: selectCategory(index)
+                            Row {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                Repeater {
+                                    id: categoryTabs
+                                    delegate: Rectangle {
+                                        id: tabBg
+                                        implicitWidth: implicitLabel.implicitWidth + 32
+                                        width: implicitWidth
+                                        height: 36
+                                        radius: Theme.shapeExtraLarge
+                                        color: "transparent"
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: parent.radius
+                                            color: tabHover.hovered ? Qt.alpha(palette.placeholderText, 0.08) : "transparent"
+                                            Behavior on color {
+                                                enabled: Theme.animationsEnabled
+                                                ColorAnimation { duration: 150 }
+                                            }
+                                        }
+
+                                        Text {
+                                            id: implicitLabel
+                                            anchors.centerIn: parent
+                                            text: modelData.label + " (" + (modelData.versions ? modelData.versions.length : 0) + ")"
+                                            font.pixelSize: 13
+                                            font.weight: index === root.currentCategory ? Font.Medium : Font.Normal
+                                            color: index === root.currentCategory ? palette.highlight : palette.placeholderText
+                                        }
+
+                                        HoverHandler { id: tabHover }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.selectCategory(index)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -289,6 +377,12 @@ Item {
             // ---------------- 模组下载 ----------------
             StackView {
                 id: modsStack
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.modeIndex === 1 ? 1 : 0
+                x: root.modeIndex === 1 ? 0 : (root.modeIndex < 1 ? -48 : 48)
+                Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
                 initialItem: ModsSearchPage {
                     stackView: modsStack
                 }
@@ -324,6 +418,12 @@ Item {
             // ---------------- 整合包下载 ----------------
             StackView {
                 id: packsStack
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.modeIndex === 2 ? 1 : 0
+                x: root.modeIndex === 2 ? 0 : (root.modeIndex < 2 ? -48 : 48)
+                Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
                 initialItem: ModpackSearchPage {
                     stackView: packsStack
                 }

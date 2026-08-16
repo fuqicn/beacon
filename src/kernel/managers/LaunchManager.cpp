@@ -262,45 +262,55 @@ void LaunchManager::doVerifyAndLaunch()
     if (m_vs.ver.library_count < 0 || m_vs.ver.library_count > MC_MAX_LIBRARIES) {
         mc_error("[Verify] library_count=%d out of range, capping to 0", m_vs.ver.library_count);
         m_vs.ver.library_count = 0;
-    }
+}
 
-    // Handle inherits_from
+    // Handle inherits_from: resolve the whole ancestor chain recursively
+    // (PCLCE-style). Libraries from every level are merged into the struct,
+    // the deepest ancestor that owns a client jar becomes the "jar" version,
+    // and when the instance JSON carries no own "arguments" (e.g. modpack
+    // instances), the merged jvm/game arguments are written back into
+    // raw_json so doLaunch applies the loader's module-path flags.
     if (m_vs.ver.inherits_from[0]) {
         mc_info("[Verify] Handling inherits_from: %s", m_vs.ver.inherits_from);
-        McVersion *parentVer = new McVersion;
-        mc_version_init(parentVer);
-        char parentJson[1024];
-        mc_path_join3(m_mcDir.toUtf8().constData(), "versions",
-                      m_vs.ver.inherits_from, parentJson, sizeof(parentJson));
-        snprintf(fn, sizeof(fn), "%s.json", m_vs.ver.inherits_from);
-        mc_path_join(parentJson, fn, parentJson, sizeof(parentJson));
-        if (mc_version_parse_file(parentVer, parentJson)) {
-            // Merge assets from parent if not set
-            if (!m_vs.ver.assets[0] && parentVer->assets[0])
-                qstrncpy(m_vs.ver.assets, parentVer->assets, sizeof(m_vs.ver.assets));
-            if (!m_vs.ver.main_class[0] && parentVer->main_class[0])
-                qstrncpy(m_vs.ver.main_class, parentVer->main_class, sizeof(m_vs.ver.main_class));
-            // Merge asset_index from parent if not set
-            if (!m_vs.ver.asset_index.id[0] && parentVer->asset_index.id[0]) {
-                qstrncpy(m_vs.ver.asset_index.id, parentVer->asset_index.id, sizeof(m_vs.ver.asset_index.id));
-                qstrncpy(m_vs.ver.asset_index.url, parentVer->asset_index.url, sizeof(m_vs.ver.asset_index.url));
-                qstrncpy(m_vs.ver.asset_index.sha1, parentVer->asset_index.sha1, sizeof(m_vs.ver.asset_index.sha1));
-                m_vs.ver.asset_index.size = parentVer->asset_index.size;
-                m_vs.ver.asset_index.total_size = parentVer->asset_index.total_size;
+
+        QStringList chain;
+        bool haveArgs = m_vs.ver.raw_json.contains("arguments")
+                        && m_vs.ver.raw_json["arguments"].isObject();
+        QList<QJsonValue> mergedJvm, mergedGame;
+
+        QString cur = QString::fromUtf8(m_vs.ver.inherits_from);
+        for (int guard = 0; guard < 16 && !cur.isEmpty(); ++guard) {
+            if (chain.contains(cur)) break;   // self-reference / cycle guard
+
+            char pj[1024];
+            mc_path_join3(m_mcDir.toUtf8().constData(), "versions",
+                          cur.toUtf8().constData(), pj, sizeof(pj));
+            char pfn[256];
+            snprintf(pfn, sizeof(pfn), "%s.json", cur.toUtf8().constData());
+            mc_path_join(pj, pfn, pj, sizeof(pj));
+
+            // McVersion holds a 1024-element McLibrary array (~2.5MB), so it
+            // must be heap-allocated: a stack local would overflow the main
+            // thread's stack reserve at the function prologue.
+            McVersion *pv = new McVersion;
+            mc_version_init(pv);
+            if (!mc_version_parse_file(pv, pj)) {
+                mc_error("[Verify] Parent version JSON not available: %s",
+                         cur.toUtf8().constData());
+                mc_version_free(pv);
+                delete pv;
+                break;
             }
-            // Merge client download info from parent if not set
-            if (!m_vs.ver.client_url[0] && parentVer->client_url[0]) {
-                qstrncpy(m_vs.ver.client_url, parentVer->client_url, sizeof(m_vs.ver.client_url));
-                qstrncpy(m_vs.ver.client_sha1, parentVer->client_sha1, sizeof(m_vs.ver.client_sha1));
-                m_vs.ver.client_size = parentVer->client_size;
-            }
-            // Merge jar field from parent if not set (e.g., Fabric/Quilt profiles inherit the client jar)
-            if (!m_vs.ver.jar[0] && parentVer->jar[0]) {
-                qstrncpy(m_vs.ver.jar, parentVer->jar, sizeof(m_vs.ver.jar));
-            }
-            // Merge libraries from parent
-            for (int i = 0; i < parentVer->library_count && m_vs.ver.library_count < MC_MAX_LIBRARIES; ++i) {
-                auto &plib = parentVer->libraries[i];
+
+            // The ancestor that owns a client jar (the vanilla game version)
+            // becomes the jar version, so client-jar paths resolve correctly
+            // through multi-level chains (e.g. modpack -> forge -> vanilla).
+            if (!m_vs.ver.jar[0] && pv->client_url[0])
+                qstrncpy(m_vs.ver.jar, cur.toUtf8().constData(), sizeof(m_vs.ver.jar));
+
+            // Merge libraries (dedupe by name)
+            for (int i = 0; i < pv->library_count && m_vs.ver.library_count < MC_MAX_LIBRARIES; ++i) {
+                auto &plib = pv->libraries[i];
                 bool found = false;
                 for (int j = 0; j < m_vs.ver.library_count; ++j) {
                     if (strcmp(m_vs.ver.libraries[j].name, plib.name) == 0) {
@@ -312,9 +322,66 @@ void LaunchManager::doVerifyAndLaunch()
                     m_vs.ver.libraries[m_vs.ver.library_count++] = plib;
                 }
             }
-            mc_version_free(parentVer);
+
+            // Merge scalar fields only when the derived version left them unset
+            if (!m_vs.ver.assets[0] && pv->assets[0])
+                qstrncpy(m_vs.ver.assets, pv->assets, sizeof(m_vs.ver.assets));
+            if (!m_vs.ver.main_class[0] && pv->main_class[0])
+                qstrncpy(m_vs.ver.main_class, pv->main_class, sizeof(m_vs.ver.main_class));
+            if (!m_vs.ver.asset_index.id[0] && pv->asset_index.id[0]) {
+                qstrncpy(m_vs.ver.asset_index.id, pv->asset_index.id, sizeof(m_vs.ver.asset_index.id));
+                qstrncpy(m_vs.ver.asset_index.url, pv->asset_index.url, sizeof(m_vs.ver.asset_index.url));
+                qstrncpy(m_vs.ver.asset_index.sha1, pv->asset_index.sha1, sizeof(m_vs.ver.asset_index.sha1));
+                m_vs.ver.asset_index.size = pv->asset_index.size;
+                m_vs.ver.asset_index.total_size = pv->asset_index.total_size;
+            }
+            if (!m_vs.ver.client_url[0] && pv->client_url[0]) {
+                qstrncpy(m_vs.ver.client_url, pv->client_url, sizeof(m_vs.ver.client_url));
+                qstrncpy(m_vs.ver.client_sha1, pv->client_sha1, sizeof(m_vs.ver.client_sha1));
+                m_vs.ver.client_size = pv->client_size;
+            }
+
+            // Collect arguments for the merge pass (deepest base first, so
+            // loader-specific args such as -p / --add-opens come after the
+            // base version's own jvm args, matching PCLCE's merge order).
+            // Prepending each ancestor's batch in reverse preserves the
+            // batch's internal order while keeping the base version first.
+            if (!haveArgs) {
+                QJsonObject aobj = pv->raw_json["arguments"].toObject();
+                if (aobj.contains("jvm") && aobj["jvm"].isArray()) {
+                    QJsonArray jvArr = aobj["jvm"].toArray();
+                    for (int i = jvArr.size() - 1; i >= 0; --i)
+                        mergedJvm.prepend(jvArr[i]);
+                }
+                if (aobj.contains("game") && aobj["game"].isArray()) {
+                    QJsonArray gmArr = aobj["game"].toArray();
+                    for (int i = gmArr.size() - 1; i >= 0; --i)
+                        mergedGame.prepend(gmArr[i]);
+                }
+            }
+
+            chain << cur;
+            cur = QString::fromUtf8(pv->inherits_from);
+            mc_version_free(pv);
+            delete pv;
         }
-        delete parentVer;
+
+        if (!haveArgs && (!mergedJvm.isEmpty() || !mergedGame.isEmpty())) {
+            QJsonObject argsObj;
+            if (!mergedJvm.isEmpty()) {
+                QJsonArray jvm;
+                for (const auto &a : mergedJvm) jvm.append(a);
+                argsObj["jvm"] = jvm;
+            }
+            if (!mergedGame.isEmpty()) {
+                QJsonArray game;
+                for (const auto &a : mergedGame) game.append(a);
+                argsObj["game"] = game;
+            }
+            m_vs.ver.raw_json["arguments"] = argsObj;
+            mc_info("[Verify] Merged parent arguments (jvm=%d game=%d)",
+                    mergedJvm.size(), mergedGame.size());
+        }
     }
 
     // Reset verify state
@@ -807,6 +874,11 @@ void LaunchManager::doLaunch()
     mc_path_join(jarPath, fn, jarPath, sizeof(jarPath));
     classpath << QString::fromUtf8(jarPath);
 
+    // Client jar file name (versions/<jarVer>/<jarVer>.jar). Forge's BootstrapLauncher
+    // turns classpath jars into named modules, and this jar would split packages with
+    // FML's "minecraft" module; remember it so it can be covered by -DignoreList below.
+    QString clientJarName = QString::fromUtf8(fn);
+
     // Libraries
     QString libsDir = QDir(m_mcDir).filePath("libraries");
     for (int i = 0; i < m_vs.ver.library_count; ++i) {
@@ -1114,6 +1186,36 @@ void LaunchManager::doLaunch()
         }
     }
 
+    // Forge's BootstrapLauncher turns classpath jars into named modules. The client jar
+    // (versions/<jarVer>/<jarVer>.jar) on the classpath would split packages with FML's
+    // "minecraft" module, so extend -DignoreList to cover it (the profile's own
+    // "${version_name}.jar" entry only matches the renamed jar the official installer
+    // places in the version folder, which this launcher does not create).
+    for (auto &arg : verJvmArgs) {
+        if (arg.startsWith("-DignoreList=")) {
+            QString sep = QString(",") + clientJarName;
+            if (!arg.contains(sep))
+                arg += sep;
+        }
+    }
+
+    // When the effective version uses the Java module path (e.g. Forge's
+    // BootstrapLauncher), the base version's redundant "-cp ${classpath}"
+    // argument must be dropped; the real classpath is delivered through
+    // classpath.txt / -DlegacyClassPath.file (PCLCE does the same).
+    if (useModulePath) {
+        QStringList filtered;
+        filtered.reserve(verJvmArgs.size());
+        for (int i = 0; i < verJvmArgs.size(); ++i) {
+            if (verJvmArgs[i] == "-cp") {
+                if (i + 1 < verJvmArgs.size()) ++i;   // skip the classpath value too
+                continue;
+            }
+            filtered << verJvmArgs[i];
+        }
+        verJvmArgs = filtered;
+    }
+
     // Write legacyClassPath.file for Forge's BootstrapLauncher
     QString cpFilePath = gameDir + "/classpath.txt";
     {
@@ -1232,11 +1334,27 @@ void LaunchManager::doLaunch()
     connect(m_process, &QProcess::started, this, [this]() {
         mc_info("Game process started");
     });
-    connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
+    connect(m_process, &QProcess::readyReadStandardOutput, this, [this, gameLogPath]() {
         while (m_process->canReadLine()) {
             QString line = QString::fromLocal8Bit(m_process->readLine()).trimmed();
             if (!line.isEmpty()) {
                 if (m_gameLog) {
+                    // Keep the game output log bounded: rotate to
+                    // game_output.log.old once it grows past 4MB.
+                    if (m_gameLog->size() >= 4 * 1024 * 1024) {
+                        QFile *oldLog = m_gameLog;
+                        oldLog->close();
+                        const QString old = gameLogPath + ".old";
+                        QFile::remove(old);
+                        QFile::rename(gameLogPath, old);
+                        m_gameLog = new QFile(gameLogPath);
+                        if (m_gameLog->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+                            m_gameLog->write("=== game output log rotated, previous log saved to " +
+                                             old.toUtf8() + " ===\n");
+                            m_gameLog->flush();
+                        }
+                        delete oldLog;
+                    }
                     m_gameLog->write(line.toUtf8());
                     m_gameLog->write("\n");
                     m_gameLog->flush();

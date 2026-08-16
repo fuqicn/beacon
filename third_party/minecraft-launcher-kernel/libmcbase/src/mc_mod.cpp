@@ -394,6 +394,10 @@ int mc_mod_get_versions(const char *project_id, int source,
         if (!loadersArr.isEmpty())
             f->loaders = strdup_qstring(loadersArr.join(", "));
 
+        QStringList gvArr = safe_string_array(obj, "game_versions");
+        if (!gvArr.isEmpty())
+            f->game_versions = strdup_qstring(gvArr.join(", "));
+
         QJsonArray deps = obj.value("dependencies").toArray();
         if (!deps.isEmpty()) {
             f->dependency_count = deps.size();

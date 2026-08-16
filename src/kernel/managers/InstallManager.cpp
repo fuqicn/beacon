@@ -41,6 +41,7 @@
 #include <QXmlStreamReader>
 #include <cstdlib>
 #include <functional>
+#include <algorithm>
 #include "KernelBridge.h"
 
 // PCLCE-style download: try BMCLAPI first, then official URL, with up to 4 retry attempts and random delay
@@ -79,6 +80,7 @@ static bool mc_download_pclce(const char *url, const char *path, const char *sha
 
 static QJsonObject httpGetJson(const QString &url);
 static QByteArray httpGetRaw(const QString &url);
+static QByteArray httpGetRawDirect(const QString &url);
 
 // Forward declarations for Forge helpers
 static QStringList forgeVersionsFromMaven(const QString &mcVersion);
@@ -220,37 +222,91 @@ static QString resolveLatestLoaderVersion(const QString &mcVersion, const QStrin
 }
 
 // ─── Forge: fetch version list from official Maven metadata XML ───
-static QStringList forgeVersionsFromMaven(const QString &mcVersion)
+// Compare Forge build numbers numerically (43.10.0 > 43.5.2), falling back to
+// string comparison for non-numeric segments.
+static bool forgeVersionLess(const QString &a, const QString &b)
+{
+    const QStringList as = a.split('.');
+    const QStringList bs = b.split('.');
+    int n = qMax(as.size(), bs.size());
+    for (int i = 0; i < n; ++i) {
+        bool aOk = false, bOk = false;
+        long long av = (i < as.size()) ? as[i].toLongLong(&aOk) : 0;
+        long long bv = (i < bs.size()) ? bs[i].toLongLong(&bOk) : 0;
+        if (aOk && bOk) {
+            if (av != bv) return av < bv;
+        } else {
+            QString asg = (i < as.size()) ? as[i] : QString();
+            QString bsg = (i < bs.size()) ? bs[i] : QString();
+            int cmp = asg.compare(bsg);
+            if (cmp != 0) return cmp < 0;
+        }
+    }
+    return false;
+}
+
+// PCL-CE style: BMCLAPI's dedicated Forge endpoint is fast and up to date
+// (every MC version up to the latest). The mirror-translated maven-metadata
+// snapshot is stale (missing everything above 1.18), so it must not be used.
+static QStringList forgeVersionsFromBmclapi(const QString &mcVersion)
 {
     QStringList versions;
+    QByteArray raw = httpGetRaw(QString("https://bmclapi2.bangbang93.com/forge/minecraft/%1").arg(mcVersion));
+    if (raw.isEmpty()) return versions;
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isArray()) return versions;
+
     QString prefix = mcVersion + "-";
-    QString mavenUrl = QString("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml");
+    QJsonArray arr = doc.array();
+    for (const auto &item : arr) {
+        QJsonObject obj = item.toObject();
+        QString ver = obj.value("version").toString();
+        if (ver.isEmpty() || ver == mcVersion) continue;
+        if (ver.startsWith(prefix)) ver = ver.mid(prefix.length());
+        if (!ver.isEmpty() && !versions.contains(ver))
+            versions << ver;
+    }
+    return versions;
+}
+
+static QStringList forgeVersionsFromMaven(const QString &mcVersion)
+{
+    // Primary: BMCLAPI Forge endpoint.
+    QStringList versions = forgeVersionsFromBmclapi(mcVersion);
+    if (!versions.isEmpty())
+        return versions;
+
+    // Fallback: official Forge Maven metadata, fetched directly (bypassing the
+    // mirror translation that rewrites maven.minecraftforge.net to a stale copy).
+    QStringList parsed;
+    QString prefix = mcVersion + "-";
     // The metadata XML is large and the server is occasionally flaky; retry with
     // a small backoff instead of giving up on the first network reset.
-    QByteArray xmlData;
-    for (int attempt = 1; attempt <= 3 && xmlData.isEmpty(); ++attempt) {
-        xmlData = httpGetRaw(mavenUrl);
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        QByteArray xmlData = httpGetRawDirect("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml");
         if (xmlData.isEmpty()) {
             mc_warn("[Install] Forge maven-metadata fetch attempt %d/3 failed", attempt);
             QThread::msleep(500 * attempt);
+            continue;
         }
-    }
-    if (xmlData.isEmpty()) return versions;
 
-    QXmlStreamReader xml(xmlData);
-    while (!xml.atEnd() && !xml.hasError()) {
-        if (xml.readNext() == QXmlStreamReader::StartElement &&
-            xml.name().toString() == "version") {
-            QString ver = xml.readElementText();
-            if (ver.startsWith(prefix)) {
-                // Extract the forge build number part
-                QString forgePart = ver.mid(prefix.length());
-                if (!forgePart.isEmpty() && !versions.contains(forgePart))
-                    versions << forgePart;
+        QXmlStreamReader xml(xmlData);
+        while (!xml.atEnd() && !xml.hasError()) {
+            if (xml.readNext() == QXmlStreamReader::StartElement &&
+                xml.name().toString() == "version") {
+                QString ver = xml.readElementText();
+                if (ver.startsWith(prefix)) {
+                    // Extract the forge build number part
+                    QString forgePart = ver.mid(prefix.length());
+                    if (!forgePart.isEmpty() && !parsed.contains(forgePart))
+                        parsed << forgePart;
+                }
             }
         }
+        break;
     }
-    return versions;
+    return parsed;
 }
 
 // ─── Forge: extract a named file from installer JAR bytes ───
@@ -443,8 +499,8 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
             // Fetch version list from official Forge Maven metadata
             QStringList vers = forgeVersionsFromMaven(mcVersion);
             if (vers.isEmpty()) return fail("Failed to find any Forge version");
-            // Take the latest (last in alphabetical/numerical order)
-            vers.sort();
+            // Take the latest in numerical order (43.10.0 > 43.5.2)
+            std::sort(vers.begin(), vers.end(), forgeVersionLess);
             forgeVer = vers.last();
             mc_info("[Install] Latest Forge for %s: %s", mcVersion.toUtf8().constData(), forgeVer.toUtf8().constData());
         }
@@ -1117,6 +1173,23 @@ static QByteArray httpGetRaw(const QString &url)
         if (!resp) return QByteArray();
         ok = resp->data && resp->data_len > 0 && resp->status_code >= 200 && resp->status_code < 300;
     }
+    if (!ok) {
+        mc_http_response_free(resp);
+        return QByteArray();
+    }
+    QByteArray data(resp->data, (int)resp->data_len);
+    mc_http_response_free(resp);
+    return data;
+}
+
+static QByteArray httpGetRawDirect(const QString &url)
+{
+    McHttpClient client;
+    mc_http_init(&client);
+    client.timeout_ms = 120000;
+    McHttpResponse *resp = mc_http_get(&client, url.toUtf8().constData());
+    if (!resp) return QByteArray();
+    bool ok = resp->data && resp->data_len > 0 && resp->status_code >= 200 && resp->status_code < 300;
     if (!ok) {
         mc_http_response_free(resp);
         return QByteArray();

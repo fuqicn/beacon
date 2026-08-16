@@ -99,8 +99,8 @@ int mc_qt_download_cancel(void) {
     return g_cancel ? 1 : 0;
 }
 
-static int g_thread_limit = 8;
-static int g_max_pieces = 4;
+static int g_thread_limit = 64;
+static int g_max_pieces = 8;
 
 void mc_qt_download_set_thread_limit(int n) {
     if (n < 1) n = 1;

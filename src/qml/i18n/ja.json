@@ -15,6 +15,7 @@
   "account.offline": "オフラインモード",
   "currentInstance": "現在のインスタンス",
   "noInstance": "未選択",
+  "noInstances": "インスタンスがありません",
   "selectInstance": "インスタンスを選択",
   "instanceSettings": "インスタンス設定",
   "instanceManage": "インスタンス管理",

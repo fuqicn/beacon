@@ -15,6 +15,7 @@
   "account.offline": "离线模式",
   "currentInstance": "当前实例",
   "noInstance": "未选择",
+  "noInstances": "当前无实例",
   "selectInstance": "选择实例",
   "instanceSettings": "实例设置",
   "instanceManage": "实例管理",

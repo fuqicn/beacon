@@ -301,7 +301,7 @@ Item {
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.RightButton) {
                             kernel.selectInstance(modelData.id, modelData.rootDir)
-                            window.navigateToPage(5, "瀹炰緥璁剧疆")
+                            window.navigateToPage(5, "实例设置")
                         } else {
                             kernel.selectInstance(modelData.id, modelData.rootDir)
                             window.navigateTo(0)
@@ -349,7 +349,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 kernel.selectInstance(modelData.id, modelData.rootDir)
-                                window.navigateToPage(5, "瀹炰緥璁剧疆")
+window.navigateToPage(5, "实例设置")
                             }
                         }
                     }

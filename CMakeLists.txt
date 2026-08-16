@@ -75,6 +75,8 @@ set(MANAGER_SRC
     src/kernel/managers/I18nManager.cpp
     src/kernel/platform/WindowEffects.h
     src/kernel/platform/WindowEffects.cpp
+    src/cpp/VersionGroupModel.h
+    src/cpp/VersionGroupModel.cpp
     resources/qml.qrc
 )
 

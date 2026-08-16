@@ -85,6 +85,23 @@ ApplicationWindow {
             visible: !isCompact
             color: "transparent"
 
+            // Active-item pill that glides to the selected button with a
+            // non-linear easing instead of flashing into place instantly.
+            Rectangle {
+                id: navIndicator
+                x: 0
+                y: 16 + window.navIndex * 68
+                width: 72
+                height: 64
+                radius: 20
+                color: Qt.alpha(palette.highlight, 0.14)
+                visible: window.navIndex >= 0
+                Behavior on y {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { duration: 320; easing.type: Easing.OutBack }
+                }
+            }
+
             Column {
                 anchors.fill: parent
                 anchors.topMargin: 16
@@ -93,8 +110,18 @@ ApplicationWindow {
                 Repeater {
                     model: window.navModel
                     delegate: ItemDelegate {
+                        id: navBtn
                         width: 72
                         height: 64
+
+                        background: Rectangle {
+                            radius: 20
+                            color: navBtn.hovered ? Qt.alpha(palette.placeholderText, 0.09) : "transparent"
+                            Behavior on color {
+                                enabled: Theme.animationsEnabled
+                                ColorAnimation { duration: 150 }
+                            }
+                        }
 
                         contentItem: Column {
                             spacing: 4

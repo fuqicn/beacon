@@ -396,31 +396,45 @@ void DownloadWorker::stepDownloadAll()
         }
     }
 
-    // ── 3. Libraries (inherits_from parent) ────────────────────
-    if (m_ver.inherits_from[0]) {
-        char parentJson[1024];
-        mc_path_join3(m_mcDir, "versions", m_ver.inherits_from, parentJson, sizeof(parentJson));
-        char pfn[256];
-        snprintf(pfn, sizeof(pfn), "%s.json", m_ver.inherits_from);
-        mc_path_join(parentJson, pfn, parentJson, sizeof(parentJson));
+// ── 3. Libraries (inherits_from chain, recursive) ────────────
+    {
+        QStringList chain;
+        QString cur = QString::fromUtf8(m_ver.inherits_from);
+        for (int guard = 0; guard < 16 && !cur.isEmpty(); ++guard) {
+            if (chain.contains(cur)) break;   // self-reference / cycle guard
+            chain << cur;
 
-        if (!QFileInfo::exists(QString::fromUtf8(parentJson))) {
-            char dirBuf[1024];
-            mc_path_dirname(parentJson, dirBuf, sizeof(dirBuf));
-            mc_path_mkdir_p(dirBuf);
+            char parentJson[1024];
+            mc_path_join3(m_mcDir, "versions", cur.toUtf8().constData(), parentJson, sizeof(parentJson));
+            char pfn[256];
+            snprintf(pfn, sizeof(pfn), "%s.json", cur.toUtf8().constData());
+            mc_path_join(parentJson, pfn, parentJson, sizeof(parentJson));
+
+            if (!QFileInfo::exists(QString::fromUtf8(parentJson))) {
+                char dirBuf[1024];
+                mc_path_dirname(parentJson, dirBuf, sizeof(dirBuf));
+                mc_path_mkdir_p(dirBuf);
+                McVersion *parentVer = new McVersion;
+                mc_version_init(parentVer);
+                mc_version_fetch_by_id_mirror(parentVer, cur.toUtf8().constData(), m_mirror.toUtf8().constData());
+                mc_version_free(parentVer);
+                delete parentVer;
+                if (!QFileInfo::exists(QString::fromUtf8(parentJson)))
+                    mc_info("[DL-W] Parent version JSON not available: %s", cur.toUtf8().constData());
+            }
+
+            // McVersion holds a 1024-element McLibrary array (~2.5MB), so it
+            // must be heap-allocated: a stack local would overflow the
+            // worker thread's stack at the function prologue.
             McVersion *parentVer = new McVersion;
             mc_version_init(parentVer);
-            mc_version_fetch_by_id_mirror(parentVer, m_ver.inherits_from, m_mirror.toUtf8().constData());
-            mc_version_free(parentVer);
-            delete parentVer;
-            if (!QFileInfo::exists(QString::fromUtf8(parentJson))) {
-                mc_info("[DL-W] Parent version JSON not available: %s", m_ver.inherits_from);
+            if (!mc_version_parse_file(parentVer, parentJson)) {
+                mc_info("[DL-W] Parent version JSON unparseable: %s", cur.toUtf8().constData());
+                mc_version_free(parentVer);
+                delete parentVer;
+                break;
             }
-        }
 
-        McVersion *parentVer = new McVersion;
-        mc_version_init(parentVer);
-        if (mc_version_parse_file(parentVer, parentJson)) {
             // Loader version JSONs usually omit the vanilla assetIndex/assets
             // (they live on the parent). Inherit them so the asset scan below
             // downloads the vanilla assets for the loader instance too.
@@ -511,6 +525,8 @@ void DownloadWorker::stepDownloadAll()
                     }
                 }
             }
+
+            cur = QString::fromUtf8(parentVer->inherits_from);
             mc_version_free(parentVer);
             delete parentVer;
         }

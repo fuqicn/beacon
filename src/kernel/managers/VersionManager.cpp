@@ -102,13 +102,14 @@ void VersionManager::doFetchManifest(const QString &mirror)
             ret = mc_manifest_fetch(&m_manifest, 1);
         else
             ret = mc_manifest_fetch_mirror(&m_manifest, 1, mirror.toUtf8().constData());
-        QMetaObject::invokeMethod(this, [this, ret]() {
-            if (ret) {
-                mc_manifest_save_cache(&m_manifest);
-            } else {
-                mc_manifest_load_cache(&m_manifest);
-            }
-            m_categoriesDirty = true;
+        // mc_manifest_fetch_mirror already persists the fresh manifest to disk;
+        // fall back to the on-disk cache when the network fetch fails.
+        if (!ret)
+            mc_manifest_load_cache(&m_manifest);
+        QVariantList categories = buildCategories();
+        QMetaObject::invokeMethod(this, [this, categories]() {
+            m_cachedCategories = categories;
+            m_categoriesDirty = false;
             m_loading = false;
             emit loadingChanged();
             emit manifestReady();
@@ -146,11 +147,12 @@ QVariantList VersionManager::classifyVersions()
 {
     if (!m_categoriesDirty && !m_cachedCategories.isEmpty())
         return m_cachedCategories;
-    buildCategories();
+    m_cachedCategories = buildCategories();
+    m_categoriesDirty = false;
     return m_cachedCategories;
 }
 
-void VersionManager::buildCategories()
+QVariantList VersionManager::buildCategories()
 {
     QVariantList categories;
 
@@ -193,8 +195,7 @@ void VersionManager::buildCategories()
     categories.append(QVariantMap{{"label", "远古版"}, {"versions", old}});
     categories.append(QVariantMap{{"label", "愚人节"}, {"versions", fools}});
 
-    m_cachedCategories = categories;
-    m_categoriesDirty = false;
+    return categories;
 }
 
 void VersionManager::fetchVersionInfo(const QString &versionId, const QString &mirror)

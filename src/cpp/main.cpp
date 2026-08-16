@@ -90,6 +90,7 @@ private:
 
 #include "KernelBridge.h"
 #include "I18nManager.h"
+#include "VersionGroupModel.h"
 #include <mc_download.h>
 #include <mc_http.h>
 #include <mc_mod.h>
@@ -761,7 +762,7 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
             dumpFile.close();
         }
 
-        KernelBridge::shutdown();
+KernelBridge::shutdown();
         return 0;
     }
     // ── Headless download test: --test-dl <url> <out> [--dl-sha1 <hex>] [--dl-size <bytes>] [--dl-mirror <url>]
@@ -1012,7 +1013,7 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
             dumpFile.close();
         }
         KernelBridge::shutdown();
-        return 0;
+return 0;
     }
     if (debugMode) {
         if (AttachConsole(ATTACH_PARENT_PROCESS) || AllocConsole()) {
@@ -1236,6 +1237,8 @@ mc_info("[MODTEST]   - %s (%s) downloads=%s",
     I18nManager *i18n = new I18nManager(QCoreApplication::applicationDirPath());
     engine.rootContext()->setContextProperty("I18n", i18n);
     qWarning("I18N currentLang=%s", qPrintable(i18n->currentLangKey()));
+
+    qmlRegisterType<VersionGroupModel>("Beacon", 1, 0, "VersionGroupModel");
 
     qint64 tStart = QDateTime::currentMSecsSinceEpoch();
     mc_info("[Startup] kernel/theme/i18n init done in %lldms",

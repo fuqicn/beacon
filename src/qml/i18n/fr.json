@@ -15,6 +15,7 @@
   "account.offline": "Mode hors ligne",
   "currentInstance": "Instance actuelle",
   "noInstance": "Aucune sélection",
+  "noInstances": "Aucune instance",
   "selectInstance": "Sélectionner",
   "instanceSettings": "Paramètres d'instance",
   "instanceManage": "Gérer les instances",

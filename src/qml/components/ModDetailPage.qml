@@ -20,6 +20,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import Beacon 1.0
 
 Item {
     id: root
@@ -27,16 +28,18 @@ Item {
     property var stackView: null
     property string projectId: ""
     property string mcVersion: ""
-    property string loader: ""
+property string loader: ""
 
-    property var project: ({})
+property var project: ({})
     property var versions: []
     property var depNames: ({})
-    property int selectedIndex: -1
+    property VersionGroupModel groupedModel: VersionGroupModel {}
+    property var selectedVersion: ({})
     property bool loading: false
+    property bool versionsLoading: false
+    property int containerHeight: 52
 
-    property var selectedFile: root.selectedIndex >= 0 && root.selectedIndex < root.versions.length
-                               ? root.versions[root.selectedIndex] : ({})
+    property var selectedFile: root.selectedVersion
 
     function formatCount(n) {
         if (n >= 1000000) return (n / 1000000).toFixed(1) + "M"
@@ -57,13 +60,16 @@ Item {
         if (t === "incompatible") return "不兼容"
         if (t === "embedded") return "内置"
         return t || ""
-    }
+}
 
     function depTypeColor(t) {
         if (t === "required") return palette.highlight
         if (t === "incompatible") return "#F44336"
         return palette.placeholderText
     }
+
+    // PCL-style grouping, collapse/expand and version ordering are implemented
+    // in C++ (VersionGroupModel) so the view only deals with display.
 
     function refreshDeps() {
         var ids = []
@@ -79,8 +85,9 @@ Item {
             kernel.modManager.getProjects(ids)
     }
 
-    function reloadVersions() {
+function reloadVersions() {
         loading = true
+        root.versionsLoading = true
         root.versions = []
         kernel.modManager.getVersions(root.projectId, root.mcVersion, root.loader)
     }
@@ -93,15 +100,18 @@ Item {
 
     Connections {
         target: kernel.modManager
-        function onProjectLoaded(project) {
+function onProjectLoaded(project) {
             if (project.id === root.projectId) {
                 root.project = project
                 loading = false
             }
         }
-        function onVersionsLoaded(versions) {
+
+function onVersionsLoaded(versions) {
             root.versions = versions
-            root.selectedIndex = versions.length > 0 ? 0 : -1
+            root.groupedModel.setVersions(versions)
+            root.containerHeight = root.groupedModel.listHeight
+            root.versionsLoading = false
             refreshDeps()
         }
         function onProjectsLoaded(projects) {
@@ -278,13 +288,10 @@ Item {
                     color: palette.placeholderText
                 }
 
-                Rectangle {
+Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: {
-                        var n = root.versions.length
-                        var h = n * 46 + 12
-                        return Math.max(52, Math.min(h, 220))
-                    }
+                    Layout.preferredHeight: root.containerHeight
+                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     radius: Theme.shapeMedium
                     color: Qt.alpha(palette.placeholderText, 0.05)
                     clip: true
@@ -295,74 +302,132 @@ Item {
                         anchors.margins: 6
                         spacing: 2
                         clip: true
-                        model: root.versions
+                        model: root.groupedModel
+                        add: Transition {
+                            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180 }
+                            NumberAnimation { property: "height"; from: 0; duration: 180; easing.type: Easing.OutCubic }
+                        }
+                        remove: Transition {
+                            NumberAnimation { property: "opacity"; to: 0; duration: 160 }
+                            NumberAnimation { property: "height"; to: 0; duration: 160; easing.type: Easing.InCubic }
+                        }
+                        displaced: Transition {
+                            NumberAnimation { properties: "x,y"; duration: 200; easing.type: Easing.OutQuad }
+                        }
 
                         ScrollBar.vertical: ScrollBar {
                             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                             width: 8
                         }
 
-                        delegate: Rectangle {
+                        delegate: Item {
                             id: vdel
                             width: versionsList.width
-                            height: 44
-                            radius: Theme.shapeSmall
-                            color: index === root.selectedIndex
-                                   ? Qt.alpha(palette.highlight, 0.12)
-                                   : (vma.containsMouse ? Qt.alpha(palette.highlight, 0.08) : "transparent")
+                            height: type === "header" ? 26 : 44
 
-                            RowLayout {
+                            // Collapsible group header: "Minecraft x.y.z (n)"
+Rectangle {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                spacing: 8
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 1
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.displayName || modelData.fileName || ""
-                                        font.pixelSize: 13
-                                        font.weight: index === root.selectedIndex ? Font.Medium : Font.Normal
-                                        color: palette.text
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: root.releaseLabel(modelData.releaseType) +
-                                              (modelData.releaseDate ? "   |   " + modelData.releaseDate.slice(0, 10) : "") +
-                                              "   |   " + root.formatCount(modelData.downloadCount || 0) + " 下载"
-                                        font.pixelSize: 10
-                                        color: palette.placeholderText
-                                        elide: Text.ElideRight
-                                    }
-                                }
+                                visible: type === "header"
+                                radius: Theme.shapeSmall
+                                color: vhArea.containsMouse ? Qt.alpha(palette.highlight, 0.06) : "transparent"
 
                                 Text {
-                                    text: modelData.fileName || ""
-                                    font.pixelSize: 10
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 10
+                                    text: (root.groupedModel.isCollapsed(primary) ? "\u25b8" : "\u25be") + "  Minecraft " + primary
+                                          + "  (" + count + ")"
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
                                     color: palette.highlight
-                                    elide: Text.ElideLeft
-                                    Layout.maximumWidth: 160
+                                }
+
+                                MouseArea {
+                                    id: vhArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.groupedModel.toggleGroup(primary)
+                                        root.containerHeight = root.groupedModel.listHeight
+                                    }
                                 }
                             }
 
-                            MouseArea {
-                                id: vma
+                            // Version row
+                            Rectangle {
                                 anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.selectedIndex = index
-                                    root.openDownloadDialog()
+                                visible: type === "item"
+                                radius: Theme.shapeSmall
+                                color: ver
+                                       ? (root.selectedVersion.id === ver.id
+                                          ? Qt.alpha(palette.highlight, 0.14)
+                                          : (vma.containsMouse
+                                             ? Qt.alpha(palette.placeholderText, 0.10)
+                                             : Qt.alpha(palette.placeholderText, 0.06)))
+                                       : "transparent"
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 8
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: ver ? (ver.displayName || ver.fileName) : ""
+                                            font.pixelSize: 13
+                                            font.weight: ver && root.selectedVersion.id === ver.id ? Font.Medium : Font.Normal
+                                            color: palette.text
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: ver ? root.releaseLabel(ver.releaseType) +
+                                                  (ver.releaseDate ? "   |   " + ver.releaseDate.slice(0, 10) : "") +
+                                                  "   |   " + root.formatCount(ver.downloadCount || 0) + " 下载" : ""
+                                            font.pixelSize: 10
+                                            color: palette.placeholderText
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    Text {
+                                        text: ver ? ver.fileName : ""
+                                        font.pixelSize: 10
+                                        color: palette.highlight
+                                        elide: Text.ElideLeft
+                                        Layout.maximumWidth: 160
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: vma
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.selectedVersion = ver
+                                        root.openDownloadDialog()
+                                    }
                                 }
                             }
                         }
 
+                        BusyIndicator {
+                            anchors.centerIn: parent
+                            visible: root.versionsLoading
+                            running: root.versionsLoading
+                        }
+
                         Text {
                             anchors.centerIn: parent
-                            text: root.versions.length === 0 ? "该加载器/版本下暂无可用文件" : ""
+                            visible: !root.versionsLoading && root.versions.length === 0
+                            text: "该加载器/版本下暂无可用文件"
                             font.pixelSize: 12
                             color: palette.placeholderText
                         }
@@ -488,31 +553,13 @@ Item {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape
-        // Anchor to the full-window content so x/y are window-relative and
-        // independent of this page's (possibly mid-transition) scene transform.
-        parent: root.Window.window ? root.Window.window.contentItem : root
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
         width: Math.min(Math.max(parent.width - 64, 320), 460)
+        height: contentColumn.implicitHeight + 64
         padding: 24
 
-        // Stay invisible until the popup has a real height (first layout done),
-        // so it never renders a frame at a wrong spot.
-        property bool placed: false
-        opacity: placed ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 120 } }
-
-        onOpened: {
-            dirLabel.text = downloadDialog.targetDir
-            downloadDialog.placed = (downloadDialog.height > 0)
-        }
-
-        onHeightChanged: {
-            if (downloadDialog.opened && downloadDialog.height > 0)
-                downloadDialog.placed = true
-        }
-
-        background: Rectangle {
+background: Rectangle {
             radius: Theme.shapeLarge
             color: palette.window
             border.color: palette.mid
@@ -520,6 +567,7 @@ Item {
         }
 
         contentItem: ColumnLayout {
+            id: contentColumn
             spacing: 16
 
             // Loading state (versions still being fetched)

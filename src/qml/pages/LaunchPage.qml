@@ -24,11 +24,42 @@ import "../components"
 Item {
     id: root
 
-    property string selectedVersion: ""
+property string selectedVersion: ""
     property string selectedJavaPath: ""
+    property string selectedIcon: ""
     readonly property bool launchActive: kernel.launchManager.running ||
                                          kernel.launchManager.verifying ||
                                          kernel.javaDownloading
+
+    function updateSelection() {
+        var sel = kernel.instanceManager.getSelectedInstance()
+        if (sel && sel.id) {
+            selectedVersion = sel.id
+            if (sel.customIcon)
+                selectedIcon = "file:///" + sel.customIcon.replace(/\\/g, "/")
+            else if (sel.iconKey)
+                selectedIcon = "qrc:/icons/instances/" + sel.iconKey + ".png"
+            else
+                selectedIcon = "qrc:/icons/instances/grass.png"
+            kernel.selectInstance(sel.id, sel.rootDir || kernel.mcDir)
+            return
+        }
+        // Selected instance no longer exists (e.g. just deleted): fall back to
+        // the first instance, or clear the display when the list is empty.
+        var list = kernel.instanceManager.instances || []
+        if (list.length > 0) {
+            var first = list[0]
+            selectedVersion = first.id
+            selectedIcon = first.customIcon
+                    ? "file:///" + first.customIcon.replace(/\\/g, "/")
+                    : "qrc:/icons/instances/" + (first.iconKey || "grass") + ".png"
+            kernel.selectInstance(first.id, first.rootDir || kernel.mcDir)
+        } else {
+            selectedVersion = ""
+            selectedIcon = ""
+            kernel.selectInstance("", kernel.mcDir)
+        }
+    }
 
     function updateStatus() {
         if (kernel.launchManager.running) {
@@ -50,29 +81,17 @@ Item {
         }
     }
 
-    Component.onCompleted: {
-        var sel = kernel.instanceManager.getSelectedInstance()
-        if (sel && sel.id) {
-            selectedVersion = sel.id
-            kernel.selectInstance(sel.id, sel.rootDir || kernel.mcDir)
-        }
+Component.onCompleted: {
+        updateSelection()
     }
 
     Connections {
         target: kernel.instanceManager
         function onSelectedChanged() {
-            var sel = kernel.instanceManager.getSelectedInstance()
-            if (sel && sel.id) {
-                selectedVersion = sel.id
-                kernel.selectInstance(sel.id, sel.rootDir || kernel.mcDir)
-            }
+            updateSelection()
         }
         function onInstancesChanged() {
-            var sel = kernel.instanceManager.getSelectedInstance()
-            if (sel && sel.id) {
-                selectedVersion = sel.id
-                kernel.selectInstance(sel.id, sel.rootDir || kernel.mcDir)
-            }
+            updateSelection()
         }
     }
 
@@ -314,17 +333,10 @@ Item {
                 color: Qt.alpha(palette.placeholderText, 0.05)
                 clip: true
 
-                Image {
+Image {
                     id: launchIconImg
                     anchors.fill: parent
-                    source: {
-                        var sel = kernel.instanceManager.getSelectedInstance()
-                        if (sel && sel.customIcon)
-                            return "file:///" + sel.customIcon.replace(/\\/g, "/")
-                        if (sel && sel.iconKey)
-                            return "qrc:/icons/instances/" + sel.iconKey + ".png"
-                        return "qrc:/icons/instances/grass.png"
-                    }
+                    source: selectedIcon
                     asynchronous: true
                     fillMode: Image.PreserveAspectFit
                     sourceSize.width: 44
@@ -341,9 +353,12 @@ Item {
                     text: I18n.tr("currentInstance")
                     font.pixelSize: 13; color: palette.placeholderText
                 }
-                Text {
+Text {
                     id: instanceName
-                    text: selectedVersion || I18n.tr("noInstance")
+                    text: selectedVersion
+                          || (kernel.instanceManager.instances.length === 0
+                              ? I18n.tr("noInstances")
+                              : I18n.tr("noInstance"))
                     font.pixelSize: 16; font.weight: Font.Medium
                     color: palette.text
                 }
@@ -360,7 +375,7 @@ Item {
                 onClicked: {
                     var sel = kernel.instanceManager.getSelectedInstance()
                     if (sel && sel.id)
-                        window.navigateToPage(5, "瀹炰緥璁剧疆")
+                        window.navigateToPage(5, "实例设置")
                 }
             }
         }

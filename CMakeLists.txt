@@ -156,6 +156,12 @@ foreach(_qml_src IN LISTS QML_SOURCES)
     set_source_files_properties(${_qml_src} PROPERTIES QT_RESOURCE_ALIAS "${_qml_alias}")
 endforeach()
 
+# Qt's qml module generator defaults to "<binary_dir>/<URI>", i.e. build/Beacon,
+# which collides with the Linux executable named "Beacon" (Windows uses
+# Beacon.exe so it never noticed). Relocate the module output under build/qml;
+# Qt adds the new location to the qmlcachegen/qmllint import paths itself.
+set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
+
 # AOT-compile the QML into the executable to reduce QML engine runtime memory
 qt_add_qml_module(Beacon
     URI "Beacon"

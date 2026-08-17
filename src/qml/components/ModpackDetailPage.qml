@@ -24,7 +24,8 @@ import Beacon 1.0
 Item {
     id: root
 
-    property var stackView: null
+property var stackView: null
+    property var installDialog: null
     property string projectId: ""
     property string mcVersion: ""
 property string loader: ""
@@ -34,6 +35,7 @@ property var project: ({})
     property VersionGroupModel groupedModel: VersionGroupModel {}
     property var selectedVersion: ({})
     property bool loading: false
+    property bool projectLoaded: false
     property bool versionsLoading: false
     property int containerHeight: 52
 
@@ -56,14 +58,12 @@ property var project: ({})
     // in C++ (VersionGroupModel) so the view only deals with display.
 
 function reloadVersions() {
-        loading = true
         root.versionsLoading = true
         root.versions = []
         kernel.modManager.getVersions(root.projectId, root.mcVersion, root.loader)
     }
 
     Component.onCompleted: {
-        loading = true
         kernel.modManager.getProject(root.projectId)
         reloadVersions()
     }
@@ -73,7 +73,7 @@ function reloadVersions() {
         function onProjectLoaded(project) {
             if (project.id === root.projectId) {
                 root.project = project
-                loading = false
+                root.projectLoaded = true
             }
         }
 function onVersionsLoaded(versions) {
@@ -81,7 +81,6 @@ function onVersionsLoaded(versions) {
             root.groupedModel.setVersions(versions)
             root.containerHeight = root.groupedModel.listHeight
             root.versionsLoading = false
-            loading = false
         }
     }
 
@@ -181,7 +180,7 @@ function onVersionsLoaded(versions) {
                         spacing: 2
                         Text {
                             Layout.fillWidth: true
-                            text: root.project.name || (root.loading ? "加载中..." : root.projectId)
+                            text: root.project.name || (root.projectLoaded ? root.projectId : "加载中...")
                             font.pixelSize: 17
                             font.weight: Font.DemiBold
                             color: palette.text
@@ -417,119 +416,21 @@ Rectangle {
         ScrollBar.vertical: ScrollBar { }
     }
 
-    function openInstallDialog() {
-        installDialog.targetDir = kernel.instanceManager.currentRootDir || kernel.mcDir
-        installDialog.open()
+function openInstallDialog() {
+        if (!root.installDialog)
+            return
+        root.installDialog.file = root.selectedFile
+        root.installDialog.loading = false
+        root.installDialog.projectName = root.project.name
+        root.installDialog.logoUrl = root.project.logoUrl || ""
+        root.installDialog.targetDir = kernel.instanceManager.currentRootDir || kernel.mcDir
+        root.installDialog.open()
     }
 
-    Popup {
-        id: installDialog
-
-        property string targetDir: ""
-
-        readonly property bool fileReady: !root.loading && root.selectedFile
-                                          && root.selectedFile.fileName
-                                          && root.selectedFile.downloadUrl
-
-        modal: true
-        focus: true
-        closePolicy: Popup.CloseOnEscape
-        x: Math.round((parent.width - width) / 2)
-        y: Math.round((parent.height - height) / 2)
-        width: Math.min(Math.max(parent.width - 64, 320), 460)
-        height: contentColumn.implicitHeight + 64
-        padding: 24
-
-        background: Rectangle {
-            radius: Theme.shapeLarge
-            color: palette.window
-            border.color: palette.mid
-            border.width: 1
-        }
-
-        contentItem: ColumnLayout {
-            id: contentColumn
-            spacing: 16
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 12
-                visible: !installDialog.fileReady
-
-                BusyIndicator {
-                    Layout.alignment: Qt.AlignHCenter
-                    running: true
-                    implicitWidth: 36
-                    implicitHeight: 36
-                }
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "正在加载版本信息..."
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 16
-                visible: installDialog.fileReady
-
-                Text {
-                    text: "安装 " + (root.project.name || "整合包")
-                    font.pixelSize: 18
-                    font.weight: Font.Bold
-                    color: palette.text
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-
-                Text {
-                    text: root.selectedFile.fileName || ""
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    visible: text !== ""
-                }
-
-                Text {
-                    text: "将创建一个新的独立实例并安装该整合包（含游戏版本与加载器），完成后可在实例页选择启动。"
-                    font.pixelSize: 11
-                    color: palette.placeholderText
-                    wrapMode: Text.Wrap
-                    Layout.fillWidth: true
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-                    Layout.alignment: Qt.AlignRight
-
-                    Item { Layout.fillWidth: true }
-
-                    Button {
-                        text: "取消"
-                        font.weight: Font.Normal
-                        onClicked: installDialog.close()
-                    }
-
-                    Button {
-                        text: "开始安装"
-                        font.weight: Font.Normal
-                        highlighted: true
-                        onClicked: {
-                            if (installDialog.targetDir.length > 0) {
-                                var f = root.selectedFile
-                                f.iconUrl = root.project.logoUrl || ""
-                                kernel.modpackManager.installFromProject(f, installDialog.targetDir)
-                                installStatus.text = "已开始安装，可在下方下载面板查看进度"
-                            }
-                            installDialog.close()
-                        }
-                    }
-                }
-            }
+    Connections {
+        target: root.installDialog
+        function onInstalled(message) {
+            installStatus.text = message
         }
     }
 }

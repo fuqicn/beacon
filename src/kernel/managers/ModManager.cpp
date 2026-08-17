@@ -410,9 +410,11 @@ void ModManager::startTask(const std::shared_ptr<ModTaskState> &st)
     QString mirrorUrl = (hasMirror && translated[0]) ? QString::fromUtf8(translated) : QString();
 
     // Allow more parallel range pieces per file. May be overridden once at
-    // startup; called here for safety so mod downloads benefit.
-    if (mc_qt_download_max_pieces() < 8)
-        mc_qt_download_set_max_pieces(8);
+    // startup; called here for safety so mod downloads benefit. Kept at 4:
+    // 8 concurrent pieces against the mirror stalls more often (slow source
+    // aborts / whole-file fallback), while 4 is measurably more stable.
+    if (mc_qt_download_max_pieces() < 4)
+        mc_qt_download_set_max_pieces(4);
 
     QString outPath = QDir(modsDir(st->rootDir)).filePath(st->fileName);
     QDir().mkpath(QFileInfo(outPath).absolutePath());

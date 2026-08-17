@@ -385,6 +385,7 @@ Item {
                 Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
                 initialItem: ModsSearchPage {
                     stackView: modsStack
+                    downloadDialog: modDownloadDialog
                 }
                 focus: true
 
@@ -426,6 +427,7 @@ Item {
                 Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
                 initialItem: ModpackSearchPage {
                     stackView: packsStack
+                    installDialog: modpackInstallDialog
                 }
                 focus: true
 
@@ -453,7 +455,17 @@ Item {
         }
     }
 
-    DownloadDialog {
+DownloadDialog {
         id: downloadDialog
+    }
+
+    // Mod / modpack install dialogs are declared here (outside the StackView
+    // pages) so they render like DownloadDialog instead of inside a page.
+    ModDownloadDialog {
+        id: modDownloadDialog
+    }
+
+    ModpackInstallDialog {
+        id: modpackInstallDialog
     }
 }

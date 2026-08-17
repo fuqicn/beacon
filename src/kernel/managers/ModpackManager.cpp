@@ -459,7 +459,7 @@ public slots:
             if (attempt > 1) {
                 removeDirRecursively(tmpDir);
                 QDir().mkpath(tmpDir);
-                QThread::msleep(500);
+                QThread::msleep(1500);
             }
             emit progressReported(0.01, QString("下载整合包 (%1/3)").arg(attempt));
             // Map the real byte progress (0..1) of the mrpack download into the
@@ -510,7 +510,27 @@ ModpackManager::ModpackManager(QObject *parent) : QObject(parent) {}
 
 ModpackManager::~ModpackManager()
 {
-    stopWorkerThread();
+    // Shutdown may block briefly: the cooperative cancel makes download loops
+    // bail within ~100ms and the pack retry loops as soon as the flag is set.
+    if (m_workerThread) {
+        if (!m_cancelRequested) {
+            m_cancelRequested = true;
+            mc_qt_download_set_cancel(1);
+        }
+        m_workerThread->requestInterruption();
+        m_workerThread->quit();
+        if (!m_workerThread->wait(5000)) {
+            mc_error("[Pack] worker did not stop within 5s at shutdown");
+            // Unparent so ~QThread (child of this) cannot abort on a
+            // still-running thread; its finished connections use `this` as
+            // context, so they are auto-disconnected once we are destroyed.
+            m_workerThread->setParent(nullptr);
+        }
+        m_cancelRequested = false;
+        mc_qt_download_set_cancel(0);
+        m_workerThread = nullptr;
+        m_worker = nullptr;
+    }
 }
 
 void ModpackManager::setBusy(bool b)
@@ -519,62 +539,49 @@ void ModpackManager::setBusy(bool b)
     emit busyChanged();
 }
 
-// Cooperatively stop the running worker, then reap the thread. Download loops
-// poll the global cancel flag every ~100ms, so setting it makes in-flight
-// downloads bail out within a second or two. Never force-terminate here:
-// killing a thread that is inside a download event loop / worker pool leaves
-// in-flight QNetworkReplies and batch child threads touching freed state.
+// Cooperatively request the running worker to stop, then return immediately.
+// Never block the GUI thread here: download loops poll the global cancel flag
+// every ~100ms and the pack retry loops break out as soon as it is set, so the
+// worker stops within a second or two on its own. The per-install
+// QThread::finished handler (startPackInstall) reaps the thread, pairs the
+// cancel flag and clears busy when it actually exits, keeping the whole
+// cancellation window free of UI freezes.
 void ModpackManager::stopWorkerThread()
 {
     if (!m_workerThread) {
-        mc_qt_download_set_cancel(0);
+        if (m_cancelRequested) {
+            m_cancelRequested = false;
+            mc_qt_download_set_cancel(0);
+        }
         return;
     }
     if (!m_workerThread->isRunning()) {
+        if (m_cancelRequested) {
+            m_cancelRequested = false;
+            mc_qt_download_set_cancel(0);
+        }
         m_workerThread = nullptr;
         m_worker = nullptr;
         return;
+    }
+    if (!m_cancelRequested) {
+        m_cancelRequested = true;
+        mc_qt_download_set_cancel(1);
     }
     m_workerThread->requestInterruption();
-    mc_qt_download_set_cancel(1);
     m_workerThread->quit();
-    // Cancellation makes every in-flight download bail within ~100ms (the
-    // download loops poll the cancel flag), and the pack-file retry loop in
-    // installPack() also breaks out as soon as the flag is set, so the worker
-    // thread and the packWorker std::thread it joins stop within a couple of
-    // seconds. Wait it out for up to 30s instead of detaching: abandoning a
-    // still-running QThread child means ~ModpackManager destroys it while
-    // running -> SIGSEGV/abort.
-    for (int i = 0; i < 150; ++i) {
-        if (m_workerThread->wait(200)) break;
-    }
-    if (m_workerThread->isRunning()) {
-        mc_error("[Pack] worker still running after 30s of cooperative cancel; "
-                 "abandoning it (never terminate: killing the thread would free "
-                 "installPack()'s stack under its running pack-file std::thread "
-                 "-> use-after-free)");
-        m_workerThread->requestInterruption();
-        // Unparent so ~ModpackManager cannot destroy a still-running QThread.
-        m_workerThread->setParent(nullptr);
-        // The worker will still finish on its own once the pool honours cancel;
-        // its late installCompleted/errorOccurred are dropped because we reset
-        // m_worker below, so clear busy ourselves to keep the manager usable.
-        m_busy = false;
-        emit busyChanged();
-        m_workerThread = nullptr;
-        m_worker = nullptr;
-        return;
-    }
-    mc_qt_download_set_cancel(0);
-    m_workerThread = nullptr;
-    m_worker = nullptr;
 }
 
 void ModpackManager::cancelAll()
 {
+    if (m_busy) {
+        m_status = "取消中...";
+        emit statusChanged(m_status);
+    }
+    // busy stays true until the worker thread actually exits (the finished
+    // handler clears it), so the cancel state stays visible in the status
+    // panel and no new install can start before the previous one stops.
     stopWorkerThread();
-    if (m_busy)
-        setBusy(false);
 }
 
 void ModpackManager::startPackInstall(ModpackManager *self, ModpackWorker *worker,
@@ -605,9 +612,13 @@ void ModpackManager::startPackInstall(ModpackManager *self, ModpackWorker *worke
                      [self, worker](const QString &msg) {
                          if (self->m_worker != worker) return;
                          mc_error("[Pack] Worker error: %s", msg.toUtf8().constData());
-                         self->m_busy = false;
-                         emit self->busyChanged();
-                         emit self->errorOccurred(msg);
+                         if (!self->m_cancelRequested) {
+                             self->m_busy = false;
+                             emit self->busyChanged();
+                             emit self->errorOccurred(msg);
+                         }
+                         // On cancel the finished handler releases busy; just
+                         // let the thread exit.
                          if (self->m_workerThread)
                              self->m_workerThread->quit();
                      }, Qt::QueuedConnection);
@@ -636,6 +647,15 @@ void ModpackManager::startPackInstall(ModpackManager *self, ModpackWorker *worke
                          if (self->m_workerThread == t) {
                              self->m_worker = nullptr;
                              self->m_workerThread = nullptr;
+                         }
+                         if (self->m_cancelRequested && !self->m_workerThread) {
+                             // The cancelled install has fully exited: release
+                             // the ref-counted global cancel flag exactly once
+                             // and clear busy so the UI can start a new one.
+                             self->m_cancelRequested = false;
+                             mc_qt_download_set_cancel(0);
+                             self->m_busy = false;
+                             emit self->busyChanged();
                          }
                      }, Qt::QueuedConnection);
 

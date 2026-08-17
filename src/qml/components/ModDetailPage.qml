@@ -19,13 +19,13 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 import Beacon 1.0
 
 Item {
     id: root
 
-    property var stackView: null
+property var stackView: null
+    property var downloadDialog: null
     property string projectId: ""
     property string mcVersion: ""
 property string loader: ""
@@ -36,6 +36,7 @@ property var project: ({})
     property VersionGroupModel groupedModel: VersionGroupModel {}
     property var selectedVersion: ({})
     property bool loading: false
+    property bool projectLoaded: false
     property bool versionsLoading: false
     property int containerHeight: 52
 
@@ -86,14 +87,12 @@ property var project: ({})
     }
 
 function reloadVersions() {
-        loading = true
         root.versionsLoading = true
         root.versions = []
         kernel.modManager.getVersions(root.projectId, root.mcVersion, root.loader)
     }
 
     Component.onCompleted: {
-        loading = true
         kernel.modManager.getProject(root.projectId)
         reloadVersions()
     }
@@ -103,7 +102,7 @@ function reloadVersions() {
 function onProjectLoaded(project) {
             if (project.id === root.projectId) {
                 root.project = project
-                loading = false
+                root.projectLoaded = true
             }
         }
 
@@ -218,7 +217,7 @@ function onVersionsLoaded(versions) {
                         spacing: 2
                         Text {
                             Layout.fillWidth: true
-                            text: root.project.name || (root.loading ? "加载中..." : root.projectId)
+                            text: root.project.name || (root.projectLoaded ? root.projectId : "加载中...")
                             font.pixelSize: 17
                             font.weight: Font.DemiBold
                             color: palette.text
@@ -485,13 +484,14 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
+onClicked: {
                                     if (root.stackView && modelData.projectId) {
                                         root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                                             stackView: root.stackView,
                                             projectId: modelData.projectId,
                                             mcVersion: root.mcVersion,
-                                            loader: root.loader
+                                            loader: root.loader,
+                                            downloadDialog: root.downloadDialog
                                         })
                                     }
                                 }
@@ -520,160 +520,27 @@ Rectangle {
         ScrollBar.vertical: ScrollBar { }
     }
 
-    function openDownloadDialog() {
+function openDownloadDialog() {
+        if (!root.downloadDialog)
+            return
         var sel = kernel.instanceManager.getSelectedInstance()
         if (sel && sel.rootDir) {
-            downloadDialog.targetDir = kernel.gameDirFor(sel.rootDir, sel.id)
+            root.downloadDialog.targetDir = kernel.gameDirFor(sel.rootDir, sel.id)
         } else {
             var rootDir = kernel.instanceManager.currentRootDir || kernel.mcDir
-            downloadDialog.targetDir = root.mcVersion
+            root.downloadDialog.targetDir = root.mcVersion
                 ? kernel.gameDirFor(rootDir, root.mcVersion)
                 : rootDir
         }
-        downloadDialog.open()
+        root.downloadDialog.file = root.selectedFile
+        root.downloadDialog.loading = false
+        root.downloadDialog.open()
     }
 
-    FolderDialog {
-        id: downloadDirDialog
-        currentFolder: "file:///" + (downloadDialog.targetDir || kernel.mcDir)
-        onAccepted: {
-            if (selectedFolder)
-                downloadDialog.targetDir = selectedFolder.toString().replace(/^file:\/\//, "")
-        }
-    }
-
-    Popup {
-        id: downloadDialog
-
-        property string targetDir: ""
-        readonly property bool fileReady: !root.loading && root.selectedFile
-                                          && root.selectedFile.fileName
-                                          && root.selectedFile.downloadUrl
-
-        modal: true
-        focus: true
-        closePolicy: Popup.CloseOnEscape
-        x: Math.round((parent.width - width) / 2)
-        y: Math.round((parent.height - height) / 2)
-        width: Math.min(Math.max(parent.width - 64, 320), 460)
-        height: contentColumn.implicitHeight + 64
-        padding: 24
-
-background: Rectangle {
-            radius: Theme.shapeLarge
-            color: palette.window
-            border.color: palette.mid
-            border.width: 1
-        }
-
-        contentItem: ColumnLayout {
-            id: contentColumn
-            spacing: 16
-
-            // Loading state (versions still being fetched)
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 12
-                visible: !downloadDialog.fileReady
-
-                BusyIndicator {
-                    Layout.alignment: Qt.AlignHCenter
-                    running: true
-                    implicitWidth: 36
-                    implicitHeight: 36
-                }
-
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "正在加载版本信息..."
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                }
-            }
-
-            // Ready state
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 16
-                visible: downloadDialog.fileReady
-
-                Text {
-                    text: "下载 " + (root.selectedFile.displayName || root.selectedFile.fileName || "模组")
-                    font.pixelSize: 18
-                    font.weight: Font.Bold
-                    color: palette.text
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-
-                Text {
-                    text: root.selectedFile.fileName || ""
-                    font.pixelSize: 12
-                    color: palette.placeholderText
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    visible: text !== ""
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Text {
-                        text: "下载目录"
-                        font.pixelSize: 13
-                        color: palette.placeholderText
-                    }
-
-                    Text {
-                        id: dirLabel
-                        Layout.fillWidth: true
-                        text: downloadDialog.targetDir
-                        font.pixelSize: 12
-                        color: palette.text
-                        elide: Text.ElideMiddle
-                    }
-
-                    Button {
-                        text: "选择..."
-                        font.weight: Font.Normal
-                        onClicked: downloadDirDialog.open()
-                    }
-                }
-
-                Text {
-                    text: "模组将安装到所选目录的 mods 文件夹"
-                    font.pixelSize: 11
-                    color: palette.placeholderText
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-                    Layout.alignment: Qt.AlignRight
-
-                    Item { Layout.fillWidth: true }
-
-                    Button {
-                        text: "取消"
-                        font.weight: Font.Normal
-                        onClicked: downloadDialog.close()
-                    }
-
-                    Button {
-                        text: "下载"
-                        font.weight: Font.Normal
-                        highlighted: true
-                        onClicked: {
-                            if (downloadDialog.targetDir.length > 0) {
-                                kernel.modManager.installMod(root.selectedFile, downloadDialog.targetDir)
-                                installStatus.text = "已加入下载队列，可在下方下载面板查看进度"
-                            }
-                            downloadDialog.close()
-                        }
-                    }
-                }
-            }
+    Connections {
+        target: root.downloadDialog
+        function onInstalled(message) {
+            installStatus.text = message
         }
     }
 }

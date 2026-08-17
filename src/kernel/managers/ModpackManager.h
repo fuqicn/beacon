@@ -68,6 +68,10 @@ private:
     qreal m_progress = 0.0;
     QThread *m_workerThread = nullptr;
     ModpackWorker *m_worker = nullptr;
+    // True while a cooperative cancel has been requested for the current
+    // worker. Used to pair the ref-counted global download cancel flag with a
+    // matching release exactly once, when the worker thread actually exits.
+    bool m_cancelRequested = false;
 };
 
 #endif

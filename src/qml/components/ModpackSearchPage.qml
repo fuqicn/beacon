@@ -23,7 +23,8 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    property var stackView: null
+property var stackView: null
+    property var installDialog: null
     property string query: ""
     property string sortKey: "relevance"
     property string mcVersion: ""
@@ -236,11 +237,12 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         if (root.stackView)
-                            root.stackView.push(Qt.resolvedUrl("ModpackDetailPage.qml"), {
+root.stackView.push(Qt.resolvedUrl("ModpackDetailPage.qml"), {
                                 stackView: root.stackView,
                                 projectId: modelData.id,
                                 mcVersion: root.mcVersion,
-                                loader: root.loader
+                                loader: root.loader,
+                                installDialog: root.installDialog
                             })
                     }
                 }

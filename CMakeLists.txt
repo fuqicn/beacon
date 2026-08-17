@@ -143,8 +143,10 @@ set(QML_SOURCES
     src/qml/components/DownloadStatusPanel.qml
     src/qml/components/ModsSearchPage.qml
     src/qml/components/ModDetailPage.qml
+    src/qml/components/ModDownloadDialog.qml
     src/qml/components/ModpackSearchPage.qml
     src/qml/components/ModpackDetailPage.qml
+    src/qml/components/ModpackInstallDialog.qml
 )
 
 # Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged

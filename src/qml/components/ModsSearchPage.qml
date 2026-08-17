@@ -23,7 +23,8 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    property var stackView: null
+property var stackView: null
+    property var downloadDialog: null
     property string query: ""
     property string sortKey: "relevance"
     property string loader: ""
@@ -265,11 +266,12 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         if (root.stackView)
-                            root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
+root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                                 stackView: root.stackView,
                                 projectId: modelData.id,
                                 mcVersion: root.mcVersion,
-                                loader: root.loader
+                                loader: root.loader,
+                                downloadDialog: root.downloadDialog
                             })
                     }
                 }

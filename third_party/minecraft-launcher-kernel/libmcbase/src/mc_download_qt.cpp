@@ -100,7 +100,7 @@ int mc_qt_download_cancel(void) {
 }
 
 static int g_thread_limit = 64;
-static int g_max_pieces = 8;
+static int g_max_pieces = 4;
 
 void mc_qt_download_set_thread_limit(int n) {
     if (n < 1) n = 1;
@@ -355,6 +355,22 @@ static void setup_req(QNetworkRequest &req, long timeout_ms) {
     req.setHttp1Configuration(h1);
 }
 
+// Transfer budget for QNetworkRequest::setTransferTimeout, which is a TOTAL
+// transfer cap. Fixed short caps kill slow-but-flowing sources (Modrinth's CDN
+// can be ~tens of KB/s), so scale the budget to the expected bytes with a
+// generous 10KB/s floor and cap at 2 hours. Stalled connections are handled
+// separately by the idle-based abort timers in download_piece/download_ranges.
+static long transfer_budget(long timeout_ms, long long expected_bytes) {
+    long long budget = timeout_ms > 0 ? (long long)timeout_ms : 30000LL;
+    if (expected_bytes > 0) {
+        long long scaled = expected_bytes * 1000 / 10240;   // 10KB/s floor
+        if (scaled > budget) budget = scaled;
+    }
+    const long long CAP = 2LL * 3600 * 1000;
+    if (budget > CAP) budget = CAP;
+    return (long)budget;
+}
+
 // BMCLAPI asks clients to throttle requests; PCL sleeps ~100ms between starts
 // across two starter threads, so the effective rate is ~20/s.
 static std::mutex g_throttle_mtx;
@@ -399,9 +415,10 @@ static int download_piece(const char *url, const char *sink_path,
 
     bmclapi_throttle(url);
 
+    long budget = transfer_budget(timeout_ms, len > 0 ? (long long)len : -1);
     QUrl qurl(QString::fromUtf8(url));
     QNetworkRequest req(qurl);
-    setup_req(req, timeout_ms);
+    setup_req(req, budget);
     if (off >= 0 && len > 0)
         req.setRawHeader("Range", QString("bytes=%1-%2").arg(off).arg(off + len - 1).toUtf8());
 
@@ -571,6 +588,8 @@ static int download_ranges(const char *url, const char *path, long size,
 
     bmclapi_throttle(url);
 
+    long budget = transfer_budget(timeout_ms, piece_len > 0 ? (long long)piece_len : -1);
+
     QEventLoop loop;
     QTimer timer;
     auto timed_out = std::make_shared<bool>(false);
@@ -583,17 +602,33 @@ static int download_ranges(const char *url, const char *path, long size,
     auto hostile = std::make_shared<bool>(false);
     std::vector<std::vector<QMetaObject::Connection>> conns(npieces);
 
-    for (int p = 0; p < npieces; p++) {
+    // Per-piece last-data timestamps + reissue bookkeeping. Modrinth's CDN
+    // (and the mirrors fronting it) feeds only some of the concurrent range
+    // connections; the rest can sit at 0 bytes for minutes. The reaper below
+    // aborts a piece that gets no data for STALL_PIECE_ABORT_MS and reissues it
+    // through the next QNAM, so a starved piece keeps getting fresh sockets
+    // instead of rotting until the global no-progress abort finally fires.
+    auto piece_last = std::make_shared<std::vector<std::chrono::steady_clock::time_point>>((size_t)npieces, t_start);
+    auto reissue_pending = std::make_shared<std::vector<char>>((size_t)npieces, 0);
+    auto reissue_after = std::make_shared<std::vector<std::chrono::steady_clock::time_point>>((size_t)npieces);
+    auto reissue_count = std::make_shared<std::vector<int>>((size_t)npieces, 0);
+
+    // Issue one piece's range request and wire its signals. Used for the
+    // initial burst and for every reissue, so a starved piece gets a fresh
+    // QNetworkAccessManager (=> fresh sockets) via pick_nam().
+    auto start_piece = [&](int p) {
         auto piece = pieces[p];
-        if (!piece->fp) continue;
+        if (!piece->fp) return;
         QUrl qurl(QString::fromUtf8(url));
         QNetworkRequest req(qurl);
-        setup_req(req, timeout_ms);
+        setup_req(req, budget);
         req.setRawHeader("Range", QString("bytes=%1-%2").arg(offs[p]).arg(offs[p] + lens[p] - 1).toUtf8());
         QNetworkReply *reply = pick_nam()->get(req);
         piece->reply = reply;
+        (*piece_last)[p] = std::chrono::steady_clock::now();
 
-        conns[p].push_back(QObject::connect(reply, &QNetworkReply::readyRead, [piece, progress_total, size, &timer, timeout_ms, last_activity, pr]() {
+        conns[p].push_back(QObject::connect(reply, &QNetworkReply::readyRead, [reply, p, piece, piece_last, progress_total, size, &timer, timeout_ms, last_activity, pr]() {
+            if (reply != piece->reply) return;   // superseded by a reissue
             QByteArray data = piece->reply->readAll();
             if (piece->fp) {
                 piece->written += (long long)fwrite(data.constData(), 1, (size_t)data.size(), piece->fp);
@@ -601,9 +636,11 @@ static int download_ranges(const char *url, const char *path, long size,
             *progress_total += (long long)data.size();
             if (pr) pr->report(*progress_total, size);
             *last_activity = std::chrono::steady_clock::now();
+            (*piece_last)[p] = std::chrono::steady_clock::now();
             if (timeout_ms > 0) timer.start((int)timeout_ms);
         }));
-        conns[p].push_back(QObject::connect(reply, &QNetworkReply::finished, [piece, &loop, done_count, active, timed_out, hostile]() {
+        conns[p].push_back(QObject::connect(reply, &QNetworkReply::finished, [reply, piece, &loop, piece_last, done_count, active, timed_out, hostile]() {
+            if (reply != piece->reply) return;   // superseded by a reissue
             QByteArray data = piece->reply->readAll();
             if (piece->fp) {
                 piece->written += (long long)fwrite(data.constData(), 1, (size_t)data.size(), piece->fp);
@@ -617,6 +654,11 @@ static int download_ranges(const char *url, const char *path, long size,
             if (++(*done_count) == active || *hostile)
                 loop.quit();
         }));
+    };
+
+    for (int p = 0; p < npieces; p++) {
+        if (!pieces[p]->fp) continue;
+        start_piece(p);
     }
 
     if (timeout_ms > 0) {
@@ -650,6 +692,58 @@ static int download_ranges(const char *url, const char *path, long size,
         slow_timer.start();
     }
 
+    // Per-piece reaper: recover pieces the server feeds zero bytes (the CDN
+    // starves some concurrent range connections indefinitely). A piece idle for
+    // STALL_PIECE_ABORT_MS gets its reply aborted and the range reissued via a
+    // different QNAM; keep at it up to MAX_REISSUES before letting the global
+    // slow-abort / transfer budget decide the source's fate.
+    const long long STALL_PIECE_ABORT_MS = 20000;
+    const int MAX_REISSUES = 12;
+    QTimer reaper_timer;
+    QMetaObject::Connection rp;
+    {
+        reaper_timer.setInterval(1000);
+        rp = QObject::connect(&reaper_timer, &QTimer::timeout,
+                              [&, piece_last, reissue_pending, reissue_after, reissue_count]() {
+            if (*timed_out || *done_count >= active) return;
+            auto now = std::chrono::steady_clock::now();
+            for (int p = 0; p < (int)pieces.size(); p++) {
+                auto piece = pieces[p];
+                if (!piece->fp || piece->ok || *done_count >= active) continue;
+                if ((*reissue_pending)[p]) {
+                    if (now < (*reissue_after)[p]) continue;
+                    // The connection may have recovered on its own while we
+                    // were waiting; if data flowed again, cancel the reissue.
+                    long long idle_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            now - (*piece_last)[p]).count();
+                    if (idle_ms < STALL_PIECE_ABORT_MS) { (*reissue_pending)[p] = 0; continue; }
+                    QNetworkReply *old = piece->reply;
+                    piece->reply = nullptr;
+                    if (old) { old->abort(); old->deleteLater(); }
+                    fclose(piece->fp); piece->fp = nullptr;
+                    char sp[2048];
+                    snprintf(sp, sizeof(sp), "%s.chunk.%d", path, p);
+                    piece->fp = fopen(sp, "wb");
+                    piece->written = 0;
+                    (*reissue_pending)[p] = 0;
+                    mc_info("[DL-Q]   piece %d stalled, reissuing (attempt %d)", p, (*reissue_count)[p]);
+                    start_piece(p);
+                    continue;
+                }
+                if (piece->reply && (*reissue_count)[p] < MAX_REISSUES) {
+                    long long idle_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            now - (*piece_last)[p]).count();
+                    if (idle_ms >= STALL_PIECE_ABORT_MS) {
+                        (*reissue_count)[p]++;
+                        (*reissue_pending)[p] = 1;
+                        (*reissue_after)[p] = now + std::chrono::milliseconds(1000);
+                    }
+                }
+            }
+        });
+        reaper_timer.start();
+    }
+
     QTimer cancel_timer;
     QMetaObject::Connection cc;
     {
@@ -668,6 +762,8 @@ static int download_ranges(const char *url, const char *path, long size,
     {
         slow_timer.stop();
         QObject::disconnect(swc);
+        reaper_timer.stop();
+        QObject::disconnect(rp);
         cancel_timer.stop();
         QObject::disconnect(cc);
     }
@@ -743,10 +839,12 @@ static int download_one_file(const McQtBatchItem *it, long timeout_ms, ProgressR
                           !strstr(url, "bmclapi"));
         if (use_ranges) any_ranges = 1;
 
-        // Adaptive timeout: grow as sources keep failing, capped at 30s.
-        // A flaky mirror must not stall the file for the full budget.
+        // Adaptive timeout: grow as sources keep failing. This is only the
+        // floor for the idle abort / minimum transfer budget; download_piece
+        // and download_ranges scale the actual transfer budget to the expected
+        // size so slow-but-flowing sources (e.g. Modrinth's CDN) can finish.
         long eff_timeout = timeout_ms;
-        if (s > 0) eff_timeout = std::min(30000L, std::max(timeout_ms, 15000L * (1L + s)));
+        if (s > 0) eff_timeout = std::max(timeout_ms, 15000L * (1L + s));
         if (strstr(url, "bmclapi") && eff_timeout > 10000L) eff_timeout = 10000L;
 
         if (use_ranges) {
@@ -801,10 +899,10 @@ static int download_one_file(const McQtBatchItem *it, long timeout_ms, ProgressR
             const char *url = it->urls[s];
             if (!url || !*url) continue;
             long eff_timeout = timeout_ms;
-            if (s > 0) eff_timeout = std::min(30000L, std::max(timeout_ms, 15000L * (1L + s)));
+            if (s > 0) eff_timeout = std::max(timeout_ms, 15000L * (1L + s));
             if (strstr(url, "bmclapi") && eff_timeout > 10000L) eff_timeout = 10000L;
             clean_temp(it->path);
-            if (download_piece(url, it->path, -1, -1, eff_timeout,
+            if (download_piece(url, it->path, -1, it->size > 0 ? it->size : -1, eff_timeout,
                                s < it->url_count - 1, pr) != 0)
                 continue;
             int ok = 1;

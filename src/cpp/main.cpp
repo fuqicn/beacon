@@ -1289,12 +1289,17 @@ return 0;
     // is closed. Everything is already torn down above (all managers cancelled,
     // worker threads stopped, download pool cleaned up, log flushed), so
     // terminating here is safe and guarantees a prompt exit.
+    #ifdef Q_OS_WIN
     mc_info("[Bridge] Exit (pid=%lu)", (unsigned long)GetCurrentProcessId());
     // ExitProcess would run DLL detach handlers (Qt6 DllMain) which can hang on
     // the leftover download/network threads; TerminateProcess skips all of that
     // and guarantees immediate termination.
     TerminateProcess(GetCurrentProcess(), (UINT)ret);
     return 0;   // unreachable; keeps the compiler happy that qMain always returns
+#else
+    mc_info("[Bridge] Exit (pid=%lld)", (long long)QCoreApplication::applicationPid());
+    return ret;
+#endif
 }
 
 #include "main.moc"

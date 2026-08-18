@@ -1025,6 +1025,15 @@ return 0;
     }
 #endif
 
+#if defined(Q_OS_LINUX)
+    // GNOME (Wayland) renders no client-side title bar for this Qt build, so
+    // the main window shows up undecorated. Fall back to the xcb (XWayland)
+    // platform where the WM provides server-side decorations and reliable
+    // close handling. Respect an explicit override from the environment.
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "xcb");
+#endif
+
     QApplication app(argc, argv);
     app.setApplicationName("Beacon");
     app.setApplicationVersion("1.0.0");
@@ -1298,7 +1307,12 @@ return 0;
     return 0;   // unreachable; keeps the compiler happy that qMain always returns
 #else
     mc_info("[Bridge] Exit (pid=%lld)", (long long)QCoreApplication::applicationPid());
-    return ret;
+    // Same rationale as TerminateProcess above: running the QML engine /
+    // QApplication destructors can deadlock with the leftover download/network
+    // threads and leave the process hanging after the window closes. Everything
+    // is already torn down, so force-exit without running destructors.
+    std::_Exit(ret);
+    return 0;   // unreachable
 #endif
 }
 

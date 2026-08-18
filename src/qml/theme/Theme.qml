@@ -61,6 +61,10 @@ QtObject {
     readonly property real shapeExtraLarge: _cornersEnabled ? 16 : 0
     readonly property real shapeFull: _cornersEnabled ? 9999 : 0
 
+    // Navigation rail pill: always rounded regardless of the corner config
+    // (matches the pre-configuration hardcoded radius: 20).
+    readonly property real shapeNavRail: 20
+
     function _surface(t) {
         return transparencyEnabled
             ? Qt.alpha(sysPalette.placeholderText, t)

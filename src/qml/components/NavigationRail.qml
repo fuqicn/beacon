@@ -48,7 +48,7 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: 56
                         height: 32
-                        radius: Theme.shapeExtraLarge
+                        radius: Theme.shapeNavRail
                         color: index === root.currentIndex ? Theme.secondaryContainer : "transparent"
 
                         Text {

@@ -93,7 +93,7 @@ ApplicationWindow {
                 y: 16 + window.navIndex * 68
                 width: 72
                 height: 64
-                radius: Theme.shapeExtraLarge
+                radius: Theme.shapeNavRail
                 color: Qt.alpha(palette.highlight, 0.14)
                 visible: window.navIndex >= 0
                 Behavior on y {
@@ -115,7 +115,7 @@ ApplicationWindow {
                         height: 64
 
                         background: Rectangle {
-                            radius: Theme.shapeExtraLarge
+                            radius: Theme.shapeNavRail
                             color: navBtn.hovered ? Qt.alpha(palette.placeholderText, 0.09) : "transparent"
                             Behavior on color {
                                 enabled: Theme.animationsEnabled

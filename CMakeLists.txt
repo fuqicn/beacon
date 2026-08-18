@@ -11,6 +11,14 @@ include(GNUInstallDirs)
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg Widgets)
 find_package(ZLIB QUIET)
 
+# Qt 6.5+ qml import-scanner embeds the standard Qt modules' qmldir/type-info
+# as resources (qrc:/qt-project.org/imports), which shadow the installed Qt's
+# qml dir in the engine's import path order and leave the native module plugins
+# unresolvable. Bake in the install qml dir so the runtime can prepend it as a
+# disk fallback that actually carries the plugin DLLs.
+get_filename_component(QT6_QML_INSTALL_DIR "${Qt6_DIR}/../../.." ABSOLUTE)
+set(QT6_QML_INSTALL_DIR "${QT6_QML_INSTALL_DIR}/qml")
+
 set(KERNEL_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel")
 
 set(KERNEL_SRC
@@ -128,7 +136,7 @@ endif()
 
 set(QML_SOURCES
     src/qml/main.qml
-    src/qml/theme/Theme.qml
+    src/qml/theme/AppTheme.qml
     src/qml/pages/LaunchPage.qml
     src/qml/pages/InstancesPage.qml
     src/qml/pages/DownloadPage.qml
@@ -170,6 +178,11 @@ qt_add_qml_module(Beacon
     NO_RESOURCE_TARGET_PATH
     NO_LINT
     QML_FILES ${QML_SOURCES}
+)
+
+# Pass the installed Qt qml dir (see the comment near find_package) to main.cpp.
+target_compile_definitions(Beacon PRIVATE
+    QT6_QML_INSTALL_DIR="${QT6_QML_INSTALL_DIR}"
 )
 
 # Copy mirrors.json to build directory

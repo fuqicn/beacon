@@ -1251,6 +1251,17 @@ return 0;
     QQmlApplicationEngine engine;
     engine.addImportPath("qrc:/qml");
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
+    // Qt 6.5+ embeds the Qt QML modules' qmldir/type-info under
+    // qrc:/qt-project.org/imports, which shadows the installed Qt's qml dir in
+    // the import path order. That embedded copy carries no native plugins
+    // (QtQuick, QtQuick.Controls, ...). addImportPath() prepends, so adding the
+    // installed Qt qml directory last puts the disk modules (with their plugin
+    // DLLs) first; on a deployed install this is skipped via the existence check.
+#ifdef QT6_QML_INSTALL_DIR
+    const QString qtInstallQml = QStringLiteral(QT6_QML_INSTALL_DIR);
+    if (QFileInfo::exists(qtInstallQml + "/QtQuick/qmldir"))
+        engine.addImportPath(qtInstallQml);
+#endif
 
     engine.rootContext()->setContextProperty("kernel", KernelBridge::instance());
     KernelBridge::instance()->setEngine(&engine);
@@ -1267,7 +1278,7 @@ return 0;
     modIconProvider->setIconsDir(QCoreApplication::applicationDirPath() + "/cache/icons");
     engine.addImageProvider("modicon", modIconProvider);
 
-    QQmlComponent themeComponent(&engine, QUrl("qrc:///qml/theme/Theme.qml"));
+    QQmlComponent themeComponent(&engine, QUrl("qrc:///qml/theme/AppTheme.qml"));
     QObject *theme = themeComponent.create();
     if (themeComponent.isError())
         qWarning("Theme error: %s", qPrintable(themeComponent.errorString()));
@@ -1290,7 +1301,7 @@ return 0;
 
     qint64 tStart = QDateTime::currentMSecsSinceEpoch();
     mc_info("[Startup] kernel/theme/i18n init done in %lldms",
-            QDateTime::currentMSecsSinceEpoch() - tStart);
+QDateTime::currentMSecsSinceEpoch() - tStart);
 
     mc_info("[Startup] loading main.qml...");
     engine.load(QUrl("qrc:///qml/main.qml"));

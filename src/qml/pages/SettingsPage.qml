@@ -447,6 +447,10 @@ Item {
                             text: I18n.tr("settings.restartNow")
                             enabled: restartNeeded
                             onClicked: kernel.restartApp()
+                            HoverHandler { id: restartHover }
+                            ToolTip.visible: restartHover.hovered && restartNeeded
+                            ToolTip.delay: 500
+                            ToolTip.text: I18n.tr("settings.restartHint")
                         }
                     }
                 }

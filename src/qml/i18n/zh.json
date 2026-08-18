@@ -48,6 +48,7 @@
   "settings.styleFusion": "Fusion",
   "settings.styleImagine": "Imagine",
   "settings.restartNow": "立即重启",
+  "settings.restartHint": "立即关闭并重启应用以应用更改，正在进行的下载会中断。",
   "settings.corner": "圆角样式",
   "settings.cornerAuto": "跟随系统",
   "settings.cornerRounded": "圆角",

@@ -36,6 +36,7 @@
 #include <QQuickWindow>
 #include <QQmlEngine>
 #include "WindowEffects.h"
+#include <cstdlib>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -313,7 +314,18 @@ void KernelBridge::restartApp()
                                .arg(pid).arg(exe);
     QProcess::startDetached("/bin/sh", QStringList() << "-c" << script);
 #endif
-    QCoreApplication::quit();
+    // Do not go through QCoreApplication::quit() here: the teardown after the
+    // event loop exits (manager cancel/delete, download-pool and QML/QtNetwork
+    // thread cleanup) can stall for tens of seconds, so the detached launcher's
+    // "Wait-Process" never completes and the restart looks unresponsive. The
+    // new instance is already scheduled above; hard-exit now so the old process
+    // releases the single-instance lock immediately and the new one starts.
+    mc_info("[Bridge] Restart requested (pid=%lld), exiting...", (long long)pid);
+#ifdef Q_OS_WIN
+    TerminateProcess(GetCurrentProcess(), 0);
+#else
+    std::_Exit(0);
+#endif
 }
 
 void KernelBridge::selectInstance(const QString &versionId, const QString &rootDir)

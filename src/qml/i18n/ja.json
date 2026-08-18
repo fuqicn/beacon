@@ -48,6 +48,7 @@
   "settings.styleFusion": "Fusion",
   "settings.styleImagine": "Imagine",
   "settings.restartNow": "今すぐ再起動",
+  "settings.restartHint": "変更を反映するため、アプリをすぐに終了して再起動します。進行中のダウンロードは中断されます。",
   "settings.corner": "角のスタイル",
   "settings.cornerAuto": "システムに追従",
   "settings.cornerRounded": "角丸",

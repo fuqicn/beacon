@@ -48,6 +48,7 @@
   "settings.styleFusion": "Fusion",
   "settings.styleImagine": "Imagine",
   "settings.restartNow": "Redémarrer maintenant",
+  "settings.restartHint": "Ferme et redémarre immédiatement l'application pour appliquer les modifications.",
   "settings.corner": "Style des coins",
   "settings.cornerAuto": "Suivre le système",
   "settings.cornerRounded": "Arrondi",

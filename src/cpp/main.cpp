@@ -50,6 +50,7 @@
 #include <QCryptographicHash>
 #include <QPointer>
 #include <QLocalServer>
+#include <QLocalSocket>
 #include <QMessageBox>
 #include <cstdlib>
 #include <exception>
@@ -1076,6 +1077,22 @@ return 0;
         + QString::fromLatin1(QCryptographicHash::hash(
             QCoreApplication::applicationDirPath().toUtf8(),
             QCryptographicHash::Md5).toHex());
+    // On Unix a force-terminated instance (e.g. the std::_Exit path below)
+    // leaves the socket file behind; QLocalServer::listen() would then fail
+    // even though no Beacon is running. Probe for a live server first, and
+    // only clear the stale socket when nobody answers.
+    {
+        QLocalSocket probe;
+        probe.connectToServer(ipcName, QIODevice::ReadOnly);
+        if (probe.waitForConnected(300)) {
+            probe.abort();
+            mc_info("[Startup] another Beacon instance is already running; exiting");
+            QMessageBox::warning(nullptr, "Beacon", QStringLiteral("Beacon 已在运行，请勿重复打开。"));
+            return 0;
+        }
+        probe.abort();
+        QLocalServer::removeServer(ipcName); // discard stale socket, ignore result
+    }
     if (!ipcServer.listen(ipcName)) {
         mc_info("[Startup] another Beacon instance is already running; exiting");
         QMessageBox::warning(nullptr, "Beacon", QStringLiteral("Beacon 已在运行，请勿重复打开。"));

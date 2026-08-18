@@ -81,6 +81,7 @@ public:
     Q_INVOKABLE void setColorScheme(bool dark);
     Q_INVOKABLE void applyThemeMode(const QString &mode);
     Q_INVOKABLE void applyWindowTransparency(bool enabled);
+    Q_INVOKABLE void restartApp();
     Q_INVOKABLE void launchGame(int memory = 4096);
     Q_INVOKABLE void cancelLaunch();
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());

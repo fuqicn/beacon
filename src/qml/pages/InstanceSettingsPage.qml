@@ -142,7 +142,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: isoInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: isoHover }
 
                 ColumnLayout {
@@ -219,7 +219,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: jvmCol.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: jvmHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: jvmHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: jvmHover }
 
                 ColumnLayout {
@@ -273,7 +273,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: memInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: memHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: memHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: memHover }
 
                 RowLayout {
@@ -318,7 +318,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: resInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: resHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: resHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: resHover }
 
                 ColumnLayout {
@@ -403,7 +403,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: javaInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: javaHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: javaHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: javaHover }
 
                 ColumnLayout {
@@ -459,7 +459,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: verFolderInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: vfHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: vfHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: vfHover }
 
                 RowLayout {
@@ -501,7 +501,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: savesInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: savesHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: savesHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: savesHover }
 
                 RowLayout {
@@ -543,7 +543,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: modsCol.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: modsHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: modsHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: modsHover }
 
                 ColumnLayout {
@@ -599,7 +599,7 @@ Item {
                             width: installedModsList.width
                             height: 38
                             radius: Theme.shapeSmall
-                            color: Qt.alpha(palette.placeholderText, 0.05)
+                            color: Theme.surfaceContainer
 
                             RowLayout {
                                 anchors.fill: parent

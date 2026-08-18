@@ -104,7 +104,7 @@ function selectCategory(index) {
                 y: 0
                 width: 100
                 height: 34
-                radius: 17
+                radius: Theme.shapeFull
                 color: Qt.alpha(palette.highlight, 0.15)
                 Behavior on x {
                     enabled: Theme.animationsEnabled
@@ -128,7 +128,7 @@ function selectCategory(index) {
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 17
+                            radius: Theme.shapeFull
                             color: mtHover.hovered ? Qt.alpha(palette.placeholderText, 0.08) : "transparent"
                         }
                         HoverHandler { id: mtHover }
@@ -274,7 +274,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: Theme.shapeMedium
-                        color: Qt.alpha(palette.placeholderText, 0.05)
+                        color: Theme.surfaceContainer
                         clip: true
                         visible: !loading
 

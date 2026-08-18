@@ -297,6 +297,25 @@ void KernelBridge::applyWindowTransparency(bool enabled)
     WindowEffects::applyTransparency(m_mainWindow, enabled, dark);
 }
 
+void KernelBridge::restartApp()
+{
+    const QString exe = QCoreApplication::applicationFilePath();
+    const qint64 pid = QCoreApplication::applicationPid();
+#ifdef Q_OS_WIN
+    // Wait for this process to fully exit (releasing the single-instance
+    // mutex) before starting the new instance, to avoid the guard rejecting it.
+    const QString cmd = QStringLiteral("Wait-Process -Id %1; Start-Process -FilePath '%2'")
+                            .arg(pid).arg(exe);
+    QProcess::startDetached("powershell.exe",
+                            QStringList() << "-NoProfile" << "-Command" << cmd);
+#else
+    const QString script = QStringLiteral("while kill -0 %1 2>/dev/null; do sleep 0.1; done; exec '%2'")
+                               .arg(pid).arg(exe);
+    QProcess::startDetached("/bin/sh", QStringList() << "-c" << script);
+#endif
+    QCoreApplication::quit();
+}
+
 void KernelBridge::selectInstance(const QString &versionId, const QString &rootDir)
 {
     if (!m_launchManager || !m_instanceManager) return;

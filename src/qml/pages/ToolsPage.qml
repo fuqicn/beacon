@@ -111,7 +111,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: javaDlInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 RowLayout {
                     id: javaDlInner
                     anchors.fill: parent

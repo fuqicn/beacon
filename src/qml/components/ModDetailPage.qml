@@ -292,7 +292,7 @@ Rectangle {
                     Layout.preferredHeight: root.containerHeight
                     Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     radius: Theme.shapeMedium
-                    color: Qt.alpha(palette.placeholderText, 0.05)
+                    color: Theme.surfaceContainer
                     clip: true
 
                     ListView {
@@ -454,7 +454,7 @@ Rectangle {
                             radius: Theme.shapeSmall
                             color: dma.containsMouse
                                    ? Qt.alpha(palette.highlight, 0.08)
-                                   : Qt.alpha(palette.placeholderText, 0.05)
+                                   : Theme.surfaceContainer
 
                             RowLayout {
                                 anchors.fill: parent

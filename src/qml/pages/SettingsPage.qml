@@ -24,6 +24,26 @@ import "../components"
 Item {
     id: root
 
+    property bool restartNeeded: false
+
+    function styleOptions() {
+        var opts = [{ text: I18n.tr("settings.styleAuto"), key: "auto" }]
+        var os = Qt.platform.os
+        if (os === "windows") {
+            opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
+            opts.push({ text: I18n.tr("settings.styleWindows"), key: "windows" })
+        } else if (os === "osx") {
+            opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
+            opts.push({ text: I18n.tr("settings.styleMacOS"), key: "macos" })
+        } else {
+            opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
+            opts.push({ text: I18n.tr("settings.styleWindows"), key: "windows" })
+            opts.push({ text: I18n.tr("settings.styleFusion"), key: "fusion" })
+            opts.push({ text: I18n.tr("settings.styleImagine"), key: "imagine" })
+        }
+        return opts
+    }
+
     Component.onCompleted: {
         javaPathInput.text = kernel.settingsManager.value("java/path", "")
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
@@ -40,6 +60,20 @@ Item {
         for (var j = 0; j < isoPolicyCombo.model.length; ++j) {
             if (isoPolicyCombo.model[j].key === isoPolicy) {
                 isoPolicyCombo.currentIndex = j
+                break
+            }
+        }
+        var uiStyle = kernel.settingsManager.value("ui/style", "auto")
+        for (var s = 0; s < styleCombo.model.length; ++s) {
+            if (styleCombo.model[s].key === uiStyle) {
+                styleCombo.currentIndex = s
+                break
+            }
+        }
+        var uiCorner = kernel.settingsManager.value("ui/corner", "auto")
+        for (var c = 0; c < cornerCombo.model.length; ++c) {
+            if (cornerCombo.model[c].key === uiCorner) {
+                cornerCombo.currentIndex = c
                 break
             }
         }
@@ -71,7 +105,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: javaInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 ColumnLayout {
                     id: javaInner
                     anchors.fill: parent
@@ -115,7 +149,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: memInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                     RowLayout {
                         id: memInner
                         anchors.fill: parent
@@ -147,7 +181,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: dlInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 RowLayout {
                     id: dlInner
                     anchors.fill: parent
@@ -176,7 +210,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: dlSourceInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 RowLayout {
                     id: dlSourceInner
                     anchors.fill: parent
@@ -218,7 +252,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: isoInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: isoHover }
 
                 RowLayout {
@@ -283,7 +317,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: themeInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 RowLayout {
                     id: themeInner
                     anchors.fill: parent
@@ -338,6 +372,86 @@ Item {
                 }
             }
 
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: styleInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: Theme.surfaceContainer
+                ColumnLayout {
+                    id: styleInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Text {
+                            text: I18n.tr("settings.style")
+                            color: palette.placeholderText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        ComboBox {
+                            id: styleCombo
+                            Layout.preferredWidth: 180
+                            model: styleOptions()
+                            textRole: "text"
+                            valueRole: "key"
+                            onActivated: {
+                                kernel.settingsManager.setValue("ui/style", currentValue)
+                                restartNeeded = true
+                            }
+                            HoverHandler { id: styleHover }
+                            ToolTip.visible: styleHover.hovered
+                            ToolTip.delay: 500
+                            ToolTip.text: I18n.tr("settings.styleHint")
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Text {
+                            text: I18n.tr("settings.corner")
+                            color: palette.placeholderText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        ComboBox {
+                            id: cornerCombo
+                            Layout.preferredWidth: 180
+                            model: [
+                                { text: I18n.tr("settings.cornerAuto"), key: "auto" },
+                                { text: I18n.tr("settings.cornerRounded"), key: "rounded" },
+                                { text: I18n.tr("settings.cornerSquare"), key: "square" }
+                            ]
+                            textRole: "text"
+                            valueRole: "key"
+                            onActivated: Theme.setCornerMode(currentValue)
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Text {
+                            text: I18n.tr("settings.styleHint")
+                            color: palette.placeholderText
+                            font.pixelSize: 12
+                            visible: restartNeeded
+                            Layout.fillWidth: true
+                        }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            text: I18n.tr("settings.restartNow")
+                            enabled: restartNeeded
+                            onClicked: kernel.restartApp()
+                        }
+                    }
+                }
+            }
+
             // System appearance settings
             Text {
                 text: "系统"
@@ -349,7 +463,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: sysInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 ColumnLayout {
                     id: sysInner
                     anchors.fill: parent
@@ -400,7 +514,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: langInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 RowLayout {
                     id: langInner
                     anchors.fill: parent
@@ -434,7 +548,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: aboutInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 ColumnLayout {
                     id: aboutInner
                     anchors.fill: parent

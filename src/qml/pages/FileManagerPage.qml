@@ -137,7 +137,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Theme.shapeMedium
-            color: Qt.alpha(palette.placeholderText, 0.05)
+            color: Theme.surfaceContainer
             clip: true
 
             ListView {

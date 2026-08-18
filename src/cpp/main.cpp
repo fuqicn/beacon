@@ -1196,16 +1196,38 @@ return 0;
     installCrashHandlers();
 #endif
 
+    QString uiStyle;
+    {
+        QSettings styleSettings(QCoreApplication::applicationDirPath() + "/settings.ini", QSettings::IniFormat);
+        uiStyle = styleSettings.value("ui/style", "auto").toString();
+    }
+
 #if defined(Q_OS_WIN)
-    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11)
+    if (uiStyle == "fluentwinui3")
+        QQuickStyle::setStyle("FluentWinUI3");
+    else if (uiStyle == "windows")
+        QQuickStyle::setStyle("Windows");
+    else if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11)
         QQuickStyle::setStyle("FluentWinUI3");
     else
         QQuickStyle::setStyle("Windows");
 #elif defined(Q_OS_MACOS)
-    QQuickStyle::setStyle("macOS");
+    if (uiStyle == "fluentwinui3")
+        QQuickStyle::setStyle("FluentWinUI3");
+    else if (uiStyle == "macos")
+        QQuickStyle::setStyle("macOS");
+    else
+        QQuickStyle::setStyle("macOS");
 #elif defined(Q_OS_LINUX)
-    // Let Qt auto-detect platform theme (Breeze on KDE, generic on others)
-    // Do not force Fusion - platform theme handles styling
+    if (uiStyle == "fluentwinui3")
+        QQuickStyle::setStyle("FluentWinUI3");
+    else if (uiStyle == "windows")
+        QQuickStyle::setStyle("Windows");
+    else if (uiStyle == "fusion")
+        QQuickStyle::setStyle("Fusion");
+    else if (uiStyle == "imagine")
+        QQuickStyle::setStyle("Imagine");
+    // else: let Qt auto-detect platform theme (Breeze on KDE, generic on others)
 #endif
 
     // Load mirror configuration from mirrors.json next to the executable

@@ -159,7 +159,7 @@ Component.onCompleted: {
                 color: {
                     if (kernel.authManager.currentAccountIndex === index)
                         return Qt.alpha(palette.highlight, 0.12)
-                    return maus.containsMouse ? Qt.alpha(palette.placeholderText, 0.08) : Qt.alpha(palette.placeholderText, 0.05)
+                    return maus.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer
                 }
                 border.color: kernel.authManager.currentAccountIndex === index
                              ? Qt.alpha(palette.highlight, 0.3)
@@ -330,7 +330,7 @@ Component.onCompleted: {
                 Layout.preferredWidth: 44
                 Layout.preferredHeight: 44
                 radius: Theme.shapeMedium
-                color: Qt.alpha(palette.placeholderText, 0.05)
+                color: Theme.surfaceContainer
                 clip: true
 
 Image {

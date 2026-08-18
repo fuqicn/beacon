@@ -23,6 +23,7 @@ QtObject {
     property bool darkMode: (sysPalette.window.hslLightness < 0.5)
 
     property string themeMode: "system"
+    property string cornerMode: "auto"
     property bool alwaysScrollbars: false
     property bool transparencyEnabled: true
     property bool animationsEnabled: true
@@ -42,19 +43,33 @@ QtObject {
     readonly property color onSurfaceVariant: sysPalette.placeholderText
     readonly property color surfaceContainerLowest: sysPalette.window
     readonly property color surfaceContainerLow: sysPalette.window
-    readonly property color surfaceContainer: Qt.alpha(sysPalette.placeholderText, 0.05)
-    readonly property color surfaceContainerHigh: Qt.alpha(sysPalette.placeholderText, 0.08)
-    readonly property color surfaceContainerHighest: Qt.alpha(sysPalette.placeholderText, 0.12)
+    readonly property color surfaceContainer: _surface(0.05)
+    readonly property color surfaceContainerHigh: _surface(0.08)
+    readonly property color surfaceContainerHighest: _surface(0.12)
     readonly property color outline: sysPalette.mid
     readonly property color outlineVariant: sysPalette.midlight
 
+    readonly property bool _cornersEnabled: cornerMode === "rounded" ? true
+                                            : cornerMode === "square" ? false
+                                            : isWin11
+
     readonly property real shapeNone: 0
-    readonly property real shapeExtraSmall: isWin11 ? 2 : 0
-    readonly property real shapeSmall: isWin11 ? 4 : 0
-    readonly property real shapeMedium: isWin11 ? 8 : 0
-    readonly property real shapeLarge: isWin11 ? 12 : 0
-    readonly property real shapeExtraLarge: isWin11 ? 16 : 0
-    readonly property real shapeFull: isWin11 ? 9999 : 0
+    readonly property real shapeExtraSmall: _cornersEnabled ? 2 : 0
+    readonly property real shapeSmall: _cornersEnabled ? 4 : 0
+    readonly property real shapeMedium: _cornersEnabled ? 8 : 0
+    readonly property real shapeLarge: _cornersEnabled ? 12 : 0
+    readonly property real shapeExtraLarge: _cornersEnabled ? 16 : 0
+    readonly property real shapeFull: _cornersEnabled ? 9999 : 0
+
+    function _surface(t) {
+        return transparencyEnabled
+            ? Qt.alpha(sysPalette.placeholderText, t)
+            : _mix(sysPalette.window, sysPalette.placeholderText, t)
+    }
+
+    function _mix(a, b, t) {
+        return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1.0)
+    }
 
     readonly property real transparencyOpacity: 0.75
 
@@ -83,6 +98,7 @@ QtObject {
         alwaysScrollbars = sm.value("system/scrollbars", "false").toString() === "true"
         transparencyEnabled = sm.value("system/transparency", "true").toString() !== "false"
         animationsEnabled = sm.value("system/animations", "true").toString() !== "false"
+        cornerMode = sm.value("ui/corner", "auto").toString()
         kernel.applyThemeMode(themeMode)
     }
 
@@ -99,6 +115,13 @@ QtObject {
             setThemeMode(darkMode ? "light" : "dark")
         else
             setThemeMode(themeMode === "dark" ? "light" : "dark")
+    }
+
+    function setCornerMode(mode) {
+        if (cornerMode === mode) return
+        cornerMode = mode
+        kernel.settingsManager.setValue("ui/corner", mode)
+        themeChanged()
     }
 
     function setAlwaysScrollbars(v) {

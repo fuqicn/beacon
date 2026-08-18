@@ -194,7 +194,7 @@ property var stackView: null
                 radius: Theme.shapeSmall
                 color: ma.containsMouse
                        ? Qt.alpha(palette.highlight, 0.08)
-                       : Qt.alpha(palette.placeholderText, 0.05)
+                       : Theme.surfaceContainer
 
                 RowLayout {
                     anchors.fill: parent

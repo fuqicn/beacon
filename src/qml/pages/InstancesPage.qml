@@ -199,7 +199,7 @@ Item {
                 radius: Theme.shapeLarge
                 color: modelData.id === kernel.instanceManager.selectedId
                        ? Qt.alpha(palette.highlight, 0.12)
-                       : (mainHover.containsMouse ? Qt.alpha(palette.placeholderText, 0.08) : Qt.alpha(palette.placeholderText, 0.05))
+                       : (mainHover.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer)
                 border.color: modelData.id === kernel.instanceManager.selectedId
                               ? Qt.alpha(palette.highlight, 0.3)
                               : "transparent"
@@ -216,7 +216,7 @@ Item {
                         Layout.preferredWidth: 48
                         Layout.preferredHeight: 48
                         radius: Theme.shapeMedium
-                        color: Qt.alpha(palette.placeholderText, 0.05)
+                        color: Theme.surfaceContainer
                         clip: true
 
                         Image {

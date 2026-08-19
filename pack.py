@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -45,6 +46,11 @@ APPIMAGETOOL_URL = (
     "https://github.com/AppImage/appimagetool/releases/download/continuous/"
     "appimagetool-x86_64.AppImage"
 )
+
+# Prefix for GitHub release downloads to work around slow/blocked access.
+# Set GH_PROXY to override, or pass --no-proxy to use GitHub directly.
+DEFAULT_PROXY = "https://gh-proxy.com/"
+DOWNLOAD_ATTEMPTS = 5
 
 
 class PackError(Exception):
@@ -245,17 +251,32 @@ def zip_dir(src_dir, zip_path):
     log("zip: %s (%d files, %d bytes)" % (zip_path, count, zip_path.stat().st_size))
 
 
-def download(url, dest):
+def download(url, dest, proxy):
     dest = Path(dest)
     if dest.is_file():
         log("already present: %s" % dest)
         return dest
+    if proxy and url.startswith("https://github.com/"):
+        url = proxy.rstrip("/") + "/" + url
     log("downloading %s" % url)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    urllib.request.urlretrieve(url, tmp)
-    tmp.replace(dest)
-    return ensure_executable(dest)
+    last_err = None
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            tmp.unlink(missing_ok=True)
+            urllib.request.urlretrieve(url, tmp)
+            tmp.replace(dest)
+            return ensure_executable(dest)
+        except Exception as e:
+            last_err = e
+            if attempt == DOWNLOAD_ATTEMPTS:
+                break
+            wait = min(2 ** (attempt - 1), 30)
+            log("download failed (%s), retrying in %ds (%d/%d)"
+                % (e, wait, attempt, DOWNLOAD_ATTEMPTS))
+            time.sleep(wait)
+    raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
 # ---------------------------------------------------------------- Windows ---
@@ -379,9 +400,9 @@ def build_linux(args, version, build_dir, qt_dir):
         raise PackError("Qt dir not found (pass --qt-dir or set QT_DIR)")
 
     log("--- Downloading AppImage tools ---")
-    linuxdeploy = download(LINUXDEPLOY_URL, tools_dir / "linuxdeploy")
-    qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt")
-    appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool")
+    linuxdeploy = download(LINUXDEPLOY_URL, tools_dir / "linuxdeploy", args.proxy)
+    qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
+    appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
 
     log("--- Running linuxdeploy (bundle Qt) ---")
     run([str(linuxdeploy), "--appdir", str(app_appdir), "--plugin", "qt"],
@@ -459,11 +480,17 @@ def parse_args():
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--skip-build", action="store_true",
                    help="skip configure/build (requires existing build artifacts)")
+    p.add_argument("--proxy", default=os.environ.get("GH_PROXY") or DEFAULT_PROXY,
+                   help="GitHub download proxy prefix (default: %s)" % DEFAULT_PROXY)
+    p.add_argument("--no-proxy", action="store_true",
+                   help="download GitHub releases directly, bypassing the proxy")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
+    if args.no_proxy:
+        args.proxy = ""
     version = resolve_version(args)
     plat = detect_platform()
 

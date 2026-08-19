@@ -407,14 +407,14 @@ def build_linux(args, version, build_dir, qt_dir):
     log("--- Running linuxdeploy (bundle shared libraries) ---")
     run([str(linuxdeploy), "--appdir", str(app_appdir)],
         cwd=work,
-        env={"STRIP": "true"})
+        env={"NO_STRIP": "1"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
          "--exclude-library", "libtiff.so*"],
         cwd=work,
-        env={"QMAKE": str(qt_dir / "bin" / "qmake")})
+        env={"NO_STRIP": "1", "QMAKE": str(qt_dir / "bin" / "qmake")})
 
     log("--- Compiling C AppRun ---")
     apprun = app_appdir / "AppRun"

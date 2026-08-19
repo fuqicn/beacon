@@ -92,18 +92,47 @@ def resolve_version(args):
     return m.group(1) if m else "1.0.0"
 
 
+def _clean_cache_value(value):
+    if not value or value.endswith("-NOTFOUND"):
+        return None
+    return value
+
+
 def resolve_qt_dir(args, build_dir):
     if args.qt_dir:
         return Path(args.qt_dir)
-    env = os.environ.get("QT_DIR")
+    env = _clean_cache_value(os.environ.get("QT_DIR"))
     if env:
         return Path(env)
-    q = read_cmake_cache(build_dir).get("Qt6_DIR")
+    q = _clean_cache_value(read_cmake_cache(build_dir).get("Qt6_DIR"))
     if q:
         p = Path(q)
         if p.name == "Qt6":
             return p.parent.parent.parent
         return p
+    if detect_platform() == "linux":
+        found = find_qt_on_linux()
+        if found:
+            return found
+    return None
+
+
+def find_qt_on_linux():
+    for base in (Path.home() / "Qt", Path("/opt/Qt")):
+        if not base.is_dir():
+            continue
+        candidates = []
+        for ver_dir in base.iterdir():
+            if not ver_dir.is_dir():
+                continue
+            gcc = ver_dir / "gcc_64"
+            if (gcc / "lib" / "cmake" / "Qt6").is_dir():
+                candidates.append(ver_dir)
+        if not candidates:
+            continue
+        candidates.sort(key=lambda v: (tuple(int(x) for x in re.findall(r"\d+", v.name)),
+                                       v.name))
+        return candidates[-1] / "gcc_64"
     return None
 
 
@@ -111,7 +140,7 @@ def resolve_mingw_bin(args, build_dir):
     if args.mingw_bin:
         return Path(args.mingw_bin)
     cache = read_cmake_cache(build_dir)
-    cc = cache.get("CMAKE_CXX_COMPILER") or cache.get("CMAKE_C_COMPILER")
+    cc = _clean_cache_value(cache.get("CMAKE_CXX_COMPILER") or cache.get("CMAKE_C_COMPILER"))
     if cc:
         return Path(cc).parent
     return None
@@ -126,7 +155,7 @@ def resolve_cmake(build_dir):
     if env:
         return Path(env)
     cache = read_cmake_cache(build_dir)
-    cc = cache.get("CMAKE_COMMAND")
+    cc = _clean_cache_value(cache.get("CMAKE_COMMAND"))
     if cc and Path(cc).is_file():
         return Path(cc)
     w = shutil.which("cmake")

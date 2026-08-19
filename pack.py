@@ -404,10 +404,17 @@ def build_linux(args, version, build_dir, qt_dir):
     qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
     appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
 
-    log("--- Running linuxdeploy (bundle Qt) ---")
-    run([str(linuxdeploy), "--appdir", str(app_appdir), "--plugin", "qt"],
+    log("--- Running linuxdeploy (bundle shared libraries) ---")
+    run([str(linuxdeploy), "--appdir", str(app_appdir)],
         cwd=work,
-        env={"STRIP": "true", "QMAKE": str(qt_dir / "bin" / "qmake")})
+        env={"STRIP": "true"})
+
+    log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
+    run([str(qt_plugin), "--appdir", str(app_appdir),
+         "--exclude-library", "libqtiff.so",
+         "--exclude-library", "libtiff.so*"],
+        cwd=work,
+        env={"QMAKE": str(qt_dir / "bin" / "qmake")})
 
     log("--- Compiling C AppRun ---")
     apprun = app_appdir / "AppRun"

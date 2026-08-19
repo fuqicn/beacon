@@ -424,7 +424,8 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
-    run([str(appimagetool), "-v", version, str(app_appdir), str(payload_img)])
+    run([str(appimagetool), str(app_appdir), str(payload_img)],
+        env={"VERSION": version})
     os.chmod(payload_img, 0o755)
 
     log("--- Assembling launcher AppDir ---")

@@ -40,6 +40,12 @@ ApplicationWindow {
                : palette.window
     }
 
+    // Force the window palette's accent to the system accent so native Qt
+    // Quick Controls (Button/ComboBox/TabButton hover & selection, Fusion and
+    // Windows styles) follow Theme.primary on platforms whose style palette
+    // defaults to a wrong/white Highlight (Windows 10, GNOME/Linux).
+    palette.highlight: Theme.primary
+
     onClosing: {
         close.accepted = true
         Qt.quit()

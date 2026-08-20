@@ -62,3 +62,6 @@ CROSS_PLATFORM_AUDIT.md
 
 # Stray temp file
 Untitled.ico
+
+__pycache__/
+*.pyc

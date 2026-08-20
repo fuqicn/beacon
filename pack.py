@@ -7,12 +7,13 @@ Auto-detects the host platform and builds + packages accordingly:
   Windows  -> dist/BeaconLauncher.exe (self-extracting C launcher embedding
               dist/beacon.zip) and dist/beacon.zip. Qt is deployed with
               windeployqt so the result runs on a clean machine.
-  Linux    -> AppImage. A two-stage build produces a self-extracting payload
+  Linux    -> AppImage. A two-stage build produces a runnable payload AppImage
               (beacon-app.AppImage) plus a launcher AppImage (Beacon.AppImage)
-              that installs/updates the app into <its dir>/beacon.
+              that installs/updates {beacon-app.AppImage, mirrors.json} into
+              <its dir>/beacon and launches the payload through the runtime.
 
 Stdlib only: zipfile, shutil, subprocess, platform, argparse, urllib, ...
-Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/gtk3 +
+Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/g++ +
 linuxdeploy/appimagetool on Linux).
 """
 
@@ -429,10 +430,9 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"NO_STRIP": "1", "QMAKE": str(qt_dir / "bin" / "qmake")})
 
-    log("--- Compiling C AppRun ---")
+    log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
-    run('gcc -O2 -Wall -o "%s" "%s" $(pkg-config --cflags --libs gtk+-3.0)'
-        % (apprun, script_dir / "selfextract.c"), shell=True)
+    shutil.copy2(script_dir / "apprun.sh", apprun)
     os.chmod(apprun, 0o755)
 
     log("--- Building beacon-app.AppImage ---")
@@ -449,6 +449,7 @@ def build_linux(args, version, build_dir, qt_dir):
     os.chmod(launch_appdir / "AppRun", 0o755)
     shutil.copy2(payload_img, launch_appdir / "beacon-app.AppImage")
     write_version_file(launch_appdir / "version.txt", version)
+    copy_mirrors_json(launch_appdir / "mirrors.json")
     desktop_text = (app_appdir / "usr" / "share" / "applications" /
                     "io.github.fuqicn.beacon.desktop").read_text(encoding="utf-8")
     desktop_text = re.sub(r"^Exec=Beacon$", "Exec=Beacon.AppImage",

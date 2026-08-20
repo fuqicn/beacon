@@ -49,6 +49,10 @@ APPIMAGETOOL_URL = (
     "https://github.com/AppImage/appimagetool/releases/download/continuous/"
     "appimagetool-x86_64.AppImage"
 )
+RUNTIME_URL = (
+    "https://github.com/AppImage/type2-runtime/releases/download/continuous/"
+    "runtime-x86_64"
+)
 
 # Prefix for GitHub release downloads to work around slow/blocked access.
 # Set GH_PROXY to override, or pass --no-proxy to use GitHub directly.
@@ -408,6 +412,15 @@ def build_linux(args, version, build_dir, qt_dir):
     qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
     appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
 
+    runtime = None
+    if args.runtime:
+        runtime = Path(args.runtime)
+        if not runtime.is_file():
+            raise PackError("runtime file not found: %s" % runtime)
+        log("using runtime file: %s" % runtime)
+    else:
+        runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
+
     log("--- Running linuxdeploy (bundle shared libraries) ---")
     run([str(linuxdeploy), "--appdir", str(app_appdir)],
         cwd=work,
@@ -427,7 +440,8 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
-    run([str(appimagetool), str(app_appdir), str(payload_img)],
+    run([str(appimagetool), "--runtime-file", str(runtime),
+         str(app_appdir), str(payload_img)],
         env={"VERSION": version})
     os.chmod(payload_img, 0o755)
 
@@ -467,7 +481,8 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building Beacon.AppImage ---")
     launch_img = work / "Beacon.AppImage"
-    run([str(appimagetool), str(launch_appdir), str(launch_img)],
+    run([str(appimagetool), "--runtime-file", str(runtime),
+         str(launch_appdir), str(launch_img)],
         env={"VERSION": version})
     os.chmod(launch_img, 0o755)
 
@@ -506,6 +521,7 @@ def parse_args():
                    help="AppImage working directory (Linux, default: build-appimage)")
     p.add_argument("--dist-dir", default="dist", help="output directory (default: dist)")
     p.add_argument("--tools-dir", help="directory with cached AppImage tools (Linux)")
+    p.add_argument("--runtime", help="AppImage runtime file (default: auto-download via proxy)")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 4,
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--skip-build", action="store_true",

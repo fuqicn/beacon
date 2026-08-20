@@ -31,12 +31,10 @@ ApplicationWindow {
     minimumHeight: 500
     title: "Beacon"
 
-    color: Theme.transparencyEnabled
-           ? (isWin11 ? "transparent" : Qt.rgba(palette.window.r, palette.window.g, palette.window.b, Theme.transparencyOpacity))
-           : palette.window
+    color: (isWin11 && Theme.transparencyEnabled) ? "transparent" : palette.window
     background: Rectangle {
-        color: Theme.transparencyEnabled
-               ? (isWin11 ? Qt.rgba(palette.window.r, palette.window.g, palette.window.b, Theme.transparencyOpacity) : "transparent")
+        color: (isWin11 && Theme.transparencyEnabled)
+               ? Qt.rgba(palette.window.r, palette.window.g, palette.window.b, Theme.transparencyOpacity)
                : palette.window
     }
 

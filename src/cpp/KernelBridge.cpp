@@ -357,7 +357,15 @@ void KernelBridge::applyThemeMode(const QString &mode)
     bool dark = effective == Qt::ColorScheme::Dark;
     if (effective == Qt::ColorScheme::Unknown)
         dark = QGuiApplication::palette().color(QPalette::Window).lightness() < 128;
-    QGuiApplication::setPalette(paletteForScheme(dark));
+
+    // Only force our neutral palette when the platform's own palette disagrees
+    // with the requested scheme (Windows 10, generic Linux/Fusion do not rebuild
+    // the palette from setColorScheme). Platforms that already provide a correct
+    // dark/light palette (Windows 11, macOS) keep their native colors, so dark
+    // mode is not washed out to the hardcoded grays.
+    const bool paletteMatches = (QGuiApplication::palette().color(QPalette::Window).lightness() < 128) == dark;
+    if (!paletteMatches)
+        QGuiApplication::setPalette(paletteForScheme(dark));
 
     applyWindowTransparency(
         m_settingsManager ? m_settingsManager->value("system/transparency", true).toBool() : true);

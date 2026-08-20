@@ -434,7 +434,7 @@ def build_linux(args, version, build_dir, qt_dir):
     log("--- Building GTK launcher ---")
     sync_c_version(version)
     gtk_launcher = work / "BeaconLauncher"
-    pkg_cmd = ["pkg-config", "--cflags", "--libs", "gtk+-3.0", "gdk-x11-3.0"]
+    pkg_cmd = ["pkg-config", "--cflags", "--libs", "gtk+-3.0", "gdk-x11-3.0", "x11"]
     pkg_flags = subprocess.check_output(pkg_cmd).decode().split()
     run(["gcc", "-O2", "-s", str(ROOT / "packager" / "beacon_gtk.c"),
          "-o", str(gtk_launcher)] + pkg_flags)

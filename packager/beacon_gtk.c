@@ -23,7 +23,7 @@
  * then launches the payload AppImage with APPIMAGE_EXTRACT_AND_RUN=1 and shows
  * a progress dialog until the "Beacon" window appears.
  *
- * Compile: gcc -O2 -s beacon_gtk.c -o BeaconLauncher $(pkg-config --cflags --libs gtk+-3.0 gdk-x11-3.0)
+ * Compile: gcc -O2 -s beacon_gtk.c -o BeaconLauncher $(pkg-config --cflags --libs gtk+-3.0 gdk-x11-3.0 x11)
  */
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>

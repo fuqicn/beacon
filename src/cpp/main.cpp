@@ -1037,6 +1037,12 @@ return 0;
 
     QApplication app(argc, argv);
     app.setApplicationName("Beacon");
+
+    // Required for any translucent QQuickWindow: without the alpha buffer,
+    // color:"transparent" (used for the Windows 11 Mica backdrop) does not
+    // compose properly and resizing the window leaves a stale, non-repainted
+    // region (a fixed-size gray/white block that no longer matches the window).
+    QQuickWindow::setDefaultAlphaBuffer(true);
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("Beacon");
     (void)QLocale::system(); // init system locale before worker threads start
@@ -1329,6 +1335,9 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
     if (mainWindow) {
         auto *kb = KernelBridge::instance();
         kb->setMainWindow(mainWindow);
+        // Applies the dark-mode title bar (Mica backdrop is disabled in
+        // WindowEffects; the translucent Mica path leaves a persistent gray
+        // block on some Windows 11 builds).
         kb->applyWindowTransparency(
             kb->settingsManager()->value("system/transparency", true).toBool());
         QObject::connect(mainWindow, &QQuickWindow::frameSwapped, mainWindow,

@@ -31,12 +31,11 @@ ApplicationWindow {
     minimumHeight: 500
     title: "Beacon"
 
-    color: (isWin11 && Theme.transparencyEnabled) ? "transparent" : palette.window
-    background: Rectangle {
-        color: (isWin11 && Theme.transparencyEnabled)
-               ? Qt.rgba(palette.window.r, palette.window.g, palette.window.b, Theme.transparencyOpacity)
-               : palette.window
-    }
+    // Solid window background. The translucent-window + Mica path is disabled:
+    // on Windows 11 it leaves the content area a persistent gray block that
+    // does not follow window resizes. Theme.surface follows the applied scheme
+    // (via the application palette) so dark/light always render correctly.
+    color: Theme.surface
 
     // Force the window palette's accent to the system accent so native Qt
     // Quick Controls (Button/ComboBox/TabButton hover & selection, Fusion and

@@ -27,17 +27,11 @@
 
 enum {
     DWMWA_USE_IMMERSIVE_DARK_MODE = 20,
-    DWMWA_SYSTEMBACKDROP_TYPE = 38,
-};
-
-enum {
-    DWMSBT_AUTO = 0,
-    DWMSBT_MICA = 2,
 };
 
 typedef HRESULT(WINAPI *DwmSetWindowAttributeFunc)(HWND, DWORD, LPCVOID, DWORD);
 
-static void applyMica(HWND hwnd, bool enabled, bool dark)
+static void applyDarkTitleBar(HWND hwnd, bool dark)
 {
     HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
     if (!dwmapi) return;
@@ -47,9 +41,6 @@ static void applyMica(HWND hwnd, bool enabled, bool dark)
         FreeLibrary(dwmapi);
         return;
     }
-
-    int backdrop = enabled ? DWMSBT_MICA : DWMSBT_AUTO;
-    fn(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
 
     BOOL useDark = dark ? TRUE : FALSE;
     fn(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
@@ -64,8 +55,15 @@ void applyTransparency(QQuickWindow *window, bool enabled, bool dark)
 {
 #ifdef Q_OS_WIN
     if (!window) return;
-    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11)
-        applyMica(reinterpret_cast<HWND>(window->winId()), enabled, dark);
+    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11) {
+        // The Mica backdrop (DWMWA_SYSTEMBACKDROP_TYPE) is disabled: on some
+        // Windows 11 builds its region is stale after the window is realized
+        // (a persistent gray block that does not follow resizes) and, combined
+        // with the translucent window, it leaves the whole content area gray.
+        // Only the dark-mode title bar is updated, which is safe on every
+        // theme change.
+        applyDarkTitleBar(reinterpret_cast<HWND>(window->winId()), dark);
+    }
 #else
     Q_UNUSED(window)
     Q_UNUSED(enabled)

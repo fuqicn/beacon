@@ -142,7 +142,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: isoInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: isoHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: isoHover }
 
                 ColumnLayout {
@@ -199,7 +199,7 @@ Item {
                     Text {
                         id: isoEffText
                         font.pixelSize: 11
-                        color: palette.highlight
+                        color: Theme.primary
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
@@ -219,7 +219,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: jvmCol.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: jvmHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: jvmHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: jvmHover }
 
                 ColumnLayout {
@@ -273,7 +273,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: memInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: memHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: memHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: memHover }
 
                 RowLayout {
@@ -318,7 +318,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: resInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: resHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: resHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: resHover }
 
                 ColumnLayout {
@@ -403,7 +403,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: javaInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: javaHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: javaHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: javaHover }
 
                 ColumnLayout {
@@ -459,7 +459,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: verFolderInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: vfHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: vfHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: vfHover }
 
                 RowLayout {
@@ -501,7 +501,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: savesInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: savesHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: savesHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: savesHover }
 
                 RowLayout {
@@ -543,7 +543,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: modsCol.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: modsHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: modsHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: modsHover }
 
                 ColumnLayout {
@@ -590,7 +590,7 @@ Item {
                         spacing: 4
                         clip: true
                         model: installedMods
-                        ScrollBar.vertical: ScrollBar {
+                        ScrollBar.vertical: OverlayScrollBar {
                             policy: ScrollBar.AsNeeded
                             width: 8
                         }
@@ -682,7 +682,7 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
-        ScrollBar.vertical: ScrollBar { }
+        ScrollBar.vertical: OverlayScrollBar { }
     }
 
     // Delete confirmation dialog
@@ -747,7 +747,8 @@ Item {
             }
         }
 
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: OverlayScrollBar {
+            followAlways: true
             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
             width: 8
         }

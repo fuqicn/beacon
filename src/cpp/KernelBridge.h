@@ -22,6 +22,7 @@
 #include <QObject>
 #include <QString>
 #include <QDir>
+#include <QPalette>
 
 #include "VersionManager.h"
 #include "DownloadManager.h"
@@ -77,11 +78,13 @@ public:
     void setMainWindow(QQuickWindow *window) { m_mainWindow = window; }
     void setEngine(QQmlEngine *engine) { m_engine = engine; }
 
-    Q_INVOKABLE void setLanguage(const QString &lang);
+Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void setColorScheme(bool dark);
     Q_INVOKABLE void applyThemeMode(const QString &mode);
     Q_INVOKABLE void applyWindowTransparency(bool enabled);
     Q_INVOKABLE void restartApp();
+
+    static QPalette paletteForScheme(bool dark);
     Q_INVOKABLE void launchGame(int memory = 4096);
     Q_INVOKABLE void cancelLaunch();
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());

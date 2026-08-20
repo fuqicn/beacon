@@ -1134,27 +1134,13 @@ return 0;
         const QFontMetricsF tm = p.fontMetrics();
         const qreal titleH = tm.height();
 
-        p.setPen(pal.color(QPalette::PlaceholderText));
-        QFont sub = app.font();
-        sub.setPixelSize(14);
-        p.setFont(sub);
-        const QFontMetricsF sm = p.fontMetrics();
-        const qreal subH = sm.height();
-
-        // Center the two lines as one block vertically.
-        const qreal gap = 10;
-        const qreal blockH = titleH + gap + subH;
-        const qreal top = (280 - blockH) / 2.0;
+        // Center the title vertically.
+        const qreal top = (280 - titleH) / 2.0;
 
         p.setPen(pal.color(QPalette::Highlight));
         p.setFont(title);
         p.drawText(QRectF(0, top, 420, titleH),
                    Qt::AlignCenter, QStringLiteral("Beacon"));
-
-        p.setPen(pal.color(QPalette::PlaceholderText));
-        p.setFont(sub);
-        p.drawText(QRectF(0, top + titleH + gap, 420, subH),
-                   Qt::AlignCenter, QStringLiteral("正在启动"));
         p.end();
         splash.setPixmap(painted);
     }
@@ -1303,12 +1289,17 @@ return 0;
     if (theme) {
         engine.rootContext()->setContextProperty("Theme", theme);
 
-        // Apply saved color scheme
+        // Apply saved color scheme before the window is created so the very
+        // first frame is already correct. theme/mode is the current key;
+        // theme/colorScheme is the legacy one.
         QString settingsPath = QCoreApplication::applicationDirPath() + "/settings.ini";
         QSettings savedSettings(settingsPath, QSettings::IniFormat);
-        QString scheme = savedSettings.value("theme/colorScheme", "light").toString();
-        QGuiApplication::styleHints()->setColorScheme(
-            scheme == "dark" ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light);
+        QString scheme = savedSettings.value("theme/mode",
+                           savedSettings.value("theme/colorScheme", "light").toString())
+                         .toString();
+        if (scheme != "dark" && scheme != "light" && scheme != "system")
+            scheme = "system";
+        KernelBridge::instance()->applyThemeMode(scheme);
     }
 
     I18nManager *i18n = new I18nManager(QCoreApplication::applicationDirPath());

@@ -158,11 +158,11 @@ Component.onCompleted: {
                 radius: Theme.shapeMedium
                 color: {
                     if (kernel.authManager.currentAccountIndex === index)
-                        return Qt.alpha(palette.highlight, 0.12)
+                        return Qt.alpha(Theme.primary, 0.12)
                     return maus.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer
                 }
                 border.color: kernel.authManager.currentAccountIndex === index
-                             ? Qt.alpha(palette.highlight, 0.3)
+                             ? Qt.alpha(Theme.primary, 0.3)
                              : "transparent"
                 border.width: 1
 
@@ -175,7 +175,7 @@ Component.onCompleted: {
                     Rectangle {
                         id: avatarRect
                         width: 36; height: 36; radius: Theme.shapeSmall
-                        color: Qt.alpha(palette.highlight, 0.1)
+                        color: Qt.alpha(Theme.primary, 0.1)
 
                         property bool skinAvailable: modelData.type === 2 && kernel.skinManager.hasCachedSkin(modelData.uuid)
 
@@ -193,7 +193,7 @@ Component.onCompleted: {
                             anchors.centerIn: parent
                             text: modelData.username.charAt(0).toUpperCase()
                             font.pixelSize: 16; font.weight: Font.Bold
-                            color: palette.highlight
+                            color: Theme.primary
                             visible: !avatarRect.skinAvailable
                         }
 
@@ -228,7 +228,7 @@ Component.onCompleted: {
                         Text {
                             text: modelData.type === 2 ? I18n.tr("account.microsoft") : I18n.tr("account.offline")
                             font.pixelSize: 11
-                            color: modelData.type === 2 ? palette.highlight : palette.placeholderText
+                            color: modelData.type === 2 ? Theme.primary : palette.placeholderText
                         }
                     }
 
@@ -267,7 +267,7 @@ Component.onCompleted: {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
             radius: Theme.shapeMedium
-            color: Qt.alpha(palette.highlight, 0.1)
+            color: Qt.alpha(Theme.primary, 0.1)
             visible: kernel.authManager.loggingIn
 
             RowLayout {
@@ -282,7 +282,7 @@ Component.onCompleted: {
                 Text {
                     text: I18n.tr("account.loggingIn")
                     font.pixelSize: 13
-                    color: palette.highlight
+                    color: Theme.primary
                 }
             }
         }
@@ -413,7 +413,8 @@ Text {
         }
         }
 
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: OverlayScrollBar {
+            followAlways: true
             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
             width: 8
         }

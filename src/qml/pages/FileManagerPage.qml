@@ -148,7 +148,8 @@ Item {
                 model: root.entries
                 spacing: 2
 
-                ScrollBar.vertical: ScrollBar {
+                ScrollBar.vertical: OverlayScrollBar {
+                    followAlways: true
                     policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                     width: 8
                 }
@@ -157,7 +158,7 @@ Item {
                     width: listView.width
                     height: 40
                     radius: Theme.shapeSmall
-                    color: fileHover.containsMouse ? Qt.alpha(palette.highlight, 0.1) : "transparent"
+                    color: fileHover.containsMouse ? Qt.alpha(Theme.primary, 0.1) : "transparent"
 
                     RowLayout {
                         anchors.fill: parent
@@ -195,7 +196,7 @@ Item {
                         Rectangle {
                             width: 24; height: 24; radius: Theme.shapeSmall
                             visible: fileHover.containsMouse
-                            color: Qt.alpha(palette.highlight, 0.15)
+                            color: Qt.alpha(Theme.primary, 0.15)
                             AppIcon {
                                 anchors.centerIn: parent
                                 iconName: "magnifying-glass"

@@ -157,7 +157,7 @@ function onVersionsLoaded(versions) {
 
                     Rectangle {
                         width: 56; height: 56; radius: Theme.shapeMedium
-                        color: Qt.alpha(palette.highlight, 0.1)
+                        color: Qt.alpha(Theme.primary, 0.1)
                         clip: true
                         Image {
                             anchors.fill: parent
@@ -170,7 +170,7 @@ function onVersionsLoaded(versions) {
                             anchors.centerIn: parent
                             text: root.project.name ? root.project.name.charAt(0).toUpperCase() : "?"
                             font.pixelSize: 24; font.weight: Font.Bold
-                            color: palette.highlight
+                            color: Theme.primary
                             visible: !(root.project.logoUrl !== "")
                         }
                     }
@@ -199,7 +199,7 @@ function onVersionsLoaded(versions) {
                             text: (root.project.gameVersions || "") +
                                   (root.project.loaders ? "   |   " + root.project.loaders : "")
                             font.pixelSize: 10
-                            color: palette.highlight
+                            color: Theme.primary
                             elide: Text.ElideRight
                             visible: (root.project.gameVersions || "") !== "" || (root.project.loaders || "") !== ""
                         }
@@ -277,7 +277,8 @@ Rectangle {
                             NumberAnimation { properties: "x,y"; duration: 200; easing.type: Easing.OutQuad }
                         }
 
-                        ScrollBar.vertical: ScrollBar {
+                        ScrollBar.vertical: OverlayScrollBar {
+                            followAlways: true
                             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                             width: 8
                         }
@@ -292,7 +293,7 @@ Rectangle {
                                 anchors.fill: parent
                                 visible: type === "header"
                                 radius: Theme.shapeSmall
-                                color: vhArea.containsMouse ? Qt.alpha(palette.highlight, 0.06) : "transparent"
+                                color: vhArea.containsMouse ? Qt.alpha(Theme.primary, 0.06) : "transparent"
 
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -302,7 +303,7 @@ Rectangle {
                                           + "  (" + count + ")"
                                     font.pixelSize: 11
                                     font.weight: Font.DemiBold
-                                    color: palette.highlight
+                                    color: Theme.primary
                                 }
 
                                 MouseArea {
@@ -324,7 +325,7 @@ Rectangle {
                                 radius: Theme.shapeSmall
                                 color: ver
                                        ? (root.selectedVersion.id === ver.id
-                                          ? Qt.alpha(palette.highlight, 0.14)
+                                          ? Qt.alpha(Theme.primary, 0.14)
                                           : (vma.containsMouse
                                              ? Qt.alpha(palette.placeholderText, 0.10)
                                              : Qt.alpha(palette.placeholderText, 0.06)))
@@ -361,7 +362,7 @@ Rectangle {
                                     Text {
                                         text: ver ? ver.fileName : ""
                                         font.pixelSize: 10
-                                        color: palette.highlight
+                                        color: Theme.primary
                                         elide: Text.ElideLeft
                                         Layout.maximumWidth: 160
                                     }
@@ -413,7 +414,7 @@ Rectangle {
             }
         }
 
-        ScrollBar.vertical: ScrollBar { }
+        ScrollBar.vertical: OverlayScrollBar { }
     }
 
 function openInstallDialog() {

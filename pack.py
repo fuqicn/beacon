@@ -9,8 +9,10 @@ Auto-detects the host platform and builds + packages accordingly:
               windeployqt so the result runs on a clean machine.
   Linux    -> AppImage. A two-stage build produces a runnable payload AppImage
               (beacon-app.AppImage) plus a launcher AppImage (Beacon.AppImage)
-              that installs/updates {beacon-app.AppImage, mirrors.json} into
-              <its dir>/beacon and launches the payload through the runtime.
+              whose AppRun is a small C/GTK3 binary that installs/updates
+              {beacon-app.AppImage, mirrors.json} into <its dir>/beacon and
+              launches the payload through the runtime with a progress dialog
+              (replicates the Windows launcher mechanism).
 
 Stdlib only: zipfile, shutil, subprocess, platform, argparse, urllib, ...
 Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/g++ +
@@ -46,10 +48,6 @@ QT_PLUGIN_URL = (
 APPIMAGETOOL_URL = (
     "https://github.com/AppImage/appimagetool/releases/download/continuous/"
     "appimagetool-x86_64.AppImage"
-)
-RUNTIME_URL = (
-    "https://github.com/AppImage/type2-runtime/releases/download/continuous/"
-    "runtime-x86_64"
 )
 
 # Prefix for GitHub release downloads to work around slow/blocked access.
@@ -208,14 +206,15 @@ def write_version_file(path, version):
     path.write_text("%s\n" % version, encoding="utf-8")
 
 
-def sync_main_c_version(version):
-    src = ROOT / "packager" / "main.c"
-    content = src.read_text(encoding="utf-8")
-    updated = re.sub(r'#define BEACON_VERSION "[^"]*"',
-                     '#define BEACON_VERSION "%s"' % version, content)
-    if updated != content:
-        src.write_text(updated, encoding="utf-8")
-        log("packager/main.c BEACON_VERSION -> %s" % version)
+def sync_c_version(version):
+    for name in ("main.c", "beacon_gtk.c"):
+        src = ROOT / "packager" / name
+        content = src.read_text(encoding="utf-8")
+        updated = re.sub(r'#define BEACON_VERSION "[^"]*"',
+                         '#define BEACON_VERSION "%s"' % version, content)
+        if updated != content:
+            src.write_text(updated, encoding="utf-8")
+            log("packager/%s BEACON_VERSION -> %s" % (name, version))
 
 
 def copy_mirrors_json(dst):
@@ -330,7 +329,7 @@ def build_windows(args, version, build_dir, qt_dir):
     shutil.copy2(zip_path, packager / "beacon.zip")
 
     log("--- Building C launcher ---")
-    sync_main_c_version(version)
+    sync_c_version(version)
     mingw_bin = resolve_mingw_bin(args, build_dir)
     windres = None
     gcc = None
@@ -409,15 +408,6 @@ def build_linux(args, version, build_dir, qt_dir):
     qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
     appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
 
-    runtime = None
-    if args.runtime:
-        runtime = Path(args.runtime)
-        if not runtime.is_file():
-            raise PackError("runtime file not found: %s" % runtime)
-        log("using runtime file: %s" % runtime)
-    else:
-        runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
-
     log("--- Running linuxdeploy (bundle shared libraries) ---")
     run([str(linuxdeploy), "--appdir", str(app_appdir)],
         cwd=work,
@@ -437,16 +427,21 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
-    run([str(appimagetool), "--runtime-file", str(runtime),
-         str(app_appdir), str(payload_img)],
+    run([str(appimagetool), str(app_appdir), str(payload_img)],
         env={"VERSION": version})
     os.chmod(payload_img, 0o755)
+
+    log("--- Building GTK launcher ---")
+    sync_c_version(version)
+    gtk_launcher = work / "BeaconLauncher"
+    pkg_cmd = ["pkg-config", "--cflags", "--libs", "gtk+-3.0", "gdk-x11-3.0"]
+    pkg_flags = subprocess.check_output(pkg_cmd).decode().split()
+    run(["gcc", "-O2", "-s", str(ROOT / "packager" / "beacon_gtk.c"),
+         "-o", str(gtk_launcher)] + pkg_flags)
 
     log("--- Assembling launcher AppDir ---")
     shutil.rmtree(launch_appdir, ignore_errors=True)
     launch_appdir.mkdir(parents=True)
-    shutil.copy2(script_dir / "launcher-apprun.sh", launch_appdir / "AppRun")
-    os.chmod(launch_appdir / "AppRun", 0o755)
     shutil.copy2(payload_img, launch_appdir / "beacon-app.AppImage")
     write_version_file(launch_appdir / "version.txt", version)
     copy_mirrors_json(launch_appdir / "mirrors.json")
@@ -459,10 +454,20 @@ def build_linux(args, version, build_dir, qt_dir):
                  "apps" / "io.github.fuqicn.beacon.svg",
                  launch_appdir / "io.github.fuqicn.beacon.svg")
 
+    log("--- Bundling GTK into launcher AppDir ---")
+    run([str(linuxdeploy), "--appdir", str(launch_appdir)],
+        cwd=work,
+        env={"NO_STRIP": "1"})
+
+    # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
+    # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.
+    gtk_apprun = launch_appdir / "AppRun"
+    shutil.copy2(gtk_launcher, gtk_apprun)
+    os.chmod(gtk_apprun, 0o755)
+
     log("--- Building Beacon.AppImage ---")
     launch_img = work / "Beacon.AppImage"
-    run([str(appimagetool), "--runtime-file", str(runtime),
-         str(launch_appdir), str(launch_img)],
+    run([str(appimagetool), str(launch_appdir), str(launch_img)],
         env={"VERSION": version})
     os.chmod(launch_img, 0o755)
 
@@ -501,7 +506,6 @@ def parse_args():
                    help="AppImage working directory (Linux, default: build-appimage)")
     p.add_argument("--dist-dir", default="dist", help="output directory (default: dist)")
     p.add_argument("--tools-dir", help="directory with cached AppImage tools (Linux)")
-    p.add_argument("--runtime", help="AppImage runtime file (default: auto-download via proxy)")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 4,
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--skip-build", action="store_true",

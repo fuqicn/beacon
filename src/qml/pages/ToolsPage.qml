@@ -160,7 +160,8 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: OverlayScrollBar {
+            followAlways: true
             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
             width: 8
         }

@@ -251,7 +251,7 @@ Popup {
                 Layout.fillWidth: true
                 height: 6
                 radius: Theme.shapeExtraSmall
-                color: Qt.alpha(palette.highlight, 0.12)
+                color: Qt.alpha(Theme.primary, 0.12)
                 clip: true
 
                 Rectangle {
@@ -259,7 +259,7 @@ Popup {
                     width: parent.width * Math.min(downloadProgress, 1.0)
                     height: parent.height
                     radius: Theme.shapeExtraSmall
-                    color: palette.highlight
+                    color: Theme.primary
                     Behavior on width { SmoothedAnimation { duration: 300; velocity: 200 } }
                 }
             }

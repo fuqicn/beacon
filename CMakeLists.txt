@@ -155,6 +155,7 @@ set(QML_SOURCES
     src/qml/components/ModpackSearchPage.qml
     src/qml/components/ModpackDetailPage.qml
     src/qml/components/ModpackInstallDialog.qml
+    src/qml/components/OverlayScrollBar.qml
 )
 
 # Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged

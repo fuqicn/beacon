@@ -33,6 +33,7 @@
 #include <QTimer>
 #include <QThread>
 #include <QPointer>
+#include <QPalette>
 #include <QQuickWindow>
 #include <QQmlEngine>
 #include "WindowEffects.h"
@@ -284,14 +285,79 @@ void KernelBridge::setColorScheme(bool dark)
         dark ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light);
 }
 
+/* Build a light/dark QPalette from the current application palette so the
+   system accent (QPalette::Highlight) is preserved; only the neutral roles are
+   overridden. Used to force a scheme on platforms whose theme does not rebuild
+   the palette from setColorScheme (Windows 10, GNOME/Linux). */
+QPalette KernelBridge::paletteForScheme(bool dark)
+{
+    QPalette p = QGuiApplication::palette();
+    if (dark) {
+        const QColor window(0x1f, 0x1f, 0x1f);
+        const QColor base(0x14, 0x14, 0x14);
+        const QColor text(0xe6, 0xe6, 0xe6);
+        const QColor button(0x2a, 0x2a, 0x2a);
+        const QColor placeholder(0x9a, 0x9a, 0x9a);
+        p.setColor(QPalette::Window, window);
+        p.setColor(QPalette::WindowText, text);
+        p.setColor(QPalette::Base, base);
+        p.setColor(QPalette::AlternateBase, window);
+        p.setColor(QPalette::Text, text);
+        p.setColor(QPalette::Button, button);
+        p.setColor(QPalette::ButtonText, text);
+        p.setColor(QPalette::BrightText, Qt::white);
+        p.setColor(QPalette::PlaceholderText, placeholder);
+        p.setColor(QPalette::Mid, QColor(0x55, 0x55, 0x55));
+        p.setColor(QPalette::Midlight, QColor(0x3c, 0x3c, 0x3c));
+        p.setColor(QPalette::Light, QColor(0x4a, 0x4a, 0x4a));
+        p.setColor(QPalette::Dark, QColor(0x10, 0x10, 0x10));
+        p.setColor(QPalette::Shadow, QColor(0x00, 0x00, 0x00));
+        p.setColor(QPalette::HighlightedText, Qt::white);
+        p.setColor(QPalette::Disabled, QPalette::Text, QColor(0x66, 0x66, 0x66));
+        p.setColor(QPalette::Disabled, QPalette::WindowText, QColor(0x66, 0x66, 0x66));
+        p.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0x66, 0x66, 0x66));
+    } else {
+        const QColor window(0xf3, 0xf3, 0xf3);
+        const QColor text(Qt::black);
+        const QColor button(0xef, 0xef, 0xef);
+        const QColor placeholder(0x8a, 0x8a, 0x8a);
+        p.setColor(QPalette::Window, window);
+        p.setColor(QPalette::WindowText, text);
+        p.setColor(QPalette::Base, Qt::white);
+        p.setColor(QPalette::AlternateBase, window);
+        p.setColor(QPalette::Text, text);
+        p.setColor(QPalette::Button, button);
+        p.setColor(QPalette::ButtonText, text);
+        p.setColor(QPalette::BrightText, Qt::white);
+        p.setColor(QPalette::PlaceholderText, placeholder);
+        p.setColor(QPalette::Mid, QColor(0xa8, 0xa8, 0xa8));
+        p.setColor(QPalette::Midlight, QColor(0xd0, 0xd0, 0xd0));
+        p.setColor(QPalette::Light, QColor(0xef, 0xef, 0xef));
+        p.setColor(QPalette::Dark, QColor(0x70, 0x70, 0x70));
+        p.setColor(QPalette::Shadow, Qt::black);
+        p.setColor(QPalette::HighlightedText, Qt::white);
+    }
+    return p;
+}
+
 void KernelBridge::applyThemeMode(const QString &mode)
 {
+    Qt::ColorScheme scheme = Qt::ColorScheme::Unknown;
     if (mode == "dark")
-        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
+        scheme = Qt::ColorScheme::Dark;
     else if (mode == "light")
-        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
-    else
-        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Unknown);
+        scheme = Qt::ColorScheme::Light;
+    QGuiApplication::styleHints()->setColorScheme(scheme);
+
+    // Resolve the effective scheme: after setColorScheme(Unknown) the platform
+    // theme reports its own scheme. Some themes (GNOME, Windows 10) do not
+    // rebuild the palette from this, so force an explicit palette that keeps
+    // the system accent (QPalette::Highlight).
+    Qt::ColorScheme effective = QGuiApplication::styleHints()->colorScheme();
+    bool dark = effective == Qt::ColorScheme::Dark;
+    if (effective == Qt::ColorScheme::Unknown)
+        dark = QGuiApplication::palette().color(QPalette::Window).lightness() < 128;
+    QGuiApplication::setPalette(paletteForScheme(dark));
 
     applyWindowTransparency(
         m_settingsManager ? m_settingsManager->value("system/transparency", true).toBool() : true);

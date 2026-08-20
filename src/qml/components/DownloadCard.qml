@@ -89,7 +89,7 @@ Rectangle {
                 width: root.dense ? 24 : 32
                 height: root.dense ? 24 : 32
                 radius: Theme.shapeSmall
-                color: Qt.alpha(palette.highlight, 0.15)
+                color: Qt.alpha(Theme.primary, 0.15)
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -126,7 +126,7 @@ Rectangle {
                 text: root.speedText
                 font.pixelSize: root.dense ? 10 : 12
                 font.weight: Font.DemiBold
-                color: palette.highlight
+                color: Theme.primary
                 font.italic: true
                 visible: text !== ""
             }
@@ -148,7 +148,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             height: root.dense ? 4 : 6
             radius: Theme.shapeExtraSmall
-            color: Qt.alpha(palette.highlight, 0.12)
+            color: Qt.alpha(Theme.primary, 0.12)
             clip: true
 
             Rectangle {
@@ -156,7 +156,7 @@ Rectangle {
                 width: progressTrack.width * root.fill
                 height: progressTrack.height
                 radius: Theme.shapeExtraSmall
-                color: palette.highlight
+                color: Theme.primary
                 Behavior on width { SmoothedAnimation { duration: 300; velocity: 200 } }
 
                 // Indeterminate shimmer

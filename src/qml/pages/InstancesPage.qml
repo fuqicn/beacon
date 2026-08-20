@@ -75,7 +75,7 @@ Item {
 
             Rectangle {
                 width: 32; height: 32; radius: Theme.shapeSmall
-                color: refHover.hovered ? Qt.alpha(palette.highlight, 0.15) : "transparent"
+                color: refHover.hovered ? Qt.alpha(Theme.primary, 0.15) : "transparent"
                 AppIcon { anchors.centerIn: parent; iconName: "refresh"; iconSize: 16 }
                 HoverHandler { id: refHover }
                 MouseArea {
@@ -123,8 +123,8 @@ Item {
                     Layout.preferredHeight: 28
                     radius: Theme.shapeLarge
                     color: modelData === kernel.instanceManager.currentRootDir
-                           ? Qt.alpha(palette.highlight, 0.18)
-                           : Qt.alpha(palette.highlight, 0.1)
+                           ? Qt.alpha(Theme.primary, 0.18)
+                           : Qt.alpha(Theme.primary, 0.1)
 
                     Row {
                         anchors.centerIn: parent
@@ -135,7 +135,7 @@ Item {
                             text: modelData.split("/").pop() || modelData
                             font.pixelSize: 12
                             font.weight: modelData === kernel.instanceManager.currentRootDir ? Font.DemiBold : Font.Normal
-                            color: palette.highlight
+                            color: Theme.primary
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -188,7 +188,8 @@ Item {
             model: kernel.instanceManager.instances
             spacing: 8
 
-            ScrollBar.vertical: ScrollBar {
+            ScrollBar.vertical: OverlayScrollBar {
+                followAlways: true
                 policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                 width: 8
             }
@@ -198,10 +199,10 @@ Item {
                 height: 72
                 radius: Theme.shapeLarge
                 color: modelData.id === kernel.instanceManager.selectedId
-                       ? Qt.alpha(palette.highlight, 0.12)
+                       ? Qt.alpha(Theme.primary, 0.12)
                        : (mainHover.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer)
                 border.color: modelData.id === kernel.instanceManager.selectedId
-                              ? Qt.alpha(palette.highlight, 0.3)
+                              ? Qt.alpha(Theme.primary, 0.3)
                               : "transparent"
                 border.width: 1
 
@@ -334,7 +335,7 @@ Item {
                     Rectangle {
                         width: 32; height: 32; radius: Theme.shapeSmall
                         HoverHandler { id: gearHover }
-                        color: gearHover.hovered ? Qt.alpha(palette.highlight, 0.15) : "transparent"
+                        color: gearHover.hovered ? Qt.alpha(Theme.primary, 0.15) : "transparent"
 
                         AppIcon {
                             anchors.centerIn: parent

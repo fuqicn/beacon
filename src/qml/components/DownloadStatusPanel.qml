@@ -127,8 +127,8 @@ Rectangle {
 
     function statusColor(status) {
         if (status === "failed") return "#F44336"
-        if (status === "success") return palette.highlight
-        if (status === "downloading") return palette.highlight
+        if (status === "success") return Theme.primary
+        if (status === "downloading") return Theme.primary
         return palette.placeholderText
     }
 
@@ -163,7 +163,7 @@ Rectangle {
                            ? kernel.downloadManager.completedFiles + "/" + kernel.downloadManager.totalFiles + " 文件"
                            : ""
             statusText: Math.round(kernel.downloadManager.progress * 100) + "%"
-            statusColor: palette.highlight
+            statusColor: Theme.primary
             onCancelRequested: kernel.downloadManager.cancelAll()
         }
 
@@ -204,7 +204,7 @@ Rectangle {
                 Text {
                     text: kernel.modManager.busy ? "下载中..." : (root.modsFinished ? "已完成" : "")
                     font.pixelSize: 11
-                    color: kernel.modManager.busy ? palette.highlight : palette.placeholderText
+                    color: kernel.modManager.busy ? Theme.primary : palette.placeholderText
                     visible: text !== ""
                     Layout.alignment: Qt.AlignVCenter
                 }
@@ -219,7 +219,7 @@ Rectangle {
                 model: root.modTasks
                 spacing: 2
                 interactive: root.modTasks.length > 4
-                ScrollBar.vertical: ScrollBar {
+                ScrollBar.vertical: OverlayScrollBar {
                     policy: ScrollBar.AsNeeded
                     width: 6
                 }
@@ -253,7 +253,7 @@ Rectangle {
             subtitle: kernel.modpackManager.status
             progress: kernel.modpackManager.progress
             statusText: Math.round(kernel.modpackManager.progress * 100) + "%"
-            statusColor: palette.highlight
+            statusColor: Theme.primary
             onCancelRequested: kernel.modpackManager.cancelAll()
         }
     }

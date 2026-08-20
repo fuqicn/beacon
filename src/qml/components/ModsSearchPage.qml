@@ -182,7 +182,8 @@ property var stackView: null
             clip: true
             model: root.results
 
-            ScrollBar.vertical: ScrollBar {
+            ScrollBar.vertical: OverlayScrollBar {
+                followAlways: true
                 policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                 width: 8
             }
@@ -193,7 +194,7 @@ property var stackView: null
                 height: 60
                 radius: Theme.shapeSmall
                 color: ma.containsMouse
-                       ? Qt.alpha(palette.highlight, 0.08)
+                       ? Qt.alpha(Theme.primary, 0.08)
                        : Theme.surfaceContainer
 
                 RowLayout {
@@ -204,7 +205,7 @@ property var stackView: null
 
                     Rectangle {
                         width: 38; height: 38; radius: Theme.shapeSmall
-                        color: Qt.alpha(palette.highlight, 0.1)
+                        color: Qt.alpha(Theme.primary, 0.1)
                         clip: true
                         Image {
                             anchors.fill: parent
@@ -217,7 +218,7 @@ property var stackView: null
                             anchors.centerIn: parent
                             text: modelData.name ? modelData.name.charAt(0).toUpperCase() : "?"
                             font.pixelSize: 16; font.weight: Font.Bold
-                            color: palette.highlight
+                            color: Theme.primary
                             visible: !(modelData.logoUrl !== "")
                         }
                     }
@@ -245,7 +246,7 @@ property var stackView: null
                             Layout.fillWidth: true
                             text: modelData.loaders || ""
                             font.pixelSize: 10
-                            color: palette.highlight
+                            color: Theme.primary
                             elide: Text.ElideRight
                             visible: (modelData.loaders || "") !== ""
                         }

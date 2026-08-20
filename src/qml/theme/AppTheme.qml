@@ -20,7 +20,13 @@ import QtQuick
 import QtQuick.Controls
 
 QtObject {
-    property bool darkMode: (sysPalette.window.hslLightness < 0.5)
+    // darkMode follows the explicit theme mode; only in "system" mode does it
+    // fall back to the palette's perceived brightness. This keeps the app in
+    // the chosen scheme even on platforms whose palette doesn't flip on
+    // setColorScheme (Windows 10, GNOME/Linux).
+    readonly property bool darkMode: themeMode === "dark" ? true
+                                     : themeMode === "light" ? false
+                                     : (sysPalette.window.hslLightness < 0.5)
 
     property string themeMode: "system"
     property bool alwaysScrollbars: false
@@ -63,6 +69,12 @@ QtObject {
     readonly property real shapeFull: _cornersEnabled ? 9999 : 0
 
     readonly property real shapeNavRail: _cornersEnabled ? 20 : 0
+
+    // Page-transition style follows the style: FluentWinUI3 / macOS / Imagine
+    // shrink+fade (Win11 default); traditional Windows and Fusion fade only.
+    readonly property bool scaleAnim: uiStyleName === "fluentwinui3"
+                                      || uiStyleName === "macos"
+                                      || uiStyleName === "imagine"
 
     function _surface(t) {
         return transparencyEnabled

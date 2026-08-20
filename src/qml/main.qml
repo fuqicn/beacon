@@ -94,7 +94,7 @@ ApplicationWindow {
                 width: 72
                 height: 64
                 radius: Theme.shapeNavRail
-                color: Qt.alpha(palette.highlight, 0.14)
+                color: Qt.alpha(Theme.primary, 0.14)
                 visible: window.navIndex >= 0
                 Behavior on y {
                     enabled: Theme.animationsEnabled
@@ -139,7 +139,7 @@ ApplicationWindow {
                                 font.pixelSize: 11
                                 font.weight: index === window.navIndex ? Font.DemiBold : Font.Normal
                                 color: index === window.navIndex
-                                       ? (isWin11 ? palette.highlight : palette.highlightedText)
+                                       ? Theme.primary
                                        : palette.placeholderText
                             }
                         }
@@ -187,7 +187,6 @@ ApplicationWindow {
                 Layout.fillHeight: true
 
                 property int current: 0
-                readonly property bool scaleAnim: Qt.platform.os !== "windows" || isWin11
 
                 function activatePage(index, animate) {
                     for (var i = 0; i < children.length; i++) {
@@ -198,14 +197,14 @@ ApplicationWindow {
                         if (show) {
                             l.active = true
                             if (animate && l.opacity !== 1) {
-                                l.scale = scaleAnim ? 0.92 : 1
+                                l.scale = Theme.scaleAnim ? 0.92 : 1
                                 l.opacity = 0
                             }
                             l.scale = 1
                             l.opacity = 1
                         } else {
                             l.opacity = 0
-                            l.scale = scaleAnim ? 0.92 : 1
+                            l.scale = Theme.scaleAnim ? 0.92 : 1
                         }
                     }
                 }
@@ -384,7 +383,7 @@ ApplicationWindow {
         background: Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: palette.highlight
+            color: Theme.primary
             Rectangle {
                 anchors.fill: parent; radius: parent.radius
                 color: killBtn.down ? Qt.rgba(0,0,0,0.2) : (killBtn.hovered ? Qt.rgba(0,0,0,0.1) : "transparent")

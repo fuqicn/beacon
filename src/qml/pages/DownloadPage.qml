@@ -105,7 +105,7 @@ function selectCategory(index) {
                 width: 100
                 height: 34
                 radius: Theme.shapeFull
-                color: Qt.alpha(palette.highlight, 0.15)
+                color: Qt.alpha(Theme.primary, 0.15)
                 Behavior on x {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
@@ -138,7 +138,7 @@ function selectCategory(index) {
                             text: modelData.label
                             font.pixelSize: 14
                             font.weight: index === root.modeIndex ? Font.Medium : Font.Normal
-                            color: index === root.modeIndex ? palette.highlight : palette.placeholderText
+                            color: index === root.modeIndex ? Theme.primary : palette.placeholderText
                         }
 
                         MouseArea {
@@ -187,7 +187,7 @@ Item {
                                 y: 0
                                 height: 36
                                 radius: Theme.shapeExtraLarge
-                                color: Qt.alpha(palette.highlight, 0.15)
+                                color: Qt.alpha(Theme.primary, 0.15)
                                 width: root.currentCategory >= 0 && categoryTabs.count > root.currentCategory
                                        ? categoryTabs.itemAt(root.currentCategory).width
                                        : 0
@@ -234,7 +234,7 @@ Item {
                                             text: modelData.label + " (" + (modelData.versions ? modelData.versions.length : 0) + ")"
                                             font.pixelSize: 13
                                             font.weight: index === root.currentCategory ? Font.Medium : Font.Normal
-                                            color: index === root.currentCategory ? palette.highlight : palette.placeholderText
+                                            color: index === root.currentCategory ? Theme.primary : palette.placeholderText
                                         }
 
                                         HoverHandler { id: tabHover }
@@ -289,14 +289,15 @@ Item {
                             model: filteredVersions
                             clip: true
 
-                            ScrollBar.vertical: ScrollBar {
+                            ScrollBar.vertical: OverlayScrollBar {
+                                followAlways: true
                                 policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                                 width: 8
                             }
 
                             add: Transition {
                                 NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200 }
-                                NumberAnimation { property: "scale"; from: isWin11 ? 0.92 : 1; to: 1; duration: 200 }
+                                NumberAnimation { property: "scale"; from: Theme.scaleAnim ? 0.92 : 1; to: 1; duration: 200 }
                             }
                             populate: Transition {
                                 NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200 }
@@ -308,7 +309,7 @@ Item {
                                 height: 48
                                 radius: Theme.shapeSmall
                                 color: mouseArea.containsMouse
-                                       ? Qt.alpha(palette.highlight, 0.08)
+                                       ? Qt.alpha(Theme.primary, 0.08)
                                        : "transparent"
 
                                 RowLayout {
@@ -344,7 +345,7 @@ Item {
                                             return ""
                                         }
                                         font.pixelSize: 11
-                                        color: palette.highlight
+                                        color: Theme.primary
                                         visible: text !== ""
                                     }
                                 }

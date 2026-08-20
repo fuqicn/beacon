@@ -201,8 +201,8 @@ Item {
                     textFormat: TextEdit.PlainText
                 }
 
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                ScrollBar.vertical: OverlayScrollBar { policy: ScrollBar.AsNeeded }
+                ScrollBar.horizontal: OverlayScrollBar { policy: ScrollBar.AsNeeded }
             }
         }
 

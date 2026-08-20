@@ -245,7 +245,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: isoInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: isoHover.hovered ? Qt.alpha(palette.highlight, 0.08) : Theme.surfaceContainer
+                color: isoHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
                 HoverHandler { id: isoHover }
 
                 RowLayout {
@@ -457,21 +457,14 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        Text { text: "透明效果"; color: palette.placeholderText; font.pixelSize: 14 }
-                        Item { Layout.fillWidth: true }
-                        Switch {
-                            checked: Theme.transparencyEnabled
-                            onToggled: Theme.setTransparencyEnabled(checked)
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
                         Text { text: "动画效果"; color: palette.placeholderText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         Switch {
                             checked: Theme.animationsEnabled
-                            onToggled: Theme.setAnimationsEnabled(checked)
+                            onToggled: {
+                                Theme.setAnimationsEnabled(checked)
+                                restartNeeded = true
+                            }
                         }
                     }
                 }
@@ -538,7 +531,8 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: OverlayScrollBar {
+            followAlways: true
             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
             width: 8
         }

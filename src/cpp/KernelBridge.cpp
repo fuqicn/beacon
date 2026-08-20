@@ -221,7 +221,13 @@ void KernelBridge::shutdown()
     // Give threads time to respond to cancellation
     QThread::msleep(500);
 
-    delete s_instance;
+    // Deliberately leak s_instance: deleting it would run each manager's
+    // destructor, and those synchronously wait on worker threads still stuck
+    // in network I/O (up to tens of seconds), which stalls shutdown and leaves
+    // the process lingering after the window closes. main.cpp force-exits via
+    // TerminateProcess/std::_Exit right after this call, so the OS reclaims
+    // everything; a plain QObject with no parent, the leak is harmless.
+    (void)s_instance;
     s_instance = nullptr;
 
     mc_qt_download_cleanup();

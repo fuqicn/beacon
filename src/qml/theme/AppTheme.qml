@@ -23,7 +23,6 @@ QtObject {
     property bool darkMode: (sysPalette.window.hslLightness < 0.5)
 
     property string themeMode: "system"
-    property string cornerMode: "auto"
     property bool alwaysScrollbars: false
     property bool transparencyEnabled: true
     property bool animationsEnabled: true
@@ -49,9 +48,11 @@ QtObject {
     readonly property color outline: sysPalette.mid
     readonly property color outlineVariant: sysPalette.midlight
 
-    readonly property bool _cornersEnabled: cornerMode === "rounded" ? true
-                                            : cornerMode === "square" ? false
-                                            : isWin11
+    // Rounded corners follow the active style: FluentWinUI3 / macOS / Imagine
+    // are rounded; the traditional Windows and Fusion styles are square.
+    readonly property bool _cornersEnabled: uiStyleName === "fluentwinui3"
+                                            || uiStyleName === "macos"
+                                            || uiStyleName === "imagine"
 
     readonly property real shapeNone: 0
     readonly property real shapeExtraSmall: _cornersEnabled ? 2 : 0
@@ -61,9 +62,7 @@ QtObject {
     readonly property real shapeExtraLarge: _cornersEnabled ? 16 : 0
     readonly property real shapeFull: _cornersEnabled ? 9999 : 0
 
-    // Navigation rail pill: always rounded regardless of the corner config
-    // (matches the pre-configuration hardcoded radius: 20).
-    readonly property real shapeNavRail: 20
+    readonly property real shapeNavRail: _cornersEnabled ? 20 : 0
 
     function _surface(t) {
         return transparencyEnabled
@@ -102,7 +101,6 @@ QtObject {
         alwaysScrollbars = sm.value("system/scrollbars", "false").toString() === "true"
         transparencyEnabled = sm.value("system/transparency", "true").toString() !== "false"
         animationsEnabled = sm.value("system/animations", "true").toString() !== "false"
-        cornerMode = sm.value("ui/corner", "auto").toString()
         kernel.applyThemeMode(themeMode)
     }
 
@@ -119,13 +117,6 @@ QtObject {
             setThemeMode(darkMode ? "light" : "dark")
         else
             setThemeMode(themeMode === "dark" ? "light" : "dark")
-    }
-
-    function setCornerMode(mode) {
-        if (cornerMode === mode) return
-        cornerMode = mode
-        kernel.settingsManager.setValue("ui/corner", mode)
-        themeChanged()
     }
 
     function setAlwaysScrollbars(v) {

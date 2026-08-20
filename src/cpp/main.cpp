@@ -1202,32 +1202,49 @@ return 0;
         uiStyle = styleSettings.value("ui/style", "auto").toString();
     }
 
+    // Resolved active style, exposed to QML so corners can follow it
+    // (FluentWinUI3 / macOS / Imagine are rounded, Windows / Fusion are square).
+    QString uiStyleName;
 #if defined(Q_OS_WIN)
-    if (uiStyle == "fluentwinui3")
+    if (uiStyle == "fluentwinui3") {
         QQuickStyle::setStyle("FluentWinUI3");
-    else if (uiStyle == "windows")
+        uiStyleName = "fluentwinui3";
+    } else if (uiStyle == "windows") {
         QQuickStyle::setStyle("Windows");
-    else if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11)
+        uiStyleName = "windows";
+    } else if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11) {
         QQuickStyle::setStyle("FluentWinUI3");
-    else
+        uiStyleName = "fluentwinui3";
+    } else {
         QQuickStyle::setStyle("Windows");
+        uiStyleName = "windows";
+    }
 #elif defined(Q_OS_MACOS)
-    if (uiStyle == "fluentwinui3")
+    if (uiStyle == "fluentwinui3") {
         QQuickStyle::setStyle("FluentWinUI3");
-    else if (uiStyle == "macos")
+        uiStyleName = "fluentwinui3";
+    } else {
         QQuickStyle::setStyle("macOS");
-    else
-        QQuickStyle::setStyle("macOS");
+        uiStyleName = "macos";
+    }
 #elif defined(Q_OS_LINUX)
-    if (uiStyle == "fluentwinui3")
+    if (uiStyle == "fluentwinui3") {
         QQuickStyle::setStyle("FluentWinUI3");
-    else if (uiStyle == "windows")
+        uiStyleName = "fluentwinui3";
+    } else if (uiStyle == "windows") {
         QQuickStyle::setStyle("Windows");
-    else if (uiStyle == "fusion")
+        uiStyleName = "windows";
+    } else if (uiStyle == "fusion") {
         QQuickStyle::setStyle("Fusion");
-    else if (uiStyle == "imagine")
+        uiStyleName = "fusion";
+    } else if (uiStyle == "imagine") {
         QQuickStyle::setStyle("Imagine");
-    // else: let Qt auto-detect platform theme (Breeze on KDE, generic on others)
+        uiStyleName = "imagine";
+    } else {
+        // Let Qt auto-detect the platform theme (Breeze on KDE, generic
+        // elsewhere); square corners by default.
+        uiStyleName = "auto";
+    }
 #endif
 
     // Load mirror configuration from mirrors.json next to the executable
@@ -1271,6 +1288,7 @@ return 0;
     isWin11 = QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows11;
 #endif
     engine.rootContext()->setContextProperty("isWin11", isWin11);
+    engine.rootContext()->setContextProperty("uiStyleName", uiStyleName);
 
     engine.addImageProvider("tinted", new TintedIconProvider);
 

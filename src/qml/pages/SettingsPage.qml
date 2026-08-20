@@ -70,13 +70,6 @@ Item {
                 break
             }
         }
-        var uiCorner = kernel.settingsManager.value("ui/corner", "auto")
-        for (var c = 0; c < cornerCombo.model.length; ++c) {
-            if (cornerCombo.model[c].key === uiCorner) {
-                cornerCombo.currentIndex = c
-                break
-            }
-        }
     }
 
     Flickable {
@@ -406,29 +399,6 @@ Item {
                             ToolTip.visible: styleHover.hovered
                             ToolTip.delay: 500
                             ToolTip.text: I18n.tr("settings.styleHint")
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-                        Text {
-                            text: I18n.tr("settings.corner")
-                            color: palette.placeholderText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        ComboBox {
-                            id: cornerCombo
-                            Layout.preferredWidth: 180
-                            model: [
-                                { text: I18n.tr("settings.cornerAuto"), key: "auto" },
-                                { text: I18n.tr("settings.cornerRounded"), key: "rounded" },
-                                { text: I18n.tr("settings.cornerSquare"), key: "square" }
-                            ]
-                            textRole: "text"
-                            valueRole: "key"
-                            onActivated: Theme.setCornerMode(currentValue)
                         }
                     }
 

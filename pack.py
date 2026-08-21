@@ -310,8 +310,9 @@ def patch_linuxdeploy_strip(tools_dir):
     extract_dir = tools_dir / ".linuxdeploy_extract"
     if not extract_dir.exists() or not (extract_dir / "squashfs-root").exists():
         log("extracting linuxdeploy for strip patching...")
-        run(["sh", str(appimage), "--appimage-extract"],
-            cwd=tools_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import subprocess as sp
+        sp.run(["sh", str(appimage), "--appimage-extract"],
+               cwd=str(tools_dir), check=True)
         if not (extract_dir / "squashfs-root").exists():
             log("WARNING: extraction failed, using original linuxdeploy")
             return str(appimage)

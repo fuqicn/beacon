@@ -287,6 +287,47 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
+def patch_linuxdeploy_strip(tools_dir):
+    """Replace linuxdeploy's bundled strip with system strip.
+
+    linuxdeploy ships an old strip that cannot handle Fedora 44's .relr.dyn
+    ELF section. The STRIP environment variable is ignored by linuxdeploy, so
+    we extract the AppImage and replace its embedded strip binary.
+    """
+    import shutil as sh
+
+    appimage = tools_dir / "linuxdeploy"
+    if not appimage.is_file():
+        return str(appimage)
+
+    system_strip = sh.which("strip")
+    if not system_strip:
+        log("WARNING: strip not found in PATH, skipping linuxdeploy patch")
+        return str(appimage)
+
+    # Check if system strip can handle .relr.dyn (new binutils)
+    # We'll just always patch to be safe
+    extract_dir = tools_dir / ".linuxdeploy_extract"
+    if not extract_dir.exists() or not (extract_dir / "squashfs-root").exists():
+        log("extracting linuxdeploy for strip patching...")
+        run(["sh", str(appimage), "--appimage-extract"],
+            cwd=tools_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not (extract_dir / "squashfs-root").exists():
+            log("WARNING: extraction failed, using original linuxdeploy")
+            return str(appimage)
+
+    src_strip = extract_dir / "squashfs-root" / "usr" / "bin" / "strip"
+    if src_strip.exists():
+        log("replacing embedded strip with system strip: %s" % system_strip)
+        sh.copy2(system_strip, src_strip)
+        os.chmod(src_strip, 0o755)
+    else:
+        log("WARNING: strip not found in linuxdeploy AppImage at %s" % src_strip)
+
+    patched = str(extract_dir / "squashfs-root" / "usr" / "bin" / "linuxdeploy")
+    return patched
+
+
 # ---------------------------------------------------------------- Windows ---
 
 def build_windows(args, version, build_dir, qt_dir):
@@ -412,6 +453,9 @@ def build_linux(args, version, build_dir, qt_dir):
     qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
     appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
 
+    # Patch linuxdeploy's embedded strip to handle Fedora 44's .relr.dyn
+    linuxdeploy = patch_linuxdeploy_strip(tools_dir)
+
     runtime = None
     if args.runtime:
         runtime = Path(args.runtime)
@@ -426,8 +470,7 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true",
-             "STRIP": "true"})
+             "gtk_update_icon_cache": "/bin/true"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
@@ -436,8 +479,7 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1",
              "SKIP_UPDATEINFO": "1", "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true",
-             "STRIP": "true"})
+             "gtk_update_icon_cache": "/bin/true"})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
@@ -479,8 +521,7 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true",
-             "STRIP": "true"})
+             "gtk_update_icon_cache": "/bin/true"})
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.

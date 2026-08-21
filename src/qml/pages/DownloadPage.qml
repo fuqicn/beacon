@@ -129,9 +129,15 @@ function selectCategory(index) {
                         Rectangle {
                             anchors.fill: parent
                             radius: Theme.shapeFull
-                            color: mtHover.hovered ? Qt.alpha(palette.placeholderText, 0.08) : "transparent"
+                            color: mtMouse.containsMouse ? Qt.alpha(palette.placeholderText, 0.15) : "transparent"
                         }
-                        HoverHandler { id: mtHover }
+                        MouseArea {
+                            id: mtMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.modeIndex = index
+                        }
 
                         Text {
                             anchors.centerIn: parent
@@ -139,12 +145,6 @@ function selectCategory(index) {
                             font.pixelSize: 14
                             font.weight: index === root.modeIndex ? Font.Medium : Font.Normal
                             color: index === root.modeIndex ? Theme.primary : palette.placeholderText
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.modeIndex = index
                         }
                     }
                 }
@@ -221,7 +221,7 @@ Item {
                                         Rectangle {
                                             anchors.fill: parent
                                             radius: parent.radius
-                                            color: tabHover.hovered ? Qt.alpha(palette.placeholderText, 0.08) : "transparent"
+                                            color: catMouse.containsMouse ? Qt.alpha(palette.placeholderText, 0.15) : "transparent"
                                             Behavior on color {
                                                 enabled: Theme.animationsEnabled
                                                 ColorAnimation { duration: 150 }
@@ -237,10 +237,10 @@ Item {
                                             color: index === root.currentCategory ? Theme.primary : palette.placeholderText
                                         }
 
-                                        HoverHandler { id: tabHover }
-
                                         MouseArea {
+                                            id: catMouse
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: root.selectCategory(index)
                                         }

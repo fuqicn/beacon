@@ -432,12 +432,12 @@ def build_linux(args, version, build_dir, qt_dir):
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
-         "--exclude-library", "libtiff.so*",
-         "--no-strip"],
+         "--exclude-library", "libtiff.so*"],
         cwd=work,
         env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1",
              "SKIP_UPDATEINFO": "1", "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
+             "gtk_update_icon_cache": "/bin/true",
+             "STRIP": "true"})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"

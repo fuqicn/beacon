@@ -422,11 +422,12 @@ def build_linux(args, version, build_dir, qt_dir):
         runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
 
     log("--- Running linuxdeploy (bundle shared libraries) ---")
-    run([str(linuxdeploy), "--appdir", str(app_appdir), "--no-strip"],
+    run([str(linuxdeploy), "--appdir", str(app_appdir)],
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
+             "gtk_update_icon_cache": "/bin/true",
+             "STRIP": "true"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
@@ -474,11 +475,12 @@ def build_linux(args, version, build_dir, qt_dir):
                  launch_appdir / "io.github.fuqicn.beacon.svg")
 
     log("--- Bundling GTK into launcher AppDir ---")
-    run([str(linuxdeploy), "--appdir", str(launch_appdir), "--no-strip"],
+    run([str(linuxdeploy), "--appdir", str(launch_appdir)],
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
+             "gtk_update_icon_cache": "/bin/true",
+             "STRIP": "true"})
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.

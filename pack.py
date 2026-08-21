@@ -424,14 +424,18 @@ def build_linux(args, version, build_dir, qt_dir):
     log("--- Running linuxdeploy (bundle shared libraries) ---")
     run([str(linuxdeploy), "--appdir", str(app_appdir)],
         cwd=work,
-        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
+        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
+             "UPDATE_DESKTOP_DATABASE": "/bin/true",
+             "gtk_update_icon_cache": "/bin/true"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
          "--exclude-library", "libtiff.so*"],
         cwd=work,
-        env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
+        env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1",
+             "SKIP_UPDATEINFO": "1", "UPDATE_DESKTOP_DATABASE": "/bin/true",
+             "gtk_update_icon_cache": "/bin/true"})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
@@ -471,7 +475,9 @@ def build_linux(args, version, build_dir, qt_dir):
     log("--- Bundling GTK into launcher AppDir ---")
     run([str(linuxdeploy), "--appdir", str(launch_appdir)],
         cwd=work,
-        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
+        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
+             "UPDATE_DESKTOP_DATABASE": "/bin/true",
+             "gtk_update_icon_cache": "/bin/true"})
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.

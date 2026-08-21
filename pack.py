@@ -426,7 +426,8 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
+             "gtk_update_icon_cache": "/bin/true",
+             "STRIP": "/usr/bin/strip"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
@@ -435,7 +436,8 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1",
              "SKIP_UPDATEINFO": "1", "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
+             "gtk_update_icon_cache": "/bin/true",
+             "STRIP": "/usr/bin/strip"})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
@@ -477,7 +479,8 @@ def build_linux(args, version, build_dir, qt_dir):
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
+             "gtk_update_icon_cache": "/bin/true",
+             "STRIP": "/usr/bin/strip"})
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.

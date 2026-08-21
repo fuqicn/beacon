@@ -308,25 +308,28 @@ def patch_linuxdeploy_strip(tools_dir):
     extract_dir = tools_dir / ".linuxdeploy_extract"
     if not extract_dir.exists() or not (extract_dir / "squashfs-root").exists():
         log("extracting linuxdeploy for strip patching...")
-        # AppImage runtime extracts to a temp dir; use mksquashfs approach
-        # Instead of running the AppImage, extract its squashfs directly
         import subprocess as sp
-        # Try extracting via Python's zipfile (some AppImages are zip-based)
+        # Ensure AppImage is executable
+        os.chmod(appimage, 0o755)
         try:
-            import zipfile
-            with zipfile.ZipFile(appimage, 'r') as zf:
-                zf.extractall(extract_dir)
-            if not (extract_dir / "squashfs-root").exists():
-                raise Exception("no squashfs-root found")
-        except Exception:
-            # Fall back to running the AppImage with --appimage-extract
-            log("zip extraction failed, trying AppImage runtime...")
+            # AppImage runtime extracts to $APPMOUNT or creates temp dir
+            # Use explicit temp dir for extraction
+            tmpdir = extract_dir.parent / ".linuxdeploy_tmp"
+            tmpdir.mkdir(parents=True, exist_ok=True)
+            env = os.environ.copy()
+            env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
+            env["TMPDIR"] = str(tmpdir)
+            sp.run(["./" + str(appimage), "--appimage-extract"],
+                   cwd=str(tools_dir), check=True, env=env)
+        except Exception as e:
+            log("WARNING: AppImage extraction failed: %s" % e)
+            # Try alternative: use python's zipfile
             try:
-                sp.run(["./" + str(appimage), "--appimage-extract"],
-                       cwd=str(tools_dir), check=True)
-            except Exception as e:
-                log("WARNING: AppImage extraction failed: %s" % e)
-                return str(appimage)
+                import zipfile
+                with zipfile.ZipFile(appimage, 'r') as zf:
+                    zf.extractall(extract_dir)
+            except Exception:
+                pass
             if not (extract_dir / "squashfs-root").exists():
                 log("WARNING: extraction failed, using original linuxdeploy")
                 return str(appimage)

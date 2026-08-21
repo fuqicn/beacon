@@ -305,17 +305,31 @@ def patch_linuxdeploy_strip(tools_dir):
         log("WARNING: strip not found in PATH, skipping linuxdeploy patch")
         return str(appimage)
 
-    # Check if system strip can handle .relr.dyn (new binutils)
-    # We'll just always patch to be safe
     extract_dir = tools_dir / ".linuxdeploy_extract"
     if not extract_dir.exists() or not (extract_dir / "squashfs-root").exists():
         log("extracting linuxdeploy for strip patching...")
+        # AppImage runtime extracts to a temp dir; use mksquashfs approach
+        # Instead of running the AppImage, extract its squashfs directly
         import subprocess as sp
-        sp.run(["sh", str(appimage), "--appimage-extract"],
-               cwd=str(tools_dir), check=True)
-        if not (extract_dir / "squashfs-root").exists():
-            log("WARNING: extraction failed, using original linuxdeploy")
-            return str(appimage)
+        # Try extracting via Python's zipfile (some AppImages are zip-based)
+        try:
+            import zipfile
+            with zipfile.ZipFile(appimage, 'r') as zf:
+                zf.extractall(extract_dir)
+            if not (extract_dir / "squashfs-root").exists():
+                raise Exception("no squashfs-root found")
+        except Exception:
+            # Fall back to running the AppImage with --appimage-extract
+            log("zip extraction failed, trying AppImage runtime...")
+            try:
+                sp.run(["./" + str(appimage), "--appimage-extract"],
+                       cwd=str(tools_dir), check=True)
+            except Exception as e:
+                log("WARNING: AppImage extraction failed: %s" % e)
+                return str(appimage)
+            if not (extract_dir / "squashfs-root").exists():
+                log("WARNING: extraction failed, using original linuxdeploy")
+                return str(appimage)
 
     src_strip = extract_dir / "squashfs-root" / "usr" / "bin" / "strip"
     if src_strip.exists():

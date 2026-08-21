@@ -423,15 +423,14 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Running linuxdeploy (bundle shared libraries) ---")
     run([str(linuxdeploy), "--appdir", str(app_appdir)],
-        cwd=work,
-        env={"NO_STRIP": "1"})
+        cwd=work)
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
          "--exclude-library", "libtiff.so*"],
         cwd=work,
-        env={"NO_STRIP": "1", "QMAKE": str(qt_dir / "bin" / "qmake")})
+        env={"QMAKE": str(qt_dir / "bin" / "qmake")})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
@@ -470,8 +469,7 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Bundling GTK into launcher AppDir ---")
     run([str(linuxdeploy), "--appdir", str(launch_appdir)],
-        cwd=work,
-        env={"NO_STRIP": "1"})
+        cwd=work)
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.

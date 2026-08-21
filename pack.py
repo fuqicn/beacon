@@ -422,27 +422,21 @@ def build_linux(args, version, build_dir, qt_dir):
         runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
 
     log("--- Running linuxdeploy (bundle shared libraries) ---")
-    # Disable strip: linuxdeploy's bundled strip cannot handle Fedora 44's
-    # .relr.dyn ELF sections; without stripping the AppImage still works fine.
-    fake_strip = work / "fake_strip"
-    fake_strip.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    os.chmod(fake_strip, 0o755)
-    run([str(linuxdeploy), "--appdir", str(app_appdir)],
+    run([str(linuxdeploy), "--appdir", str(app_appdir), "--no-strip"],
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true",
-             "STRIP": str(fake_strip)})
+             "gtk_update_icon_cache": "/bin/true"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
-         "--exclude-library", "libtiff.so*"],
+         "--exclude-library", "libtiff.so*",
+         "--no-strip"],
         cwd=work,
         env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1",
              "SKIP_UPDATEINFO": "1", "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true",
-             "STRIP": str(fake_strip)})
+             "gtk_update_icon_cache": "/bin/true"})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
@@ -480,12 +474,11 @@ def build_linux(args, version, build_dir, qt_dir):
                  launch_appdir / "io.github.fuqicn.beacon.svg")
 
     log("--- Bundling GTK into launcher AppDir ---")
-    run([str(linuxdeploy), "--appdir", str(launch_appdir)],
+    run([str(linuxdeploy), "--appdir", str(launch_appdir), "--no-strip"],
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
              "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true",
-             "STRIP": str(fake_strip)})
+             "gtk_update_icon_cache": "/bin/true"})
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.

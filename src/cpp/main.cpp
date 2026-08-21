@@ -524,6 +524,21 @@ private:
     long m_size;
 };
 
+// Resolve the persistent launcher data directory.
+// In AppImage mode BEACON_LAUNCHER_DIR is set by the GTK launcher (beacon_gtk.c)
+// to the directory containing the .AppImage file; data lives in <that>/beacon/.
+// Outside AppImage, fall back to the directory containing the executable.
+static QString resolveLauncherDir()
+{
+    const char *env = getenv("BEACON_LAUNCHER_DIR");
+    if (env && env[0]) {
+        QString dir = QString::fromUtf8(env) + "/beacon";
+        QDir().mkpath(dir);
+        return dir;
+    }
+    return QCoreApplication::applicationDirPath();
+}
+
 int main(int argc, char *argv[])
 {
 #ifdef Q_OS_WIN
@@ -1050,7 +1065,7 @@ return 0;
     qint64 tProc = QDateTime::currentMSecsSinceEpoch();
 
     // Log to file next to the executable for GUI-mode diagnosis
-    mc_log_set_file((QCoreApplication::applicationDirPath() + "/launcher.log").toUtf8().constData());
+    mc_log_set_file((resolveLauncherDir() + "/launcher.log").toUtf8().constData());
 
     mc_info("[Startup] t0=0ms (after QApplication ctor)");
 
@@ -1240,16 +1255,17 @@ return 0;
 #endif
 
     // Load mirror configuration from mirrors.json next to the executable
-    QString mirrorPath = QCoreApplication::applicationDirPath() + "/mirrors.json";
+    QString mirrorPath = resolveLauncherDir() + "/mirrors.json";
     if (QFile::exists(mirrorPath))
         mc_mirror_load_config(mirrorPath.toUtf8().constData());
 
-    KernelBridge::initialize("zh", QCoreApplication::applicationDirPath() + "/.minecraft");
+    KernelBridge::setLauncherDir(resolveLauncherDir());
+    KernelBridge::initialize("zh", resolveLauncherDir() + "/.minecraft");
 
     // A crash during installPack can leave the mrpack download / extraction
     // temp dirs behind; sweep them at startup so the next install starts from a
     // clean slate instead of reusing stale pieces.
-    const QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+    const QString mcDir = resolveLauncherDir() + "/.minecraft";
     const QStringList staleTemps = {
         mcDir + "/versions/.mrpack_dl",
         mcDir + "/versions/.mrpack_tmp"
@@ -1285,7 +1301,7 @@ return 0;
     engine.addImageProvider("tinted", new TintedIconProvider);
 
     ModIconProvider *modIconProvider = new ModIconProvider;
-    modIconProvider->setIconsDir(QCoreApplication::applicationDirPath() + "/cache/icons");
+    modIconProvider->setIconsDir(resolveLauncherDir() + "/cache/icons");
     engine.addImageProvider("modicon", modIconProvider);
 
     QQmlComponent themeComponent(&engine, QUrl("qrc:///qml/theme/AppTheme.qml"));
@@ -1298,7 +1314,7 @@ return 0;
         // Apply saved color scheme before the window is created so the very
         // first frame is already correct. theme/mode is the current key;
         // theme/colorScheme is the legacy one.
-        QString settingsPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+        QString settingsPath = resolveLauncherDir() + "/settings.ini";
         QSettings savedSettings(settingsPath, QSettings::IniFormat);
         QString scheme = savedSettings.value("theme/mode",
                            savedSettings.value("theme/colorScheme", "light").toString())
@@ -1308,7 +1324,7 @@ return 0;
         KernelBridge::instance()->applyThemeMode(scheme);
     }
 
-    I18nManager *i18n = new I18nManager(QCoreApplication::applicationDirPath());
+    I18nManager *i18n = new I18nManager(resolveLauncherDir());
     engine.rootContext()->setContextProperty("I18n", i18n);
     qWarning("I18N currentLang=%s", qPrintable(i18n->currentLangKey()));
 

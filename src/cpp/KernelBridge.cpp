@@ -82,6 +82,12 @@ static BOOL CALLBACK enumMinecraftWindow(HWND hwnd, LPARAM lParam)
 #endif
 
 KernelBridge *KernelBridge::s_instance = nullptr;
+QString KernelBridge::s_launcherDir;
+
+void KernelBridge::setLauncherDir(const QString &dir)
+{
+    s_launcherDir = dir;
+}
 
 KernelBridge *KernelBridge::instance()
 {
@@ -111,8 +117,11 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     s_instance->m_settingsManager = new SettingsManager(s_instance);
     s_instance->m_skinManager = new SkinManager(s_instance);
 
-    // Set launcher dir for auth & settings
-    QString launcherDir = QCoreApplication::applicationDirPath();
+    // Set launcher dir for auth & settings. Use the explicitly-set dir (AppImage
+    // mode: <APPIMAGE>/beacon/) or fall back to the executable directory.
+    QString launcherDir = s_launcherDir.isEmpty()
+                              ? QCoreApplication::applicationDirPath()
+                              : s_launcherDir;
     s_instance->m_authManager->setLauncherDir(launcherDir);
     s_instance->m_authManager->refresh();
     s_instance->m_settingsManager->setLauncherDir(launcherDir);
@@ -789,7 +798,9 @@ void KernelBridge::launchGame(int memory)
         mc_info("Java detection: need version %d", requiredJava);
 
         // 1. Check bundled runtime for exact version match
-        QString runtimeDir = QCoreApplication::applicationDirPath() + "/.runtime";
+        QString runtimeDir = s_launcherDir.isEmpty()
+                                 ? QCoreApplication::applicationDirPath() + "/.runtime"
+                                 : s_launcherDir + "/.runtime";
         QString bundledPath;
 #ifdef Q_OS_WIN
         bundledPath = runtimeDir + QString("/java-%1/bin/java.exe").arg(requiredJava);

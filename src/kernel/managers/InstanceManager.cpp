@@ -224,12 +224,12 @@ void InstanceManager::removeInstance(const QString &id)
             if (!verDir.isEmpty()) {
                 QDir dir(verDir);
                 if (dir.exists()) {
-                    if (!QFile::moveToTrash(verDir)) {
-                        mc_error("moveToTrash failed for %s, falling back to permanent delete",
+                    // QFile::moveToTrash() is designed for individual files and
+                    // may silently return true for directories on some systems
+                    // without actually trashing them. Always remove directly.
+                    if (!dir.removeRecursively())
+                        mc_error("removeRecursively failed for %s",
                                  verDir.toUtf8().constData());
-                        if (!dir.removeRecursively())
-                            mc_error("removeRecursively failed for %s", verDir.toUtf8().constData());
-                    }
                 }
             }
             m_instances.removeAt(i);
@@ -238,6 +238,7 @@ void InstanceManager::removeInstance(const QString &id)
                 emit selectedChanged();
             }
             saveConfig();
+            scanInstances();
             emit instancesChanged();
             return;
         }

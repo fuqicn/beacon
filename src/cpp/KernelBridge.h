@@ -59,6 +59,7 @@ class KernelBridge : public QObject
 public:
     static KernelBridge *instance();
     static void initialize(const QString &lang = "zh", const QString &mcDir = QString());
+    static void setLauncherDir(const QString &dir);
     static void shutdown();
 
     VersionManager *versionManager() const { return m_versionManager; }
@@ -132,6 +133,7 @@ private:
     ~KernelBridge() override;
 
     static KernelBridge *s_instance;
+    static QString s_launcherDir;
 
     QString m_mcDir;
     int m_launchMemory = 4096;

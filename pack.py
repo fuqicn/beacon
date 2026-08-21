@@ -422,14 +422,16 @@ def build_linux(args, version, build_dir, qt_dir):
         runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
 
     log("--- Running linuxdeploy (bundle shared libraries) ---")
-    run([str(linuxdeploy), "--appdir", str(app_appdir)],
+    run([str(linuxdeploy), "--appdir", str(app_appdir),
+         "--ignore-missing-dependencies"],
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
-         "--exclude-library", "libtiff.so*"],
+         "--exclude-library", "libtiff.so*",
+         "--ignore-missing-dependencies"],
         cwd=work,
         env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
 
@@ -469,7 +471,8 @@ def build_linux(args, version, build_dir, qt_dir):
                  launch_appdir / "io.github.fuqicn.beacon.svg")
 
     log("--- Bundling GTK into launcher AppDir ---")
-    run([str(linuxdeploy), "--appdir", str(launch_appdir)],
+    run([str(linuxdeploy), "--appdir", str(launch_appdir),
+         "--ignore-missing-dependencies"],
         cwd=work,
         env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
 

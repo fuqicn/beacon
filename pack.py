@@ -422,15 +422,18 @@ def build_linux(args, version, build_dir, qt_dir):
         runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
 
     log("--- Running linuxdeploy (bundle shared libraries) ---")
-    run([str(linuxdeploy), "--appdir", str(app_appdir)],
-        cwd=work)
+    run([str(linuxdeploy), "--appdir", str(app_appdir),
+         "--appimage-unsupported-action=skip"],
+        cwd=work,
+        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
 
     log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
     run([str(qt_plugin), "--appdir", str(app_appdir),
          "--exclude-library", "libqtiff.so",
-         "--exclude-library", "libtiff.so*"],
+         "--exclude-library", "libtiff.so*",
+         "--appimage-unsupported-action=skip"],
         cwd=work,
-        env={"QMAKE": str(qt_dir / "bin" / "qmake")})
+        env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
 
     log("--- Installing AppRun ---")
     apprun = app_appdir / "AppRun"
@@ -441,7 +444,7 @@ def build_linux(args, version, build_dir, qt_dir):
     payload_img = work / "beacon-app.AppImage"
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(app_appdir), str(payload_img)],
-        env={"VERSION": version})
+        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     os.chmod(payload_img, 0o755)
 
     log("--- Building GTK launcher ---")
@@ -468,8 +471,10 @@ def build_linux(args, version, build_dir, qt_dir):
                  launch_appdir / "io.github.fuqicn.beacon.svg")
 
     log("--- Bundling GTK into launcher AppDir ---")
-    run([str(linuxdeploy), "--appdir", str(launch_appdir)],
-        cwd=work)
+    run([str(linuxdeploy), "--appdir", str(launch_appdir),
+         "--appimage-unsupported-action=skip"],
+        cwd=work,
+        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1"})
 
     # linuxdeploy generates its own AppRun; replace it with the C/GTK launcher
     # which self-bootstraps LD_LIBRARY_PATH from $APPDIR/usr/lib.
@@ -481,7 +486,7 @@ def build_linux(args, version, build_dir, qt_dir):
     launch_img = work / "Beacon.AppImage"
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(launch_appdir), str(launch_img)],
-        env={"VERSION": version})
+        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     os.chmod(launch_img, 0o755)
 
     dist = Path(args.dist_dir)

@@ -287,12 +287,10 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
-def bundle_dependencies(appdir_path, qt_lib_dir=None):
+def bundle_dependencies(appdir_path):
     """Copy all shared library dependencies into the AppDir.
 
-    Uses ldd to find dependencies, copies them to usr/lib, and sets rpath
-    so the binary can find them at runtime. For Qt, copies the entire Qt lib
-    directory to ensure versioned symlinks are complete.
+    Uses ldd to find actual dependencies and copies them with full symlink chains.
     """
     import shutil as sh
     import subprocess as sp
@@ -307,33 +305,9 @@ def bundle_dependencies(appdir_path, qt_lib_dir=None):
     lib_dir = appdir_path / "usr" / "lib"
     lib_dir.mkdir(parents=True, exist_ok=True)
 
-    # If we have a Qt lib directory, copy the entire Qt libs
-    if qt_lib_dir and Path(qt_lib_dir).exists():
-        log("copying entire Qt library tree from %s" % qt_lib_dir)
-        # Copy all .so files and symlinks
-        for src_file in Path(qt_lib_dir).rglob("*.so*"):
-            if src_file.is_file():
-                dst = lib_dir / src_file.name
-                if not dst.exists():
-                    try:
-                        sh.copy2(src_file, dst)
-                    except Exception as e:
-                        log("WARNING: failed to copy %s: %s" % (src_file.name, e))
-        log("copied Qt libraries from %s" % qt_lib_dir)
-        # Set rpath
-        patchelf = sh.which("patchelf")
-        if patchelf:
-            try:
-                sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(binary)],
-                       capture_output=True, check=True)
-                log("set rpath to $ORIGIN/../lib")
-            except Exception as e:
-                log("WARNING: patchelf failed: %s" % e)
-        return
-
-    # Fallback: use ldd to find dependencies
+    # Use ldd to find all dependencies (including recursive)
     try:
-        result = sp.run(["ldd", str(binary)], capture_output=True, text=True)
+        result = sp.run(["ldd", "--recursive", str(binary)], capture_output=True, text=True)
         if result.returncode != 0:
             log("WARNING: ldd failed: %s" % result.stderr[:200])
             return
@@ -341,42 +315,60 @@ def bundle_dependencies(appdir_path, qt_lib_dir=None):
         log("WARNING: ldd execution failed: %s" % e)
         return
 
-    copied = []
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        lib_path = None
-        parts = line.split()
-        if len(parts) >= 3 and parts[1] == "=>":
-            lib_path = parts[2]
-        elif len(parts) >= 2 and parts[0].endswith(".so*"):
-            lib_path = parts[0]
-        if not lib_path or lib_path == "(null)":
-            continue
+    copied = set()
+
+    def copy_lib(lib_path):
+        """Recursively copy a library and its dependencies."""
+        if lib_path in copied:
+            return
+        copied.add(lib_path)
 
         src = Path(lib_path)
         if not src.exists():
-            continue
+            log("WARNING: dependency not found: %s" % lib_path)
+            return
 
-        # Resolve symlinks to get the real file
+        # Resolve symlinks
         try:
             real_src = src.resolve()
         except Exception:
             real_src = src
 
-        # Copy the library
+        # Copy the real library
         dst = lib_dir / real_src.name
         if not dst.exists():
             try:
                 sh.copy2(real_src, dst)
-                copied.append(real_src.name)
             except Exception as e:
                 log("WARNING: failed to copy %s: %s" % (real_src.name, e))
 
+        # Copy symlinks that point to this library
+        for link_dir in [src.parent, real_src.parent]:
+            for f in link_dir.iterdir():
+                if f.is_symlink() and f.name not in copied:
+                    try:
+                        target = os.readlink(f)
+                        if target == real_src.name or target.startswith(real_src.stem):
+                            dst_link = lib_dir / f.name
+                            if not dst_link.exists():
+                                os.symlink(target, dst_link)
+                    except Exception:
+                        pass
+
+    # Parse ldd output
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or '=>' not in line:
+            continue
+        parts = line.split()
+        if len(parts) >= 3 and parts[1] == "=>":
+            lib_path = parts[2]
+            if lib_path and lib_path != "(null)" and lib_path.startswith("/"):
+                copy_lib(lib_path)
+
     log("copied %d libraries" % len(copied))
 
-    # Set rpath using patchelf
+    # Set rpath
     patchelf = sh.which("patchelf")
     if patchelf:
         try:
@@ -386,7 +378,7 @@ def bundle_dependencies(appdir_path, qt_lib_dir=None):
         except Exception as e:
             log("WARNING: patchelf failed: %s" % e)
     else:
-        log("WARNING: patchelf not found")
+        log("WARNING: patchelf not found, rpath not set")
 
 
 def patch_linuxdeploy_strip(tools_dir):
@@ -659,9 +651,7 @@ Categories=Game;
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
     # Bundle all shared library dependencies
-    # Pass Qt lib directory to ensure complete versioned symlinks are copied
-    qt_lib_dir = qt_dir / "lib" if qt_dir else None
-    bundle_dependencies(tmp_appdir, qt_lib_dir)
+    bundle_dependencies(tmp_appdir)
     # Download runtime if needed
     runtime = None
     if args.runtime:

@@ -391,7 +391,7 @@ def _build_rpm(args, version, build_dir, dist):
     share_dir = install_dir / "usr" / "share"
     share_dir.mkdir(parents=True)
     (share_dir / "applications").mkdir(parents=True)
-    (share_dir / "icons" / "hicolor" / "scalable" / "apps").mkdir(parents=True, parents=True)
+     (share_dir / "icons" / "hicolor" / "scalable" / "apps").mkdir(parents=True)
     (share_dir / "beacon").mkdir(parents=True)
 
     # Copy binary

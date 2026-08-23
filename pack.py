@@ -654,11 +654,9 @@ Categories=Game;
         log("using runtime file: %s" % runtime)
     else:
         runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
-    # Set TMPDIR to ASCII path for AppImage runtime extraction
-    env = {"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"}
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_appdir), str(tmp_payload)],
-        env=env)
+        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1", "TMPDIR": str(tmp_work)})
     tmp_payload.rename(payload_img)
     os.chmod(payload_img, 0o755)
 

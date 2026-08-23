@@ -36,8 +36,8 @@ Item {
             opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
             opts.push({ text: I18n.tr("settings.styleMacOS"), key: "macos" })
         } else {
+            // Linux/macOS: Windows style is not available; use Fusion and Imagine
             opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
-            opts.push({ text: I18n.tr("settings.styleWindows"), key: "windows" })
             opts.push({ text: I18n.tr("settings.styleFusion"), key: "fusion" })
             opts.push({ text: I18n.tr("settings.styleImagine"), key: "imagine" })
         }

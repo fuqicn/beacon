@@ -421,20 +421,19 @@ Type=Application
 Categories=Game;
 """, encoding="utf-8")
 
-    # Generate spec file
+    # Generate spec file - binary-only package, no build steps
     spec_content = """Name:           beacon
 Version:        %s
 Release:        0
 Summary:        Cross-platform Minecraft launcher
 License:        GPL-3.0-or-later
 URL:            https://github.com/fuqicn/beacon
+Buildarch:      noarch
+BuildRoot:      %%{_tmppath}/beacon-buildroot
 
 %%description
 Beacon is a cross-platform Minecraft launcher with support for mods, modpacks,
 and multiple instances.
-
-%%install
-cp -r %%{buildroot}/install/. %%{_prefix}/
 
 %%files
 /usr/bin/Beacon

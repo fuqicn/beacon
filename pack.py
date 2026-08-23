@@ -7,8 +7,7 @@ Auto-detects the host platform and builds + packages accordingly:
   Windows  -> dist/BeaconLauncher.exe (self-extracting C launcher embedding
               dist/beacon.zip) and dist/beacon.zip. Qt is deployed with
               windeployqt so the result runs on a clean machine.
-  Linux    -> RPM/DEB package via rpmbuild/debhelper, or source tarball for
-              openSUSE Build Service.
+  Linux    -> RPM/DEB package via rpmbuild/debhelper.
 
 Stdlib only: zipfile, shutil, subprocess, platform, argparse, urllib, ...
 Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/g++ on Linux).

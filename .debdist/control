@@ -1,0 +1,19 @@
+debhelper-compat (= 13)
+debconf
+dh-seq-cmake
+dh-seq-python
+cmake
+g++
+ninja-build
+libqt6core6a (>= 6.5)
+libqt6dbus6
+libqt6gui6 (>= 6.5)
+libqt6network6
+libqt6qml6 (>= 6.5)
+libqt6quick6 (>= 6.5)
+libqt6quickcontrols2-6 (>= 6.5)
+libqt6quickdialogs2-6 (>= 6.5)
+libqt6svg6 (>= 6.5)
+libqt6widgets6 (>= 6.5)
+libzstd1
+zlib1g (>= 1:1.1.4)

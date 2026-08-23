@@ -7,16 +7,11 @@ Auto-detects the host platform and builds + packages accordingly:
   Windows  -> dist/BeaconLauncher.exe (self-extracting C launcher embedding
               dist/beacon.zip) and dist/beacon.zip. Qt is deployed with
               windeployqt so the result runs on a clean machine.
-  Linux    -> AppImage. A two-stage build produces a runnable payload AppImage
-              (beacon-app.AppImage) plus a launcher AppImage (Beacon.AppImage)
-              whose AppRun is a small C/GTK3 binary that installs/updates
-              {beacon-app.AppImage, mirrors.json} into <its dir>/beacon and
-              launches the payload through the runtime with a progress dialog
-              (replicates the Windows launcher mechanism).
+  Linux    -> RPM/DEB package via rpmbuild/debhelper, or source tarball for
+              openSUSE Build Service.
 
 Stdlib only: zipfile, shutil, subprocess, platform, argparse, urllib, ...
-Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/g++ +
-linuxdeploy/appimagetool on Linux).
+Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/g++ on Linux).
 """
 
 import argparse
@@ -37,22 +32,6 @@ ROOT = Path(__file__).resolve().parent
 EXCLUDE_DIRS = (".qt", ".runtime", ".minecraft")
 EXCLUDE_EXTS = (".ini", ".log")
 
-LINUXDEPLOY_URL = (
-    "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/"
-    "linuxdeploy-x86_64.AppImage"
-)
-QT_PLUGIN_URL = (
-    "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/"
-    "linuxdeploy-plugin-qt-x86_64.AppImage"
-)
-APPIMAGETOOL_URL = (
-    "https://github.com/AppImage/appimagetool/releases/download/continuous/"
-    "appimagetool-x86_64.AppImage"
-)
-RUNTIME_URL = (
-    "https://github.com/AppImage/type2-runtime/releases/download/continuous/"
-    "runtime-x86_64"
-)
 
 # Prefix for GitHub release downloads to work around slow/blocked access.
 # Set GH_PROXY to override, or pass --no-proxy to use GitHub directly.
@@ -287,222 +266,7 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
-def bundle_dependencies(appdir_path):
-    """Copy all shared library dependencies into the AppDir.
-
-    Uses ldd to find actual dependencies and copies them with full symlink chains.
-    """
-    import shutil as sh
-    import subprocess as sp
-
-    binary = appdir_path / "usr" / "bin" / "Beacon"
-    if not binary.exists():
-        log("WARNING: Beacon binary not found, skipping dependency bundling")
-        return
-
-    log("bundling dependencies for %s" % binary)
-
-    lib_dir = appdir_path / "usr" / "lib"
-    lib_dir.mkdir(parents=True, exist_ok=True)
-
-    # Use ldd to find all dependencies (including recursive)
-    try:
-        result = sp.run(["ldd", "--recursive", str(binary)], capture_output=True, text=True)
-        if result.returncode != 0:
-            log("WARNING: ldd failed: %s" % result.stderr[:200])
-            return
-    except Exception as e:
-        log("WARNING: ldd execution failed: %s" % e)
-        return
-
-    copied = set()
-
-    def copy_lib(lib_path):
-        """Recursively copy a library and its dependencies."""
-        if lib_path in copied:
-            return
-        copied.add(lib_path)
-
-        src = Path(lib_path)
-        if not src.exists():
-            log("WARNING: dependency not found: %s" % lib_path)
-            return
-
-        # Resolve symlinks
-        try:
-            real_src = src.resolve()
-        except Exception:
-            real_src = src
-
-        # Copy the real library
-        dst = lib_dir / real_src.name
-        if not dst.exists():
-            try:
-                sh.copy2(real_src, dst)
-            except Exception as e:
-                log("WARNING: failed to copy %s: %s" % (real_src.name, e))
-
-        # Copy symlinks that point to this library
-        for link_dir in [src.parent, real_src.parent]:
-            for f in link_dir.iterdir():
-                if f.is_symlink() and f.name not in copied:
-                    try:
-                        target = os.readlink(f)
-                        if target == real_src.name or target.startswith(real_src.stem):
-                            dst_link = lib_dir / f.name
-                            if not dst_link.exists():
-                                os.symlink(target, dst_link)
-                    except Exception:
-                        pass
-
-    # Parse ldd output
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line or '=>' not in line:
-            continue
-        parts = line.split()
-        if len(parts) >= 3 and parts[1] == "=>":
-            lib_path = parts[2]
-            if lib_path and lib_path != "(null)" and lib_path.startswith("/"):
-                copy_lib(lib_path)
-
-    log("copied %d libraries" % len(copied))
-
-    # Set rpath
-    patchelf = sh.which("patchelf")
-    if patchelf:
-        try:
-            sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(binary)],
-                   capture_output=True, check=True)
-            log("set rpath to $ORIGIN/../lib")
-        except Exception as e:
-            log("WARNING: patchelf failed: %s" % e)
-    else:
-        log("WARNING: patchelf not found, rpath not set")
-
-
-def patch_linuxdeploy_strip(tools_dir):
-    """Replace linuxdeploy's bundled strip with system strip.
-
-    linuxdeploy ships an old strip that cannot handle Fedora 44's .relr.dyn
-    ELF section. Since linuxdeploy ignores the STRIP environment variable,
-    we must extract the AppImage, replace its embedded strip, and run from
-    the extracted directory.
-    """
-    import shutil as sh
-
-    appimage = tools_dir / "linuxdeploy"
-    if not appimage.is_file():
-        return str(appimage)
-
-    system_strip = sh.which("strip")
-    if not system_strip:
-        log("WARNING: strip not found in PATH, skipping linuxdeploy patch")
-        return str(appimage)
-
-    # Check if we need to patch (system strip might already be new enough)
-    # We'll always patch to be safe since we can't easily check .relr.dyn support
-
-    extract_dir = tools_dir / ".linuxdeploy_extract"
-    squashfs_root = extract_dir / "squashfs-root"
-
-    if not squashfs_root.exists():
-        log("extracting linuxdeploy for strip patching...")
-        # Try multiple extraction methods
-        extracted = False
-
-        # Method 1: Try unsquashfs (fast, reliable if available)
-        import subprocess as sp
-        unsquashfs = sh.which("unsquashfs")
-        if unsquashfs:
-            try:
-                # Create a temp dir for extraction
-                tmpdir = extract_dir.parent / ".linuxdeploy_tmp"
-                tmpdir.mkdir(parents=True, exist_ok=True)
-                result = sp.run([unsquashfs, "-d", str(squashfs_root),
-                                 str(appimage)], capture_output=True, text=True)
-                if result.returncode == 0 and squashfs_root.exists():
-                    extracted = True
-                    log("extracted using unsquashfs")
-            except Exception as e:
-                log("unsquashfs failed: %s" % e)
-
-        # Method 2: Try running the AppImage with --appimage-extract
-        if not extracted:
-            try:
-                os.chmod(appimage, 0o755)
-                env = os.environ.copy()
-                env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
-                env["TMPDIR"] = str(extract_dir.parent)
-                # AppImage runtime may extract to a known location
-                result = sp.run(["./" + str(appimage), "--appimage-extract"],
-                                cwd=str(tools_dir), capture_output=True, text=True,
-                                env=env)
-                if result.returncode == 0 and squashfs_root.exists():
-                    extracted = True
-                    log("extracted using AppImage runtime")
-                else:
-                    log("AppImage extraction failed: %s" % result.stderr[:200])
-            except Exception as e:
-                log("AppImage runtime extraction failed: %s" % e)
-
-        # Method 3: Try Python's zipfile (for zip-based AppImages)
-        if not extracted:
-            try:
-                import zipfile
-                tmpdir = extract_dir.parent / ".linuxdeploy_zip_tmp"
-                tmpdir.mkdir(parents=True, exist_ok=True)
-                with zipfile.ZipFile(appimage, 'r') as zf:
-                    zf.extractall(tmpdir)
-                # Find squashfs-root
-                for root, dirs, files in os.walk(tmpdir):
-                    if "squashfs-root" in dirs:
-                        sq_root = Path(root) / "squashfs-root"
-                        sq_root.rename(squashfs_root)
-                        extracted = True
-                        log("extracted using zipfile")
-                        break
-                if not extracted:
-                    # Try moving the whole content
-                    items = [p for p in tmpdir.iterdir() if p.name != '.extracted']
-                    if items:
-                        squashfs_root.parent.mkdir(parents=True, exist_ok=True)
-                        for item in items:
-                            item.rename(squashfs_root / item.name)
-                        extracted = True
-                        log("extracted using zipfile (flat)")
-            except Exception as e:
-                log("zipfile extraction failed: %s" % e)
-
-        if not extracted:
-            log("WARNING: all extraction methods failed, using original linuxdeploy")
-            return str(appimage)
-
-    # Replace embedded strip with system strip
-    src_strip = squashfs_root / "usr" / "bin" / "strip"
-    if src_strip.exists():
-        log("replacing embedded strip with system strip: %s" % system_strip)
-        sh.copy2(system_strip, src_strip)
-        os.chmod(src_strip, 0o755)
-        log("patched: %s -> %s" % (src_strip, system_strip))
-    else:
-        log("WARNING: strip not found at %s" % src_strip)
-        # List contents for debugging
-        usr_bin = squashfs_root / "usr" / "bin"
-        if usr_bin.exists():
-            log("contents of usr/bin: %s" % [f.name for f in usr_bin.iterdir()])
-
-    # Return path to extracted linuxdeploy binary
-    patched_linuxdeploy = squashfs_root / "usr" / "bin" / "linuxdeploy"
-    if patched_linuxdeploy.exists():
-        log("using patched linuxdeploy from: %s" % patched_linuxdeploy)
-        return str(patched_linuxdeploy)
-
-    log("WARNING: linuxdeploy binary not found at expected path")
-    return str(appimage)
-
-
-# ---------------------------------------------------------------- Windows ---
+# ---------------------------------------------------------------- Linux -----
 
 def build_windows(args, version, build_dir, qt_dir):
     log("=== Building Beacon for Windows ===")
@@ -582,43 +346,109 @@ def build_windows(args, version, build_dir, qt_dir):
 # ---------------------------------------------------------------- Linux -----
 
 def build_linux(args, version, build_dir, qt_dir):
-    log("=== Building Beacon AppImages for Linux ===")
+    """Build and package for Linux (RPM/DEB)."""
+    log("=== Building Beacon for Linux ===")
     if not args.skip_build:
         configure_and_build(args, build_dir, qt_dir)
 
     work = ROOT / args.work_dir
     work.mkdir(parents=True, exist_ok=True)
-    tools_dir = Path(args.tools_dir) if args.tools_dir else work
-    app_appdir = work / "app.AppDir"
-    launch_appdir = work / "launch.AppDir"
-    script_dir = ROOT / "appimage"
+    dist = Path(args.dist_dir)
+    dist.mkdir(parents=True, exist_ok=True)
 
-    os.environ["APPIMAGE_EXTRACT_AND_RUN"] = "1"
-    os.environ["ARCH"] = "x86_64"
+    # Build source tarball for openSUSE Build Service
+    src_tarball = dist / "beacon-%s.tar.gz" % version
+    run(["tar", "czf", str(src_tarball), "--exclude=.git", "--exclude=build*", "."],
+        cwd=str(ROOT))
+    log("Source tarball: %s" % src_tarball)
 
-    log("--- Installing into app AppDir ---")
-    shutil.rmtree(app_appdir, ignore_errors=True)
-    app_appdir.mkdir(parents=True)
-    run(["cmake", "--install", str(build_dir)],
-        env={"DESTDIR": str(app_appdir)})
+    # Build RPM if rpmbuild is available
+    if shutil.which("rpmbuild"):
+        _build_rpm(args, version, build_dir, dist)
 
-    # Copy mirrors.json
-    copy_mirrors_json(app_appdir / "usr" / "bin" / "mirrors.json")
+    # Build DEB if dpkg-deb is available
+    if shutil.which("dpkg-deb"):
+        _build_deb(args, version, build_dir, dist)
 
-    # Create simple AppRun that just runs the binary
-    apprun = app_appdir / "AppRun"
-    apprun.write_text("""#!/bin/sh
-# Beacon self-extracting AppImage AppRun
-# Static binary - no runtime dependencies needed
-exec "$(dirname "$0")/usr/bin/Beacon" "$@"
-""", encoding="utf-8")
-    os.chmod(apprun, 0o755)
+    log("=== Linux build done ===")
 
-    # Create desktop file (must be in AppDir root for appimagetool)
-    usr_share = app_appdir / "usr" / "share"
-    (usr_share / "applications").mkdir(parents=True, exist_ok=True)
-    (usr_share / "icons" / "hicolor" / "scalable" / "apps").mkdir(parents=True, exist_ok=True)
-    desktop = usr_share / "applications" / "io.github.fuqicn.beacon.desktop"
+
+def _build_rpm(args, version, build_dir, dist):
+    """Build RPM package using rpmbuild."""
+    log("--- Building RPM ---")
+    rpm_buildroot = Path(args.work_dir) / "rpm-build"
+    rpm_buildroot.mkdir(parents=True, exist_ok=True)
+
+    # Prepare source directory
+    src_dir = rpm_buildroot / "SOURCES"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    spec_dir = rpm_buildroot / "SPECS"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy source tarball
+    src_tarball = dist / "beacon-%s.tar.gz" % version
+    shutil.copy2(src_tarball, src_dir / "beacon-%s.tar.gz" % version)
+
+    # Generate spec file
+    spec_content = _generate_spec(version)
+    spec_file = spec_dir / "beacon.spec"
+    spec_file.write_text(spec_content, encoding="utf-8")
+
+    # Build RPM
+    env = os.environ.copy()
+    env["HOME"] = str(rpm_buildroot)
+    run(["rpmbuild", "-bb", "--define", "_topdir %s" % rpm_buildroot,
+         str(spec_file)], cwd=str(rpm_buildroot), env=env)
+
+    # Copy RPM to dist
+    rpm_dir = rpm_buildroot / "RPMS" / "noarch"
+    for rpm_file in rpm_dir.glob("*.rpm"):
+        shutil.copy2(rpm_file, dist)
+    log("RPM package: %s" % list(dist.glob("*.rpm")))
+
+
+def _build_deb(args, version, build_dir, dist):
+    """Build DEB package using debhelper."""
+    log("--- Building DEB ---")
+    deb_buildroot = Path(args.work_dir) / "deb-build"
+    deb_buildroot.mkdir(parents=True, exist_ok=True)
+
+    # Create debian package structure
+    pkg_dir = deb_buildroot / "beacon-%s" % version
+    if pkg_dir.exists():
+        shutil.rmtree(pkg_dir)
+    pkg_dir.mkdir(parents=True)
+
+    # Install files
+    install_dir = pkg_dir / "usr"
+    install_dir.mkdir(parents=True)
+    bin_dir = install_dir / "bin"
+    bin_dir.mkdir(parents=True)
+    share_dir = install_dir / "share"
+    share_dir.mkdir(parents=True)
+    appdir = share_dir / "applications"
+    appdir.mkdir(parents=True)
+    icons_dir = share_dir / "icons" / "hicolor" / "scalable" / "apps"
+    icons_dir.mkdir(parents=True, parents=True)
+    beacon_dir = share_dir / "beacon"
+    beacon_dir.mkdir(parents=True)
+
+    # Copy binary
+    binary = Path(build_dir) / "Beacon"
+    if binary.exists():
+        shutil.copy2(binary, bin_dir / "Beacon")
+        os.chmod(bin_dir / "Beacon", 0o755)
+
+    # Copy resources
+    mirrors_src = ROOT / "third_party" / "minecraft-launcher-kernel" / "mirrors.json"
+    if mirrors_src.exists():
+        shutil.copy2(mirrors_src, beacon_dir / "mirrors.json")
+    svg_src = ROOT / "Untitled.svg"
+    if svg_src.exists():
+        shutil.copy2(svg_src, icons_dir / "io.github.fuqicn.beacon.svg")
+
+    # Create desktop file
+    desktop = appdir / "io.github.fuqicn.beacon.desktop"
     desktop.write_text("""[Desktop Entry]
 Name=Beacon
 Exec=Beacon
@@ -626,60 +456,75 @@ Icon=io.github.fuqicn.beacon
 Type=Application
 Categories=Game;
 """, encoding="utf-8")
-    # Also copy to root for appimagetool
-    (app_appdir / "Beacon.desktop").write_text("""[Desktop Entry]
-Name=Beacon
-Exec=Beacon
-Icon=io.github.fuqicn.beacon
-Type=Application
-Categories=Game;
-""", encoding="utf-8")
-    shutil.copy2(ROOT / "Untitled.svg",
-                 app_appdir / "io.github.fuqicn.beacon.svg")
-    shutil.copy2(ROOT / "Untitled.svg",
-                 usr_share / "icons" / "hicolor" / "scalable" / "apps" / "io.github.fuqicn.beacon.svg")
 
-    log("--- Downloading AppImage tools ---")
-    appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
+    # Create debian control file
+    debian_dir = pkg_dir / "debian"
+    debian_dir.mkdir(parents=True)
+    control = debian_dir / "control"
+    control.write_text("""Package: beacon
+Version: %s
+Section: games
+Priority: optional
+Architecture: all
+Maintainer: fuqicn <fuqi2012cn@outlook.com>
+Description: Cross-platform Minecraft launcher
+ Beacon is a cross-platform Minecraft launcher.
+""" % version, encoding="utf-8")
 
-    log("--- Building beacon-app.AppImage ---")
-    payload_img = work / "beacon-app.AppImage"
-    # Move to ASCII-only temp dir to avoid appimagetool encoding issues with Chinese paths
-    tmp_work = work / ".appimage_tmp"
-    tmp_work.mkdir(exist_ok=True)
-    tmp_appdir = tmp_work / "appdir"
-    tmp_payload = tmp_work / "beacon-app.AppImage"
-    shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
-    # Bundle all shared library dependencies
-    bundle_dependencies(tmp_appdir)
-    # Download runtime if needed
-    runtime = None
-    if args.runtime:
-        runtime = Path(args.runtime)
-        if not runtime.is_file():
-            raise PackError("runtime file not found: %s" % runtime)
-        log("using runtime file: %s" % runtime)
-    else:
-        runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
-    run([str(appimagetool), "--runtime-file", str(runtime),
-         str(tmp_appdir), str(tmp_payload)],
-        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1", "TMPDIR": str(tmp_work)})
-    tmp_payload.rename(payload_img)
-    os.chmod(payload_img, 0o755)
-
-    dist = Path(args.dist_dir)
-    dist.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(payload_img, dist / "Beacon.AppImage")
-
-    log("=== Linux package done ===")
-    log("  %s" % (dist / "Beacon.AppImage"))
+    # Build DEB
+    run(["dpkg-deb", "--build", str(pkg_dir), str(dist / "beacon_%s_all.deb" % version)])
+    log("DEB package: %s" % (dist / "beacon_%s_all.deb" % version))
 
 
-def _symlink(target, link):
-    if link.is_symlink() or link.exists():
-        link.unlink()
-    link.parent.mkdir(parents=True, exist_ok=True)
-    os.symlink(target, link)
+def _generate_spec(version):
+    """Generate RPM spec file content."""
+    return """Name:           beacon
+Version:        %s
+Release:        0
+Summary:        Cross-platform Minecraft launcher
+License:        GPL-3.0-or-later
+URL:            https://github.com/fuqicn/beacon
+Source0:        %%{name}-%%{version}.tar.gz
+BuildRequires:  cmake
+BuildRequires:  gcc-c++
+BuildRequires:  ninja
+BuildRequires:  qt6-qtbase-devel
+BuildRequires:  qt6-qtdeclarative-devel
+BuildRequires:  qt6-qtquickcontrols2-devel
+BuildRequires:  qt6-qtsvg-devel
+BuildRequires:  zlib-devel
+Requires:       qt6-qtbase
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtquickcontrols2
+Requires:       qt6-qtsvg
+Requires:       zlib
+
+%%description
+Beacon is a cross-platform Minecraft launcher with support for mods, modpacks,
+and multiple instances.
+
+%%prep
+%%setup -q
+
+%%build
+cmake -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build --parallel %%(cpu_count)
+
+%%install
+cmake --install build --prefix %%(buildroot)/usr
+
+%%files
+/usr/bin/Beacon
+/usr/share/applications/io.github.fuqicn.beacon.desktop
+/usr/share/icons/hicolor/scalable/apps/io.github.fuqicn.beacon.svg
+/usr/share/beacon/mirrors.json
+
+%%changelog
+* Mon Aug 25 2025 fuqicn <fuqi2012cn@outlook.com> - %s-0
+- Initial package for openSUSE Build Service
+""" % (version, version)
 
 
 def build_macos(args, version):
@@ -696,11 +541,9 @@ def parse_args():
     p.add_argument("--build-dir", help="CMake build directory (default: build / build-linux)")
     p.add_argument("--qt-dir", help="Qt root directory (override cache/env discovery)")
     p.add_argument("--mingw-bin", help="directory containing windres/gcc (Windows)")
-    p.add_argument("--work-dir", default="build-appimage",
-                   help="AppImage working directory (Linux, default: build-appimage)")
+    p.add_argument("--work-dir", default="build-linux",
+                   help="Linux build working directory (default: build-linux)")
     p.add_argument("--dist-dir", default="dist", help="output directory (default: dist)")
-    p.add_argument("--tools-dir", help="directory with cached AppImage tools (Linux)")
-    p.add_argument("--runtime", help="AppImage runtime file (default: auto-download via proxy)")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 4,
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--skip-build", action="store_true",

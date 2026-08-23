@@ -86,6 +86,10 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void restartApp();
 
     static QPalette paletteForScheme(bool dark);
+    // Return current palette colors as a QVariantMap for QML binding.
+    // This is used to override SystemPalette on platforms where it doesn't
+    // reflect QGuiApplication::palette() (Linux/Fusion, etc.).
+    Q_INVOKABLE QVariantMap getCurrentPalette() const;
     Q_INVOKABLE void launchGame(int memory = 4096);
     Q_INVOKABLE void cancelLaunch();
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());
@@ -122,6 +126,7 @@ Q_INVOKABLE void setLanguage(const QString &lang);
 signals:
     void javaDownloadingChanged();
     void minecraftRunningChanged();
+    void paletteChanged();
 
 private:
     void doAuthAndLaunch();

@@ -33,8 +33,9 @@ QtObject {
     property bool transparencyEnabled: true
     property bool animationsEnabled: true
 
-    readonly property SystemPalette sysPalette: SystemPalette {}
+    readonly property SystemPalette sysPalette: kernel ? kernel.palette : SystemPalette {}
 
+    // Fallback: if kernel is not available, use SystemPalette
     readonly property color primary: sysPalette.highlight
     readonly property color onPrimary: sysPalette.highlightedText
     readonly property color primaryContainer: Qt.alpha(sysPalette.highlight, 0.15)

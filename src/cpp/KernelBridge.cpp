@@ -349,6 +349,27 @@ QPalette KernelBridge::paletteForScheme(bool dark)
     return p;
 }
 
+QVariantMap KernelBridge::getCurrentPalette() const
+{
+    const QPalette &p = QGuiApplication::palette();
+    QVariantMap map;
+    map["window"] = p.color(QPalette::Window).name();
+    map["windowText"] = p.color(QPalette::WindowText).name();
+    map["base"] = p.color(QPalette::Base).name();
+    map["text"] = p.color(QPalette::Text).name();
+    map["button"] = p.color(QPalette::Button).name();
+    map["buttonText"] = p.color(QPalette::ButtonText).name();
+    map["highlight"] = p.color(QPalette::Highlight).name();
+    map["highlightedText"] = p.color(QPalette::HighlightedText).name();
+    map["placeholderText"] = p.color(QPalette::PlaceholderText).name();
+    map["mid"] = p.color(QPalette::Mid).name();
+    map["midlight"] = p.color(QPalette::Midlight).name();
+    map["light"] = p.color(QPalette::Light).name();
+    map["dark"] = p.color(QPalette::Dark).name();
+    map["shadow"] = p.color(QPalette::Shadow).name();
+    return map;
+}
+
 void KernelBridge::applyThemeMode(const QString &mode)
 {
     Qt::ColorScheme scheme = Qt::ColorScheme::Unknown;
@@ -375,6 +396,9 @@ void KernelBridge::applyThemeMode(const QString &mode)
     const bool paletteMatches = (QGuiApplication::palette().color(QPalette::Window).lightness() < 128) == dark;
     if (!paletteMatches)
         QGuiApplication::setPalette(paletteForScheme(dark));
+
+    // Notify QML that the palette has changed so SystemPalette bindings update
+    emit paletteChanged();
 
     applyWindowTransparency(
         m_settingsManager ? m_settingsManager->value("system/transparency", true).toBool() : true);

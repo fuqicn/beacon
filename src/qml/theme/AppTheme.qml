@@ -33,9 +33,17 @@ QtObject {
     property bool transparencyEnabled: true
     property bool animationsEnabled: true
 
-    readonly property SystemPalette sysPalette: kernel ? kernel.palette : SystemPalette {}
-
-    // Fallback: if kernel is not available, use SystemPalette
+    // Use kernel palette on Linux where SystemPalette doesn't reflect Qt's palette
+    readonly property SystemPalette _fallbackPalette: SystemPalette {}
+    readonly property var _kernelPalette: kernel ? kernel.getCurrentPalette() : null
+    readonly property SystemPalette sysPalette: _kernelPalette !== null
+        ? Qt.createQmlObject('import QtQuick 2.15; SystemPalette { window: "%1"; windowText: "%2"; base: "%3"; text: "%4"; button: "%5"; buttonText: "%6"; highlight: "%7"; highlightedText: "%8"; placeholderText: "%9"; mid: "%10"; midlight: "%11"; light: "%12"; dark: "%13"; shadow: "%14" }'
+            .arg(_kernelPalette.window).arg(_kernelPalette.windowText).arg(_kernelPalette.base)
+               .arg(_kernelPalette.text).arg(_kernelPalette.button).arg(_kernelPalette.buttonText)
+               .arg(_kernelPalette.highlight).arg(_kernelPalette.highlightedText).arg(_kernelPalette.placeholderText)
+               .arg(_kernelPalette.mid).arg(_kernelPalette.midlight).arg(_kernelPalette.light)
+               .arg(_kernelPalette.dark).arg(_kernelPalette.shadow), parent, "dynamicPalette")
+        : _fallbackPalette
     readonly property color primary: sysPalette.highlight
     readonly property color onPrimary: sysPalette.highlightedText
     readonly property color primaryContainer: Qt.alpha(sysPalette.highlight, 0.15)

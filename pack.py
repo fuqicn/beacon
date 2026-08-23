@@ -345,186 +345,56 @@ def build_windows(args, version, build_dir, qt_dir):
 # ---------------------------------------------------------------- Linux -----
 
 def build_linux(args, version, build_dir, qt_dir):
-    """Build and package for Linux (RPM/DEB)."""
+    """Build and package for Linux (tar.gz archive)."""
     log("=== Building Beacon for Linux ===")
     if not args.skip_build:
         configure_and_build(args, build_dir, qt_dir)
 
-    work = ROOT / args.work_dir
-    work.mkdir(parents=True, exist_ok=True)
     dist = Path(args.dist_dir)
     dist.mkdir(parents=True, exist_ok=True)
 
-    # Build RPM if rpmbuild is available
-    if shutil.which("rpmbuild"):
-        _build_rpm(args, version, build_dir, dist)
-
-    # Build DEB if dpkg-deb is available
-    if shutil.which("dpkg-deb"):
-        _build_deb(args, version, build_dir, dist)
-
-    log("=== Linux build done ===")
-
-
-def _build_rpm(args, version, build_dir, dist):
-    """Build RPM package from compiled binary using rpmbuild."""
-    log("--- Building RPM ---")
-    rpm_buildroot = Path(args.work_dir) / "rpm-build" / "RPMBUILD"
-    rpm_buildroot.mkdir(parents=True, exist_ok=True)
-
-    # Create directory structure
-    for d in ("BUILD", "RPMS", "SOURCES", "SPECS", "SRPMS"):
-        (rpm_buildroot / d).mkdir(exist_ok=True)
-    install_dir = rpm_buildroot / "install"
-    install_dir.mkdir(parents=True)
-
-    # Install files
-    bin_dir = install_dir / "usr" / "bin"
-    bin_dir.mkdir(parents=True)
-    share_dir = install_dir / "usr" / "share"
-    share_dir.mkdir(parents=True)
-    (share_dir / "applications").mkdir(parents=True)
-    (share_dir / "icons" / "hicolor" / "scalable" / "apps").mkdir(parents=True)
-    (share_dir / "beacon").mkdir(parents=True)
+    # Create staging directory
+    staging = Path(args.work_dir) / "linux-staging" / "beacon-%s" % version
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
 
     # Copy binary
     binary = Path(build_dir) / "Beacon"
     if not binary.exists():
         raise PackError("Binary not found: %s" % binary)
-    shutil.copy2(binary, bin_dir / "Beacon")
-    os.chmod(bin_dir / "Beacon", 0o755)
+    shutil.copy2(binary, staging / "Beacon")
+    os.chmod(staging / "Beacon", 0o755)
+    log("copied Beacon -> staging/")
 
     # Copy mirrors.json
     mirrors_src = ROOT / "third_party" / "minecraft-launcher-kernel" / "mirrors.json"
     if mirrors_src.exists():
-        shutil.copy2(mirrors_src, share_dir / "beacon" / "mirrors.json")
+        shutil.copy2(mirrors_src, staging / "mirrors.json")
+        log("copied mirrors.json")
 
     # Copy icon
     svg_src = ROOT / "Untitled.svg"
     if svg_src.exists():
-        shutil.copy2(svg_src, share_dir / "icons" / "hicolor" / "scalable" / "apps" / "io.github.fuqicn.beacon.svg")
+        shutil.copy2(svg_src, staging / "beacon.svg")
+        log("copied icon")
 
     # Create desktop file
-    desktop = share_dir / "applications" / "io.github.fuqicn.beacon.desktop"
+    desktop = staging / "io.github.fuqicn.beacon.desktop"
     desktop.write_text("""[Desktop Entry]
 Name=Beacon
-Exec=Beacon
-Icon=io.github.fuqicn.beacon
+Exec=%(dir)s/Beacon
+Icon=%(dir)s/beacon.svg
 Type=Application
 Categories=Game;
-""", encoding="utf-8")
+""" % {"dir": "."}, encoding="utf-8")
 
-    # Generate spec file - binary-only package, no build steps
-    spec_content = """Name:           beacon
-Version:        %s
-Release:        0
-Summary:        Cross-platform Minecraft launcher
-License:        GPL-3.0-or-later
-URL:            https://github.com/fuqicn/beacon
-Buildarch:      noarch
-BuildRoot:      %%{_tmppath}/beacon-buildroot
+    # Create tar.gz
+    tarball = dist / ("beacon-%s-linux.tar.gz" % version)
+    run(["tar", "czf", str(tarball), "-C", str(staging.parent), staging.name])
+    log("Linux tarball: %s (%d bytes)" % (tarball, tarball.stat().st_size))
 
-%%description
-Beacon is a cross-platform Minecraft launcher with support for mods, modpacks,
-and multiple instances.
-
-%%files
-/usr/bin/Beacon
-/usr/share/applications/io.github.fuqicn.beacon.desktop
-/usr/share/icons/hicolor/scalable/apps/io.github.fuqicn.beacon.svg
-/usr/share/beacon/mirrors.json
-
-%%changelog
-* Mon Aug 25 2025 fuqicn <fuqi2012cn@outlook.com> - %s-0
-- Initial package
-""" % (version, version)
-
-    spec_file = rpm_buildroot / "SPECS" / "beacon.spec"
-    spec_file.write_text(spec_content, encoding="utf-8")
-
-    # Build RPM
-    env = os.environ.copy()
-    env["HOME"] = str(rpm_buildroot)
-    run(["rpmbuild", "-bb",
-         "--define", "_topdir %s" % rpm_buildroot,
-         "--buildroot", str(install_dir),
-         str(spec_file)],
-        cwd=str(rpm_buildroot), env=env)
-
-    # Copy RPM to dist
-    rpm_dir = rpm_buildroot / "RPMS" / "noarch"
-    for rpm_file in rpm_dir.glob("*.rpm"):
-        shutil.copy2(rpm_file, dist)
-    log("RPM packages: %s" % list(dist.glob("*.rpm")))
-
-
-def _build_deb(args, version, build_dir, dist):
-    """Build DEB package using debhelper."""
-    log("--- Building DEB ---")
-    deb_buildroot = Path(args.work_dir) / "deb-build"
-    deb_buildroot.mkdir(parents=True, exist_ok=True)
-
-    # Create debian package structure
-    pkg_dir = deb_buildroot / "beacon-%s" % version
-    if pkg_dir.exists():
-        shutil.rmtree(pkg_dir)
-    pkg_dir.mkdir(parents=True)
-
-    # Install files
-    install_dir = pkg_dir / "usr"
-    install_dir.mkdir(parents=True)
-    bin_dir = install_dir / "bin"
-    bin_dir.mkdir(parents=True)
-    share_dir = install_dir / "share"
-    share_dir.mkdir(parents=True)
-    appdir = share_dir / "applications"
-    appdir.mkdir(parents=True)
-    icons_dir = share_dir / "icons" / "hicolor" / "scalable" / "apps"
-    icons_dir.mkdir(parents=True)
-    beacon_dir = share_dir / "beacon"
-    beacon_dir.mkdir(parents=True)
-
-    # Copy binary
-    binary = Path(build_dir) / "Beacon"
-    if binary.exists():
-        shutil.copy2(binary, bin_dir / "Beacon")
-        os.chmod(bin_dir / "Beacon", 0o755)
-
-    # Copy resources
-    mirrors_src = ROOT / "third_party" / "minecraft-launcher-kernel" / "mirrors.json"
-    if mirrors_src.exists():
-        shutil.copy2(mirrors_src, beacon_dir / "mirrors.json")
-    svg_src = ROOT / "Untitled.svg"
-    if svg_src.exists():
-        shutil.copy2(svg_src, icons_dir / "io.github.fuqicn.beacon.svg")
-
-    # Create desktop file
-    desktop = appdir / "io.github.fuqicn.beacon.desktop"
-    desktop.write_text("""[Desktop Entry]
-Name=Beacon
-Exec=Beacon
-Icon=io.github.fuqicn.beacon
-Type=Application
-Categories=Game;
-""", encoding="utf-8")
-
-    # Create debian control file
-    debian_dir = pkg_dir / "debian"
-    debian_dir.mkdir(parents=True)
-    control = debian_dir / "control"
-    control.write_text("""Package: beacon
-Version: %s
-Section: games
-Priority: optional
-Architecture: all
-Maintainer: fuqicn <fuqi2012cn@outlook.com>
-Description: Cross-platform Minecraft launcher
- Beacon is a cross-platform Minecraft launcher.
-""" % version, encoding="utf-8")
-
-    # Build DEB
-    run(["dpkg-deb", "--build", str(pkg_dir), str(dist / "beacon_%s_all.deb" % version)])
-    log("DEB package: %s" % (dist / "beacon_%s_all.deb" % version))
+    log("=== Linux build done ===")
 
 
 def build_macos(args, version):

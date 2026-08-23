@@ -544,10 +544,14 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
-    # Quote paths to handle special characters (e.g., # in path)
+    # Use temp dir for appimagetool to avoid path parsing issues with special chars
+    tmp_work = work / ".appimage_tmp"
+    tmp_work.mkdir(exist_ok=True)
+    tmp_payload = tmp_work / "beacon-app.AppImage"
     run([str(appimagetool), "--runtime-file", str(runtime),
-         '"' + str(app_appdir) + '"', '"' + str(payload_img) + '"'],
+         str(app_appdir), str(tmp_payload)],
         env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
+    tmp_payload.rename(payload_img)
     os.chmod(payload_img, 0o755)
 
     log("--- Building GTK launcher ---")
@@ -584,10 +588,11 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building Beacon.AppImage ---")
     launch_img = work / "Beacon.AppImage"
-    # Quote paths to handle special characters (e.g., # in path)
+    tmp_launch = tmp_work / "Beacon.AppImage"
     run([str(appimagetool), "--runtime-file", str(runtime),
-         '"' + str(launch_appdir) + '"', '"' + str(launch_img) + '"'],
+         str(launch_appdir), str(tmp_launch)],
         env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
+    tmp_launch.rename(launch_img)
     os.chmod(launch_img, 0o755)
 
     dist = Path(args.dist_dir)

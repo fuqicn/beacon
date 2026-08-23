@@ -607,7 +607,7 @@ exec "$(dirname "$0")/usr/bin/Beacon" "$@"
 """, encoding="utf-8")
     os.chmod(apprun, 0o755)
 
-    # Create desktop file
+    # Create desktop file (must be in AppDir root for appimagetool)
     usr_share = app_appdir / "usr" / "share"
     (usr_share / "applications").mkdir(parents=True, exist_ok=True)
     (usr_share / "icons" / "hicolor" / "scalable" / "apps").mkdir(parents=True, exist_ok=True)
@@ -619,6 +619,16 @@ Icon=io.github.fuqicn.beacon
 Type=Application
 Categories=Game;
 """, encoding="utf-8")
+    # Also copy to root for appimagetool
+    (app_appdir / "Beacon.desktop").write_text("""[Desktop Entry]
+Name=Beacon
+Exec=Beacon
+Icon=io.github.fuqicn.beacon
+Type=Application
+Categories=Game;
+""", encoding="utf-8")
+    shutil.copy2(ROOT / "Untitled.svg",
+                 app_appdir / "io.github.fuqicn.beacon.svg")
     shutil.copy2(ROOT / "Untitled.svg",
                  usr_share / "icons" / "hicolor" / "scalable" / "apps" / "io.github.fuqicn.beacon.svg")
 

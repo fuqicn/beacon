@@ -429,7 +429,7 @@ def _build_deb(args, version, build_dir, dist):
     appdir = share_dir / "applications"
     appdir.mkdir(parents=True)
     icons_dir = share_dir / "icons" / "hicolor" / "scalable" / "apps"
-    icons_dir.mkdir(parents=True, parents=True)
+    icons_dir.mkdir(parents=True)
     beacon_dir = share_dir / "beacon"
     beacon_dir.mkdir(parents=True)
 

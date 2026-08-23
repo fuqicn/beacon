@@ -508,107 +508,53 @@ def build_linux(args, version, build_dir, qt_dir):
     run(["cmake", "--install", str(build_dir)],
         env={"DESTDIR": str(app_appdir)})
 
+    # Copy mirrors.json
+    copy_mirrors_json(app_appdir / "usr" / "bin" / "mirrors.json")
+
+    # Create simple AppRun that just runs the binary
+    apprun = app_appdir / "AppRun"
+    apprun.write_text("""#!/bin/sh
+# Beacon self-extracting AppImage AppRun
+# Static binary - no runtime dependencies needed
+exec "$(dirname "$0")/usr/bin/Beacon" "$@"
+""", encoding="utf-8")
+    os.chmod(apprun, 0o755)
+
+    # Create desktop file
     usr_share = app_appdir / "usr" / "share"
     (usr_share / "applications").mkdir(parents=True, exist_ok=True)
     (usr_share / "icons" / "hicolor" / "scalable" / "apps").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(script_dir / "beacon.desktop",
-                 usr_share / "applications" / "io.github.fuqicn.beacon.desktop")
+    desktop = usr_share / "applications" / "io.github.fuqicn.beacon.desktop"
+    desktop.write_text("""[Desktop Entry]
+Name=Beacon
+Exec=Beacon
+Icon=io.github.fuqicn.beacon
+Type=Application
+Categories=Game;
+""", encoding="utf-8")
     shutil.copy2(ROOT / "Untitled.svg",
                  usr_share / "icons" / "hicolor" / "scalable" / "apps" / "io.github.fuqicn.beacon.svg")
-    _symlink("usr/bin/Beacon", app_appdir / "Beacon")
-    _symlink("usr/share/applications/io.github.fuqicn.beacon.desktop",
-             app_appdir / "io.github.fuqicn.beacon.desktop")
-    _symlink("usr/share/icons/hicolor/scalable/apps/io.github.fuqicn.beacon.svg",
-             app_appdir / "io.github.fuqicn.beacon.svg")
-    copy_mirrors_json(app_appdir / "usr" / "bin" / "mirrors.json")
-    write_version_file(app_appdir / "version.txt", version)
-
-    if not qt_dir:
-        qt_dir = resolve_qt_dir(args, build_dir)
-    if not qt_dir:
-        raise PackError("Qt dir not found (pass --qt-dir or set QT_DIR)")
-
-    log("--- Downloading AppImage tools ---")
-    linuxdeploy = download(LINUXDEPLOY_URL, tools_dir / "linuxdeploy", args.proxy)
-    qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
-    appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
-
-    runtime = None
-    if args.runtime:
-        runtime = Path(args.runtime)
-        if not runtime.is_file():
-            raise PackError("runtime file not found: %s" % runtime)
-        log("using runtime file: %s" % runtime)
-    else:
-        runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
-    # Move to ASCII-only temp dir to avoid appimagetool encoding issues with Chinese paths
+    # Move to ASCII-only temp dir to avoid appimagetool encoding issues
     tmp_work = work / ".appimage_tmp"
     tmp_work.mkdir(exist_ok=True)
     tmp_appdir = tmp_work / "appdir"
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
-    # Run linuxdeploy-plugin-qt to bundle Qt plugins (but not the main deploy)
-    run([str(qt_plugin), "--appdir", str(tmp_appdir),
-         "--exclude-library", "libqtiff.so",
-         "--exclude-library", "libtiff.so*"],
-        env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1"})
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_appdir), str(tmp_payload)],
         env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     tmp_payload.rename(payload_img)
     os.chmod(payload_img, 0o755)
 
-    log("--- Building GTK launcher ---")
-    sync_c_version(version)
-    gtk_launcher = work / "BeaconLauncher"
-    pkg_cmd = ["pkg-config", "--cflags", "--libs", "gtk+-3.0", "gdk-x11-3.0", "x11"]
-    pkg_flags = subprocess.check_output(pkg_cmd).decode().split()
-    run(["gcc", "-O2", "-s", str(ROOT / "packager" / "beacon_gtk.c"),
-         "-o", str(gtk_launcher)] + pkg_flags)
-
-    log("--- Assembling launcher AppDir ---")
-    shutil.rmtree(launch_appdir, ignore_errors=True)
-    launch_appdir.mkdir(parents=True)
-    shutil.copy2(payload_img, launch_appdir / "beacon-app.AppImage")
-    write_version_file(launch_appdir / "version.txt", version)
-    copy_mirrors_json(launch_appdir / "mirrors.json")
-    desktop_text = (app_appdir / "usr" / "share" / "applications" /
-                    "io.github.fuqicn.beacon.desktop").read_text(encoding="utf-8")
-    desktop_text = re.sub(r"^Exec=Beacon$", "Exec=Beacon.AppImage",
-                          desktop_text, flags=re.M)
-    (launch_appdir / "io.github.fuqicn.beacon.desktop").write_text(desktop_text, encoding="utf-8")
-    shutil.copy2(app_appdir / "usr" / "share" / "icons" / "hicolor" / "scalable" /
-                 "apps" / "io.github.fuqicn.beacon.svg",
-                 launch_appdir / "io.github.fuqicn.beacon.svg")
-
-    log("--- Bundling GTK into launcher AppDir ---")
-    # Install AppRun (C/GTK launcher)
-    gtk_apprun = launch_appdir / "AppRun"
-    shutil.copy2(gtk_launcher, gtk_apprun)
-    os.chmod(gtk_apprun, 0o755)
-
-    log("--- Building Beacon.AppImage ---")
-    launch_img = work / "Beacon.AppImage"
-    tmp_launchdir = tmp_work / "launchdir"
-    tmp_launch = tmp_work / "Beacon.AppImage"
-    shutil.copytree(launch_appdir, tmp_launchdir, dirs_exist_ok=True)
-    run([str(appimagetool), "--runtime-file", str(runtime),
-         str(tmp_launchdir), str(tmp_launch)],
-        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
-    tmp_launch.rename(launch_img)
-    os.chmod(launch_img, 0o755)
-
     dist = Path(args.dist_dir)
     dist.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(payload_img, dist / "beacon-app.AppImage")
-    shutil.copy2(launch_img, dist / "Beacon.AppImage")
+    shutil.copy2(payload_img, dist / "Beacon.AppImage")
 
     log("=== Linux package done ===")
     log("  %s" % (dist / "Beacon.AppImage"))
-    log("  %s" % (dist / "beacon-app.AppImage"))
 
 
 def _symlink(target, link):

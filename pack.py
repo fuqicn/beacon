@@ -287,38 +287,6 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
-def patch_rpaths(appdir_path):
-    """Set rpath to $ORIGIN/../lib on executables in usr/bin.
-
-    This replaces the rpath-setting step that linuxdeploy used to do.
-    Only patch the main executable, not plugins or system libraries.
-    """
-    import subprocess as sp
-    patchelf = shutil.which("patchelf")
-    if not patchelf:
-        log("WARNING: patchelf not found, skipping rpath patching")
-        return
-    # Only patch executables in usr/bin
-    bin_dir = Path(appdir_path) / "usr" / "bin"
-    if not bin_dir.exists():
-        log("WARNING: usr/bin not found, skipping rpath patching")
-        return
-    log("patching rpaths in %s" % bin_dir)
-    for f in bin_dir.iterdir():
-        if not f.is_file():
-            continue
-        try:
-            with open(f, 'rb') as fh:
-                magic = fh.read(4)
-            if magic != b'\x7fELF':
-                continue
-            sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(f)],
-                   capture_output=True, check=True)
-            log("patched: %s" % f.name)
-        except Exception as e:
-            log("WARNING: patchelf failed for %s: %s" % (f.name, e))
-
-
 def patch_linuxdeploy_strip(tools_dir):
     """Replace linuxdeploy's bundled strip with system strip.
 
@@ -582,8 +550,6 @@ def build_linux(args, version, build_dir, qt_dir):
     tmp_appdir = tmp_work / "appdir"
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
-    # Patch rpaths so bundled Qt libs are found at runtime
-    patch_rpaths(tmp_appdir)
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_appdir), str(tmp_payload)],
         env={"APPIMAGE_EXTRACT_AND_RUN": "1"})
@@ -627,8 +593,6 @@ def build_linux(args, version, build_dir, qt_dir):
     tmp_launchdir = tmp_work / "launchdir"
     tmp_launch = tmp_work / "Beacon.AppImage"
     shutil.copytree(launch_appdir, tmp_launchdir, dirs_exist_ok=True)
-    # Patch rpaths for the GTK launcher binary
-    patch_rpaths(tmp_launchdir)
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_launchdir), str(tmp_launch)],
         env={"APPIMAGE_EXTRACT_AND_RUN": "1"})

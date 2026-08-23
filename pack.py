@@ -544,8 +544,9 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
+    # Quote paths to handle special characters (e.g., # in path)
     run([str(appimagetool), "--runtime-file", str(runtime),
-         str(app_appdir), str(payload_img)],
+         '"' + str(app_appdir) + '"', '"' + str(payload_img) + '"'],
         env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     os.chmod(payload_img, 0o755)
 
@@ -583,8 +584,9 @@ def build_linux(args, version, build_dir, qt_dir):
 
     log("--- Building Beacon.AppImage ---")
     launch_img = work / "Beacon.AppImage"
+    # Quote paths to handle special characters (e.g., # in path)
     run([str(appimagetool), "--runtime-file", str(runtime),
-         str(launch_appdir), str(launch_img)],
+         '"' + str(launch_appdir) + '"', '"' + str(launch_img) + '"'],
         env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     os.chmod(launch_img, 0o755)
 

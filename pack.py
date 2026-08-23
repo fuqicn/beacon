@@ -543,6 +543,15 @@ Categories=Game;
     tmp_appdir = tmp_work / "appdir"
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
+    # Download runtime if needed
+    runtime = None
+    if args.runtime:
+        runtime = Path(args.runtime)
+        if not runtime.is_file():
+            raise PackError("runtime file not found: %s" % runtime)
+        log("using runtime file: %s" % runtime)
+    else:
+        runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_appdir), str(tmp_payload)],
         env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})

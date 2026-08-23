@@ -357,7 +357,7 @@ def build_linux(args, version, build_dir, qt_dir):
     dist.mkdir(parents=True, exist_ok=True)
 
     # Build source tarball for openSUSE Build Service
-    src_tarball = dist / "beacon-%s.tar.gz" % version
+    src_tarball = dist / ("beacon-%s.tar.gz" % version)
     run(["tar", "czf", str(src_tarball), "--exclude=.git", "--exclude=build*", "."],
         cwd=str(ROOT))
     log("Source tarball: %s" % src_tarball)

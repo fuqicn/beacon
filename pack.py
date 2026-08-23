@@ -321,17 +321,13 @@ def bundle_dependencies(appdir_path):
         line = line.strip()
         if not line:
             continue
-        # Parse: "libname.so.1 => /path/to/lib (0x...)" or "/path/to/lib (0x...)"
+        # Parse ldd output
+        lib_path = None
         parts = line.split()
-        if len(parts) >= 2 and parts[1] == "=>":
+        if len(parts) >= 3 and parts[1] == "=>":
             lib_path = parts[2]
-        elif len(parts) >= 1 and parts[0].endswith(".so*"):
+        elif len(parts) >= 2 and parts[0].endswith(".so*"):
             lib_path = parts[0]
-        else:
-            continue
-
-        # Skip if it's a system path (not needed since we're bundling)
-        # Actually, we should copy ALL dependencies
         if not lib_path or lib_path == "(null)":
             continue
 
@@ -339,31 +335,35 @@ def bundle_dependencies(appdir_path):
         if not src.exists():
             continue
 
-        # Find the real path (handle symlinks)
+        # Resolve symlinks to get the real file
         try:
             real_src = src.resolve()
         except Exception:
             real_src = src
 
-        # Copy the library and any symlinks
+        # Copy the library and all symlinks in the chain
         dst = lib_dir / real_src.name
         if not dst.exists():
             try:
                 sh.copy2(real_src, dst)
                 copied.append(real_src.name)
-                # Also copy symlinks
-                if real_src.is_symlink():
-                    link_target = os.readlink(real_src)
-                    # Create symlink in dest
-                    if dst.is_symlink():
-                        dst.unlink()
-                    os.symlink(link_target, dst)
             except Exception as e:
                 log("WARNING: failed to copy %s: %s" % (real_src.name, e))
 
+        # Also copy any symlinks pointing to this library
+        if real_src.is_symlink() or src.is_symlink():
+            try:
+                link_target = os.readlink(real_src if real_src.is_symlink() else src)
+                symlink_name = real_src.name if real_src.is_symlink() else src.name
+                dst_symlink = lib_dir / symlink_name
+                if not dst_symlink.exists():
+                    os.symlink(link_target, dst_symlink)
+            except Exception:
+                pass
+
     log("copied %d libraries" % len(copied))
 
-    # Set rpath using patchelf if available
+    # Set rpath using patchelf
     patchelf = sh.which("patchelf")
     if patchelf:
         try:
@@ -372,6 +372,8 @@ def bundle_dependencies(appdir_path):
             log("set rpath to $ORIGIN/../lib")
         except Exception as e:
             log("WARNING: patchelf failed: %s" % e)
+    else:
+        log("WARNING: patchelf not found")
 
 
 def patch_linuxdeploy_strip(tools_dir):

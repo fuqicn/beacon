@@ -1322,6 +1322,18 @@ return 0;
         if (scheme != "dark" && scheme != "light" && scheme != "system")
             scheme = "system";
         KernelBridge::instance()->applyThemeMode(scheme);
+
+        // Sync theme settings from QSettings to AppTheme QML object.
+        // These were previously set in AppTheme.qml Component.onCompleted,
+        // but that caused qmlcachegen crashes on Linux (Qt 6.8) because
+        // the cache generator cannot resolve the 'kernel' context property.
+        auto *sm = KernelBridge::instance()->settingsManager();
+        QMetaObject::invokeMethod(theme, "setAlwaysScrollbars",
+                                  Q_ARG(QVariant, sm->value("system/scrollbars", false).toBool()));
+        QMetaObject::invokeMethod(theme, "setTransparencyEnabled",
+                                  Q_ARG(QVariant, sm->value("system/transparency", true).toBool()));
+        QMetaObject::invokeMethod(theme, "setAnimationsEnabled",
+                                  Q_ARG(QVariant, sm->value("system/animations", true).toBool()));
     }
 
     I18nManager *i18n = new I18nManager(resolveLauncherDir());

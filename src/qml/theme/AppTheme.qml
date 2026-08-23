@@ -102,22 +102,7 @@ QtObject {
     signal themeChanged()
     onDarkModeChanged: themeChanged()
 
-    Component.onCompleted: {
-        var sm = kernel.settingsManager
-        var mode = sm.value("theme/mode", "")
-        if (mode === "") {
-            var legacy = sm.value("theme/colorScheme", "")
-            themeMode = (legacy === "light" || legacy === "dark") ? legacy : "system"
-            if (themeMode !== "system")
-                sm.setValue("theme/mode", themeMode)
-        } else {
-            themeMode = mode
-        }
-        alwaysScrollbars = sm.value("system/scrollbars", "false").toString() === "true"
-        transparencyEnabled = sm.value("system/transparency", "true").toString() !== "false"
-        animationsEnabled = sm.value("system/animations", "true").toString() !== "false"
-        kernel.applyThemeMode(themeMode)
-    }
+
 
     function setThemeMode(mode) {
         if (themeMode === mode) return

@@ -171,6 +171,7 @@ def configure_and_build(args, build_dir, qt_dir):
         cfg.append("-DCMAKE_PREFIX_PATH=%s" % qt_dir)
     if detect_platform() == "linux":
         cfg.append("-DCMAKE_INSTALL_PREFIX=/usr")
+        cfg.append("-DLINUX_NO_CACHEGEN=ON")
     if not build_dir.exists():
         cfg.append("-G")
         cfg.append("Ninja")

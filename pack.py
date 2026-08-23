@@ -550,9 +550,14 @@ def build_linux(args, version, build_dir, qt_dir):
     tmp_appdir = tmp_work / "appdir"
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
+    # Run linuxdeploy-plugin-qt to bundle Qt plugins (but not the main deploy)
+    run([str(qt_plugin), "--appdir", str(tmp_appdir),
+         "--exclude-library", "libqtiff.so",
+         "--exclude-library", "libtiff.so*"],
+        env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1"})
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_appdir), str(tmp_payload)],
-        env={"APPIMAGE_EXTRACT_AND_RUN": "1"})
+        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     tmp_payload.rename(payload_img)
     os.chmod(payload_img, 0o755)
 
@@ -580,9 +585,6 @@ def build_linux(args, version, build_dir, qt_dir):
                  launch_appdir / "io.github.fuqicn.beacon.svg")
 
     log("--- Bundling GTK into launcher AppDir ---")
-    # Skip linuxdeploy to avoid strip compatibility issues with .relr.dyn
-    # appimagetool will handle the AppImage creation directly
-
     # Install AppRun (C/GTK launcher)
     gtk_apprun = launch_appdir / "AppRun"
     shutil.copy2(gtk_launcher, gtk_apprun)
@@ -595,7 +597,7 @@ def build_linux(args, version, build_dir, qt_dir):
     shutil.copytree(launch_appdir, tmp_launchdir, dirs_exist_ok=True)
     run([str(appimagetool), "--runtime-file", str(runtime),
          str(tmp_launchdir), str(tmp_launch)],
-        env={"APPIMAGE_EXTRACT_AND_RUN": "1"})
+        env={"VERSION": version, "APPIMAGE_EXTRACT_AND_RUN": "1"})
     tmp_launch.rename(launch_img)
     os.chmod(launch_img, 0o755)
 

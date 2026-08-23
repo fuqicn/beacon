@@ -349,26 +349,20 @@ QPalette KernelBridge::paletteForScheme(bool dark)
     return p;
 }
 
-QVariantMap KernelBridge::getCurrentPalette() const
-{
-    const QPalette &p = QGuiApplication::palette();
-    QVariantMap map;
-    map["window"] = p.color(QPalette::Window).name();
-    map["windowText"] = p.color(QPalette::WindowText).name();
-    map["base"] = p.color(QPalette::Base).name();
-    map["text"] = p.color(QPalette::Text).name();
-    map["button"] = p.color(QPalette::Button).name();
-    map["buttonText"] = p.color(QPalette::ButtonText).name();
-    map["highlight"] = p.color(QPalette::Highlight).name();
-    map["highlightedText"] = p.color(QPalette::HighlightedText).name();
-    map["placeholderText"] = p.color(QPalette::PlaceholderText).name();
-    map["mid"] = p.color(QPalette::Mid).name();
-    map["midlight"] = p.color(QPalette::Midlight).name();
-    map["light"] = p.color(QPalette::Light).name();
-    map["dark"] = p.color(QPalette::Dark).name();
-    map["shadow"] = p.color(QPalette::Shadow).name();
-    return map;
-}
+QColor KernelBridge::windowColor() const { return QGuiApplication::palette().color(QPalette::Window); }
+QColor KernelBridge::windowText() const { return QGuiApplication::palette().color(QPalette::WindowText); }
+QColor KernelBridge::baseColor() const { return QGuiApplication::palette().color(QPalette::Base); }
+QColor KernelBridge::textColor() const { return QGuiApplication::palette().color(QPalette::Text); }
+QColor KernelBridge::buttonColor() const { return QGuiApplication::palette().color(QPalette::Button); }
+QColor KernelBridge::buttonText() const { return QGuiApplication::palette().color(QPalette::ButtonText); }
+QColor KernelBridge::highlightColor() const { return QGuiApplication::palette().color(QPalette::Highlight); }
+QColor KernelBridge::highlightedTextColor() const { return QGuiApplication::palette().color(QPalette::HighlightedText); }
+QColor KernelBridge::placeholderTextColor() const { return QGuiApplication::palette().color(QPalette::PlaceholderText); }
+QColor KernelBridge::midColor() const { return QGuiApplication::palette().color(QPalette::Mid); }
+QColor KernelBridge::midlightColor() const { return QGuiApplication::palette().color(QPalette::Midlight); }
+QColor KernelBridge::lightColor() const { return QGuiApplication::palette().color(QPalette::Light); }
+QColor KernelBridge::darkColor() const { return QGuiApplication::palette().color(QPalette::Dark); }
+QColor KernelBridge::shadowColor() const { return QGuiApplication::palette().color(QPalette::Shadow); }
 
 void KernelBridge::applyThemeMode(const QString &mode)
 {

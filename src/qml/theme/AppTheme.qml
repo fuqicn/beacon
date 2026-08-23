@@ -33,35 +33,27 @@ QtObject {
     property bool transparencyEnabled: true
     property bool animationsEnabled: true
 
-    // Use kernel palette on Linux where SystemPalette doesn't reflect Qt's palette
-    readonly property SystemPalette _fallbackPalette: SystemPalette {}
-    readonly property var _kernelPalette: kernel ? kernel.getCurrentPalette() : null
-    readonly property SystemPalette sysPalette: _kernelPalette !== null
-        ? Qt.createQmlObject('import QtQuick 2.15; SystemPalette { window: "%1"; windowText: "%2"; base: "%3"; text: "%4"; button: "%5"; buttonText: "%6"; highlight: "%7"; highlightedText: "%8"; placeholderText: "%9"; mid: "%10"; midlight: "%11"; light: "%12"; dark: "%13"; shadow: "%14" }'
-            .arg(_kernelPalette.window).arg(_kernelPalette.windowText).arg(_kernelPalette.base)
-               .arg(_kernelPalette.text).arg(_kernelPalette.button).arg(_kernelPalette.buttonText)
-               .arg(_kernelPalette.highlight).arg(_kernelPalette.highlightedText).arg(_kernelPalette.placeholderText)
-               .arg(_kernelPalette.mid).arg(_kernelPalette.midlight).arg(_kernelPalette.light)
-               .arg(_kernelPalette.dark).arg(_kernelPalette.shadow), parent, "dynamicPalette")
-        : _fallbackPalette
-    readonly property color primary: sysPalette.highlight
-    readonly property color onPrimary: sysPalette.highlightedText
-    readonly property color primaryContainer: Qt.alpha(sysPalette.highlight, 0.15)
-    readonly property color onPrimaryContainer: sysPalette.text
-    readonly property color secondary: sysPalette.highlight
-    readonly property color onSecondary: sysPalette.highlightedText
-    readonly property color secondaryContainer: Qt.alpha(sysPalette.highlight, 0.12)
-    readonly property color onSecondaryContainer: sysPalette.text
-    readonly property color surface: sysPalette.window
-    readonly property color onSurface: sysPalette.text
-    readonly property color onSurfaceVariant: sysPalette.placeholderText
-    readonly property color surfaceContainerLowest: sysPalette.window
-    readonly property color surfaceContainerLow: sysPalette.window
+    // Use kernel palette colors directly - this bypasses SystemPalette which
+    // doesn't reflect QGuiApplication::palette() on Linux (Fusion/GNOME/etc).
+    // kernel.window, kernel.text, etc. are bound to the actual application palette.
+    readonly property color surface: kernel ? kernel.window : sysPalette.window
+    readonly property color onSurface: kernel ? kernel.text : sysPalette.text
+    readonly property color onSurfaceVariant: kernel ? kernel.placeholderText : sysPalette.placeholderText
+    readonly property color surfaceContainerLowest: kernel ? kernel.window : sysPalette.window
+    readonly property color surfaceContainerLow: kernel ? kernel.window : sysPalette.window
+    readonly property color primary: kernel ? kernel.highlight : sysPalette.highlight
+    readonly property color onPrimary: kernel ? kernel.highlightedText : sysPalette.highlightedText
+    readonly property color primaryContainer: Qt.alpha(kernel ? kernel.highlight : sysPalette.highlight, 0.15)
+    readonly property color onPrimaryContainer: kernel ? kernel.text : sysPalette.text
+    readonly property color secondary: kernel ? kernel.highlight : sysPalette.highlight
+    readonly property color onSecondary: kernel ? kernel.highlightedText : sysPalette.highlightedText
+    readonly property color secondaryContainer: Qt.alpha(kernel ? kernel.highlight : sysPalette.highlight, 0.12)
+    readonly property color onSecondaryContainer: kernel ? kernel.text : sysPalette.text
+    readonly property color outline: kernel ? kernel.mid : sysPalette.mid
+    readonly property color outlineVariant: kernel ? kernel.midlight : sysPalette.midlight
     readonly property color surfaceContainer: _surface(0.05)
     readonly property color surfaceContainerHigh: _surface(0.08)
     readonly property color surfaceContainerHighest: _surface(0.12)
-    readonly property color outline: sysPalette.mid
-    readonly property color outlineVariant: sysPalette.midlight
 
     // Rounded corners follow the active style: FluentWinUI3 / macOS / Imagine
     // are rounded; the traditional Windows and Fusion styles are square.
@@ -86,9 +78,11 @@ QtObject {
                                       || uiStyleName === "imagine"
 
     function _surface(t) {
+        var win = kernel ? kernel.window : sysPalette.window
+        var ph = kernel ? kernel.placeholderText : sysPalette.placeholderText
         return transparencyEnabled
-            ? Qt.alpha(sysPalette.placeholderText, t)
-            : _mix(sysPalette.window, sysPalette.placeholderText, t)
+            ? Qt.alpha(ph, t)
+            : _mix(win, ph, t)
     }
 
     function _mix(a, b, t) {

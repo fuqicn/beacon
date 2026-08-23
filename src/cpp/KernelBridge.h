@@ -86,10 +86,36 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void restartApp();
 
     static QPalette paletteForScheme(bool dark);
-    // Return current palette colors as a QVariantMap for QML binding.
-    // This is used to override SystemPalette on platforms where it doesn't
-    // reflect QGuiApplication::palette() (Linux/Fusion, etc.).
-    Q_INVOKABLE QVariantMap getCurrentPalette() const;
+    // Palette color properties for QML - these reflect the actual application palette
+    // and are used to override SystemPalette on platforms where it doesn't update.
+    Q_PROPERTY(QColor window      READ windowColor      NOTIFY paletteChanged)
+    Q_PROPERTY(QColor windowText  READ windowText      NOTIFY paletteChanged)
+    Q_PROPERTY(QColor base        READ baseColor       NOTIFY paletteChanged)
+    Q_PROPERTY(QColor text        READ textColor       NOTIFY paletteChanged)
+    Q_PROPERTY(QColor button      READ buttonColor     NOTIFY paletteChanged)
+    Q_PROPERTY(QColor buttonText  READ buttonText      NOTIFY paletteChanged)
+    Q_PROPERTY(QColor highlight   READ highlightColor  NOTIFY paletteChanged)
+    Q_PROPERTY(QColor highlightedText READ highlightedTextColor NOTIFY paletteChanged)
+    Q_PROPERTY(QColor placeholderText READ placeholderTextColor NOTIFY paletteChanged)
+    Q_PROPERTY(QColor mid         READ midColor        NOTIFY paletteChanged)
+    Q_PROPERTY(QColor midlight    READ midlightColor   NOTIFY paletteChanged)
+    Q_PROPERTY(QColor light       READ lightColor      NOTIFY paletteChanged)
+    Q_PROPERTY(QColor dark        READ darkColor       NOTIFY paletteChanged)
+    Q_PROPERTY(QColor shadow      READ shadowColor     NOTIFY paletteChanged)
+    QColor windowColor() const;
+    QColor windowText() const;
+    QColor baseColor() const;
+    QColor textColor() const;
+    QColor buttonColor() const;
+    QColor buttonText() const;
+    QColor highlightColor() const;
+    QColor highlightedTextColor() const;
+    QColor placeholderTextColor() const;
+    QColor midColor() const;
+    QColor midlightColor() const;
+    QColor lightColor() const;
+    QColor darkColor() const;
+    QColor shadowColor() const;
     Q_INVOKABLE void launchGame(int memory = 4096);
     Q_INVOKABLE void cancelLaunch();
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());

@@ -291,8 +291,9 @@ def patch_linuxdeploy_strip(tools_dir):
     """Replace linuxdeploy's bundled strip with system strip.
 
     linuxdeploy ships an old strip that cannot handle Fedora 44's .relr.dyn
-    ELF section. The STRIP environment variable is ignored by linuxdeploy, so
-    we extract the AppImage and replace its embedded strip binary.
+    ELF section. Since linuxdeploy ignores the STRIP environment variable,
+    we must extract the AppImage, replace its embedded strip, and run from
+    the extracted directory.
     """
     import shutil as sh
 
@@ -305,45 +306,106 @@ def patch_linuxdeploy_strip(tools_dir):
         log("WARNING: strip not found in PATH, skipping linuxdeploy patch")
         return str(appimage)
 
+    # Check if we need to patch (system strip might already be new enough)
+    # We'll always patch to be safe since we can't easily check .relr.dyn support
+
     extract_dir = tools_dir / ".linuxdeploy_extract"
-    if not extract_dir.exists() or not (extract_dir / "squashfs-root").exists():
+    squashfs_root = extract_dir / "squashfs-root"
+
+    if not squashfs_root.exists():
         log("extracting linuxdeploy for strip patching...")
+        # Try multiple extraction methods
+        extracted = False
+
+        # Method 1: Try unsquashfs (fast, reliable if available)
         import subprocess as sp
-        # Ensure AppImage is executable
-        os.chmod(appimage, 0o755)
-        try:
-            # AppImage runtime extracts to $APPMOUNT or creates temp dir
-            # Use explicit temp dir for extraction
-            tmpdir = extract_dir.parent / ".linuxdeploy_tmp"
-            tmpdir.mkdir(parents=True, exist_ok=True)
-            env = os.environ.copy()
-            env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
-            env["TMPDIR"] = str(tmpdir)
-            sp.run(["./" + str(appimage), "--appimage-extract"],
-                   cwd=str(tools_dir), check=True, env=env)
-        except Exception as e:
-            log("WARNING: AppImage extraction failed: %s" % e)
-            # Try alternative: use python's zipfile
+        unsquashfs = sp.which("unsquashfs")
+        if unsquashfs:
+            try:
+                # Create a temp dir for extraction
+                tmpdir = extract_dir.parent / ".linuxdeploy_tmp"
+                tmpdir.mkdir(parents=True, exist_ok=True)
+                result = sp.run([unsquashfs, "-d", str(squashfs_root),
+                                 str(appimage)], capture_output=True, text=True)
+                if result.returncode == 0 and squashfs_root.exists():
+                    extracted = True
+                    log("extracted using unsquashfs")
+            except Exception as e:
+                log("unsquashfs failed: %s" % e)
+
+        # Method 2: Try running the AppImage with --appimage-extract
+        if not extracted:
+            try:
+                os.chmod(appimage, 0o755)
+                env = os.environ.copy()
+                env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
+                env["TMPDIR"] = str(extract_dir.parent)
+                # AppImage runtime may extract to a known location
+                result = sp.run(["./" + str(appimage), "--appimage-extract"],
+                                cwd=str(tools_dir), capture_output=True, text=True,
+                                env=env)
+                if result.returncode == 0 and squashfs_root.exists():
+                    extracted = True
+                    log("extracted using AppImage runtime")
+                else:
+                    log("AppImage extraction failed: %s" % result.stderr[:200])
+            except Exception as e:
+                log("AppImage runtime extraction failed: %s" % e)
+
+        # Method 3: Try Python's zipfile (for zip-based AppImages)
+        if not extracted:
             try:
                 import zipfile
+                tmpdir = extract_dir.parent / ".linuxdeploy_zip_tmp"
+                tmpdir.mkdir(parents=True, exist_ok=True)
                 with zipfile.ZipFile(appimage, 'r') as zf:
-                    zf.extractall(extract_dir)
-            except Exception:
-                pass
-            if not (extract_dir / "squashfs-root").exists():
-                log("WARNING: extraction failed, using original linuxdeploy")
-                return str(appimage)
+                    zf.extractall(tmpdir)
+                # Find squashfs-root
+                for root, dirs, files in os.walk(tmpdir):
+                    if "squashfs-root" in dirs:
+                        sq_root = Path(root) / "squashfs-root"
+                        sq_root.rename(squashfs_root)
+                        extracted = True
+                        log("extracted using zipfile")
+                        break
+                if not extracted:
+                    # Try moving the whole content
+                    items = [p for p in tmpdir.iterdir() if p.name != '.extracted']
+                    if items:
+                        squashfs_root.parent.mkdir(parents=True, exist_ok=True)
+                        for item in items:
+                            item.rename(squashfs_root / item.name)
+                        extracted = True
+                        log("extracted using zipfile (flat)")
+            except Exception as e:
+                log("zipfile extraction failed: %s" % e)
 
-    src_strip = extract_dir / "squashfs-root" / "usr" / "bin" / "strip"
+        if not extracted:
+            log("WARNING: all extraction methods failed, using original linuxdeploy")
+            return str(appimage)
+
+    # Replace embedded strip with system strip
+    src_strip = squashfs_root / "usr" / "bin" / "strip"
     if src_strip.exists():
         log("replacing embedded strip with system strip: %s" % system_strip)
         sh.copy2(system_strip, src_strip)
         os.chmod(src_strip, 0o755)
+        log("patched: %s -> %s" % (src_strip, system_strip))
     else:
-        log("WARNING: strip not found in linuxdeploy AppImage at %s" % src_strip)
+        log("WARNING: strip not found at %s" % src_strip)
+        # List contents for debugging
+        usr_bin = squashfs_root / "usr" / "bin"
+        if usr_bin.exists():
+            log("contents of usr/bin: %s" % [f.name for f in usr_bin.iterdir()])
 
-    patched = str(extract_dir / "squashfs-root" / "usr" / "bin" / "linuxdeploy")
-    return patched
+    # Return path to extracted linuxdeploy binary
+    patched_linuxdeploy = squashfs_root / "usr" / "bin" / "linuxdeploy"
+    if patched_linuxdeploy.exists():
+        log("using patched linuxdeploy from: %s" % patched_linuxdeploy)
+        return str(patched_linuxdeploy)
+
+    log("WARNING: linuxdeploy binary not found at expected path")
+    return str(appimage)
 
 
 # ---------------------------------------------------------------- Windows ---

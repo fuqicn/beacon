@@ -622,6 +622,9 @@ Categories=Game;
     shutil.copy2(ROOT / "Untitled.svg",
                  usr_share / "icons" / "hicolor" / "scalable" / "apps" / "io.github.fuqicn.beacon.svg")
 
+    log("--- Downloading AppImage tools ---")
+    appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
+
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"
     # Move to ASCII-only temp dir to avoid appimagetool encoding issues

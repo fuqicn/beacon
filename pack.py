@@ -319,7 +319,7 @@ def patch_linuxdeploy_strip(tools_dir):
 
         # Method 1: Try unsquashfs (fast, reliable if available)
         import subprocess as sp
-        unsquashfs = sp.which("unsquashfs")
+        unsquashfs = sh.which("unsquashfs")
         if unsquashfs:
             try:
                 # Create a temp dir for extraction

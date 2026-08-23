@@ -21,12 +21,12 @@ import QtQuick.Controls
 
 QtObject {
     // darkMode follows the explicit theme mode; only in "system" mode does it
-    // fall back to the palette's perceived brightness. This keeps the app in
-    // the chosen scheme even on platforms whose palette doesn't flip on
-    // setColorScheme (Windows 10, GNOME/Linux).
+    // fall back to the palette's perceived brightness. Use kernel colors directly
+    // on platforms where SystemPalette doesn't reflect QGuiApplication::palette().
     readonly property bool darkMode: themeMode === "dark" ? true
                                      : themeMode === "light" ? false
-                                     : (sysPalette.window.hslLightness < 0.5)
+                                     : (kernel ? kernel.window.lightness() < 0.5
+                                               : sysPalette.window.hslLightness < 0.5)
 
     property string themeMode: "system"
     property bool alwaysScrollbars: false

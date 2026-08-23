@@ -171,14 +171,23 @@ endforeach()
 # Qt adds the new location to the qmlcachegen/qmllint import paths itself.
 set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
 
-# AOT-compile the QML into the executable to reduce QML engine runtime memory
+# AOT-compile QML into the executable for Windows where qmlcachegen can
+# resolve our context properties at cache-build time. On Linux (Qt 6.8) the
+# cache generator cannot resolve kernel/Theme/I18n context properties and
+# emits an infinite-loop fallback (loadScopeObjectPropertyLookup never
+# returns true), causing a segfault + CPU spin on startup. Runtime loading
+# works fine on both platforms since the engine resolves them dynamically.
+if(WIN32)
+    set(_qml_files QML_FILES ${QML_SOURCES})
+endif()
+
 qt_add_qml_module(Beacon
     URI "Beacon"
     VERSION 1.0
     RESOURCE_PREFIX "/qml"
     NO_RESOURCE_TARGET_PATH
     NO_LINT
-    QML_FILES ${QML_SOURCES}
+    ${_qml_files}
 )
 
 # Pass the installed Qt qml dir (see the comment near find_package) to main.cpp.

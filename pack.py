@@ -152,6 +152,13 @@ def resolve_cmake(build_dir):
     w = shutil.which("cmake")
     if w:
         return Path(w)
+    # Check Qt's default toolchain locations
+    for candidate in [
+        Path("E:/Qt/Tools/CMake_64/bin/cmake.exe"),
+        Path("E:/Qt/Tools/CMake_64/bin/cmake"),
+    ]:
+        if candidate.is_file():
+            return candidate
     raise PackError("cmake not found (set the CMAKE environment variable)")
 
 
@@ -167,6 +174,18 @@ def configure_and_build(args, build_dir, qt_dir):
     if not build_dir.exists():
         cfg.append("-G")
         cfg.append("Ninja")
+        # Resolve Ninja path
+        ninja_bin = shutil.which("ninja")
+        if not ninja_bin:
+            for candidate in [
+                Path(qt_dir).parent / "Tools" / "Ninja" / "ninja.exe" if qt_dir else None,
+                Path("E:/Qt/Tools/Ninja/ninja.exe"),
+            ]:
+                if candidate and candidate.is_file():
+                    ninja_bin = str(candidate)
+                    break
+        if ninja_bin:
+            cfg.append("-DCMAKE_MAKE_PROGRAM=%s" % ninja_bin)
         run(cfg)
     else:
         run(cfg)

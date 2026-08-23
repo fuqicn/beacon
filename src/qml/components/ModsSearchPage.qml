@@ -152,11 +152,11 @@ property var stackView: null
                 id: sortCombo
                 font.weight: Font.Medium
                 model: ListModel {
-                    ListElement { text: I18n.tr("modSearch.rel"); key: "relevance" }
-                    ListElement { text: I18n.tr("modSearch.downloads"); key: "downloads" }
-                    ListElement { text: I18n.tr("modSearch.follows"); key: "follows" }
-                    ListElement { text: I18n.tr("modSearch.newest"); key: "newest" }
-                    ListElement { text: I18n.tr("modSearch.updated"); key: "updated" }
+                    ListElement { text: "相关度"; key: "relevance" }
+                    ListElement { text: "下载量"; key: "downloads" }
+                    ListElement { text: "关注量"; key: "follows" }
+                    ListElement { text: "最新发布"; key: "newest" }
+                    ListElement { text: "最近更新"; key: "updated" }
                 }
                 textRole: "text"
                 currentIndex: 0

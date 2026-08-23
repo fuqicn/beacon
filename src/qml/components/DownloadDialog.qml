@@ -129,7 +129,7 @@ Popup {
                     Layout.fillWidth: true
                     font.weight: Font.Medium
                     model: ListModel {
-                        ListElement { text: I18n.tr("download.typeVanilla"); loader: "" }
+                        ListElement { text: "原版"; loader: "" }
                         ListElement { text: "Fabric"; loader: "fabric" }
                         ListElement { text: "Forge"; loader: "forge" }
                         ListElement { text: "Quilt"; loader: "quilt" }

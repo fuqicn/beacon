@@ -25,7 +25,7 @@ QtObject {
     // on platforms where SystemPalette doesn't reflect QGuiApplication::palette().
     readonly property bool darkMode: themeMode === "dark" ? true
                                      : themeMode === "light" ? false
-                                     : (kernel ? kernel.window.lightness() < 0.5
+                                     : (kernel ? Qt.color(kernel.window).lightness() < 0.5
                                                : sysPalette.window.hslLightness < 0.5)
 
     property string themeMode: "system"

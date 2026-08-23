@@ -367,7 +367,7 @@ Text {
             Button {
                 text: I18n.tr("selectInstance")
                 font.weight: Font.Normal
-                onClicked: window.navigateToPage(4, "实例管理")
+                onClicked: window.navigateToPage(4, I18n.tr("launch.manageInstances"))
             }
             Button {
                 text: I18n.tr("instanceSettings")
@@ -375,7 +375,7 @@ Text {
                 onClicked: {
                     var sel = kernel.instanceManager.getSelectedInstance()
                     if (sel && sel.id)
-                        window.navigateToPage(5, "实例设置")
+                        window.navigateToPage(5, I18n.tr("launch.instanceSettings"))
                 }
             }
         }

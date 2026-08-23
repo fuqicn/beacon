@@ -354,7 +354,7 @@ def build_linux(args, version, build_dir, qt_dir):
     dist.mkdir(parents=True, exist_ok=True)
 
     # Create staging directory
-    staging = Path(args.work_dir) / "linux-staging" / "beacon-%s" % version
+    staging = Path(args.work_dir) / "linux-staging" / ("beacon-%s" % version)
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)

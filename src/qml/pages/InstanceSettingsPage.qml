@@ -115,14 +115,14 @@ Item {
                 spacing: 12
 
                 Button {
-                    text: "\u2190  返回"
+                    text: "\u2190  " + I18n.tr("back")
                     flat: true
                     font.weight: Font.Normal
-                    onClicked: window.navigateToPage(4, "实例管理")
+                    onClicked: window.navigateToPage(4, I18n.tr("launch.manageInstances"))
                 }
 
                 Text {
-                    text: instanceData.id || "未选择"
+                    text: instanceData.id || I18n.tr("instance.notSelected")
                     font.pixelSize: 20
                     font.weight: Font.Medium
                     color: palette.text
@@ -235,12 +235,12 @@ Item {
                         ColumnLayout {
                             spacing: 2
                             Text {
-                                text: "单独 JVM 参数"
+                                text: I18n.tr("instance.jvmArgs")
                                 font.pixelSize: 14
                                 color: palette.text
                             }
                             Text {
-                                text: "为此实例设置独立的 Java 参数"
+                                text: I18n.tr("instance.jvmArgsDesc")
                                 font.pixelSize: 11
                                 color: palette.placeholderText
                             }
@@ -285,12 +285,12 @@ Item {
                     ColumnLayout {
                         spacing: 2
                         Text {
-                            text: "内存分配"
+                            text: I18n.tr("instance.memory")
                             font.pixelSize: 14
                             color: palette.text
                         }
                         Text {
-                            text: "分配的内存大小（0 = 使用默认值）"
+                            text: I18n.tr("instance.memoryDesc")
                             font.pixelSize: 11
                             color: palette.placeholderText
                         }
@@ -304,7 +304,7 @@ Item {
                         editable: true
                         value: root.readInstanceSetting("launch/memory", 0)
                         onValueModified: root.writeInstanceSetting("launch/memory", value)
-                        textFromValue: function(v, locale) { return v === 0 ? "默认" : v + " MB" }
+                        textFromValue: function(v, locale) { return v === 0 ? I18n.tr("instance.default") : v + " MB" }
                         valueFromText: function(t, locale) {
                             var n = parseInt(t)
                             return isNaN(n) ? 0 : n
@@ -334,12 +334,12 @@ Item {
                         ColumnLayout {
                             spacing: 2
                             Text {
-                                text: "分辨率"
+                                text: I18n.tr("instance.resolution")
                                 font.pixelSize: 14
                                 color: palette.text
                             }
                             Text {
-                                text: "窗口大小（0 = 跟随当前窗口/系统默认）"
+                                text: I18n.tr("instance.resolutionDesc")
                                 font.pixelSize: 11
                                 color: palette.placeholderText
                             }
@@ -353,7 +353,7 @@ Item {
                             editable: true
                             value: root.readInstanceSetting("launch/resolutionW", 0)
                             onValueModified: root.writeInstanceSetting("launch/resolutionW", value)
-                            textFromValue: function(v, locale) { return v === 0 ? "宽:默认" : "宽:" + v }
+                            textFromValue: function(v, locale) { return v === 0 ? I18n.tr("instance.resWidthLabel") + ":" + (v === 0 ? I18n.tr("instance.default") : String(v)) }
                             valueFromText: function(t, locale) { var n = parseInt(t); return isNaN(n) ? 0 : n }
                         }
 
@@ -363,7 +363,7 @@ Item {
                             editable: true
                             value: root.readInstanceSetting("launch/resolutionH", 0)
                             onValueModified: root.writeInstanceSetting("launch/resolutionH", value)
-                            textFromValue: function(v, locale) { return v === 0 ? "高:默认" : "高:" + v }
+                            textFromValue: function(v, locale) { return v === 0 ? I18n.tr("instance.resHeightLabel") + ":" + (v === 0 ? I18n.tr("instance.default") : String(v)) }
                             valueFromText: function(t, locale) { var n = parseInt(t); return isNaN(n) ? 0 : n }
                         }
                     }
@@ -376,12 +376,12 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "全屏启动"
+                                text: I18n.tr("instance.fullscreen")
                                 font.pixelSize: 14
                                 color: palette.text
                             }
                             Text {
-                                text: "以全屏模式启动游戏"
+                                text: I18n.tr("instance.fullscreenDesc")
                                 font.pixelSize: 11
                                 color: palette.placeholderText
                             }
@@ -420,12 +420,12 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "自定义 Java"
+                                text: I18n.tr("instance.customJava")
                                 font.pixelSize: 14
                                 color: palette.text
                             }
                             Text {
-                                text: "留空 = 自动检测"
+                                text: I18n.tr("instance.customJavaDesc")
                                 font.pixelSize: 11
                                 color: palette.placeholderText
                             }
@@ -440,13 +440,13 @@ Item {
                             id: javaField
                             Layout.fillWidth: true
                             text: root.readInstanceSetting("launch/javaPath", "")
-                            placeholderText: root.isWindows ? "javaw.exe 路径" : "java 路径"
+                            placeholderText: root.isWindows ? I18n.tr("instance.javaPathWin") : I18n.tr("instance.javaPathUnix")
                             font.pixelSize: 12
                             onEditingFinished: root.writeInstanceSetting("launch/javaPath", text)
                         }
 
                         Button {
-                            text: "选择"
+                            text: I18n.tr("instance.browse")
                             font.weight: Font.Normal
                             onClicked: javaFileDialog.open()
                         }
@@ -472,7 +472,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: 2
                         Text {
-                            text: "版本文件夹"
+                            text: I18n.tr("instance.versionFolder")
                             font.pixelSize: 14
                             color: palette.text
                         }
@@ -486,7 +486,7 @@ Item {
                     }
 
                     Button {
-                        text: "打开"
+                        text: I18n.tr("instance.open")
                         font.weight: Font.Normal
                         onClicked: {
                             if (instanceData.verDir)
@@ -514,7 +514,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: 2
                         Text {
-                            text: "存档文件夹"
+                            text: I18n.tr("instance.savesFolder")
                             font.pixelSize: 14
                             color: palette.text
                         }
@@ -528,7 +528,7 @@ Item {
                     }
 
                     Button {
-                        text: "打开"
+                        text: I18n.tr("instance.open")
                         font.weight: Font.Normal
                         onClicked: {
                             if (gameDir)
@@ -560,12 +560,12 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "已安装模组"
+                                text: I18n.tr("instance.installedMods")
                                 font.pixelSize: 14
                                 color: palette.text
                             }
                             Text {
-                                text: installedMods.length === 0 ? "尚未安装任何模组" : "共 " + installedMods.length + " 个模组"
+                                text: installedMods.length === 0 ? I18n.tr("instance.noMods") : I18n.tr("instance.modsCount").replace("%1", String(installedMods.length))
                                 font.pixelSize: 11
                                 color: palette.placeholderText
                             }
@@ -574,7 +574,7 @@ Item {
                         Item { Layout.fillWidth: true }
 
                         Button {
-                            text: "打开文件夹"
+                            text: I18n.tr("instance.openFolder")
                             font.weight: Font.Normal
                             onClicked: {
                                 if (gameDir)
@@ -622,7 +622,7 @@ Item {
                                 }
 
                                 Button {
-                                    text: "删除"
+                                    text: I18n.tr("instance.delete")
                                     font.weight: Font.Normal
                                     flat: true
                                     onClicked: {
@@ -655,12 +655,12 @@ Item {
                     ColumnLayout {
                         spacing: 2
                         Text {
-                            text: "删除实例"
+                            text: I18n.tr("instance.deleteTitle")
                             font.pixelSize: 14
                             color: "#F44336"
                         }
                         Text {
-                            text: "将永久删除此实例的所有文件"
+                            text: I18n.tr("instance.deleteConfirmBrief")
                             font.pixelSize: 11
                             color: Qt.alpha("#F44336", 0.7)
                         }
@@ -669,7 +669,7 @@ Item {
                     Item { Layout.fillWidth: true }
 
                     Button {
-                        text: "删除"
+                        text: I18n.tr("instance.delete")
                         highlighted: true
                         font.weight: Font.Normal
                         onClicked: {
@@ -708,14 +708,14 @@ Item {
             spacing: 20
 
             Text {
-                text: "删除实例"
+                text: I18n.tr("instance.deleteTitle")
                 font.pixelSize: 20
                 font.weight: Font.Bold
                 color: palette.text
             }
 
             Text {
-                text: "确认删除 \"" + (instanceData.id || "") + "\"？将永久删除版本文件夹的所有文件，此操作不可恢复。"
+                I18n.tr("instance.deleteConfirmFull").replace("%1", instanceData.id || "")
                 font.pixelSize: 13
                 color: palette.placeholderText
                 wrapMode: Text.WordWrap
@@ -729,19 +729,19 @@ Item {
                 Layout.alignment: Qt.AlignRight
 
                 Button {
-                    text: "取消"
+                    text: I18n.tr("instance.cancel")
                     font.weight: Font.Normal
                     onClicked: deleteConfirmPopup.close()
                 }
 
                 Button {
-                    text: "删除"
+                    text: I18n.tr("instance.delete")
                     font.weight: Font.Normal
                     highlighted: true
                     onClicked: {
                         kernel.instanceManager.removeInstance(instanceId)
                         deleteConfirmPopup.close()
-                        window.navigateToPage(4, "实例管理")
+                        window.navigateToPage(4, I18n.tr("launch.manageInstances"))
                     }
                 }
             }
@@ -757,10 +757,10 @@ Item {
     // Java executable picker
     FileDialog {
         id: javaFileDialog
-        title: "选择 Java 可执行文件"
+        title: I18n.tr("instance.selectJava")
         nameFilters: root.isWindows
-                   ? ["Java 可执行文件 (*.exe)", "所有文件 (*)"]
-                   : ["Java 可执行文件 (*)", "所有文件 (*)"]
+                   ? [I18n.tr("instance.javaFilterWin"), I18n.tr("instances.allFiles")]
+                   : [I18n.tr("instance.javaFilterUnix"), I18n.tr("instances.allFiles")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             var p = selectedFile.toString().replace(/^file:\/\//, "")

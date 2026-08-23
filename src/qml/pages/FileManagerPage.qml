@@ -209,7 +209,7 @@ Item {
                             }
                             ToolTip.visible: parent.visible && fileHover.containsMouse
                             ToolTip.delay: 400
-                            ToolTip.text: "在资源管理器中显示"
+                            ToolTip.text: I18n.tr("file.reveal")
                         }
                     }
 

@@ -38,8 +38,8 @@ Item {
 
     FileDialog {
         id: importDialog
-        title: "导入整合包(.mrpack)"
-        nameFilters: ["Modrinth 整合包(*.mrpack)", "所有文件(*)"]
+        title: I18n.tr("instances.importModpack")
+        nameFilters: [I18n.tr("instances.modpackFilter"), I18n.tr("instances.allFiles")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             var src = selectedFile.toString().replace(/^file:\/\//, "")
@@ -268,7 +268,7 @@ Item {
                             }
 
                             Text {
-                                text: modelData.libraryCount + " 库"
+                                text: modelData.libraryCount + " " + I18n.tr("instances.libs")
                                 font.pixelSize: 12
                                 color: palette.placeholderText
                             }
@@ -302,7 +302,7 @@ Item {
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.RightButton) {
                             kernel.selectInstance(modelData.id, modelData.rootDir)
-                            window.navigateToPage(5, "实例设置")
+                            window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
                         } else {
                             kernel.selectInstance(modelData.id, modelData.rootDir)
                             window.navigateTo(0)
@@ -350,7 +350,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 kernel.selectInstance(modelData.id, modelData.rootDir)
-window.navigateToPage(5, "实例设置")
+window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
                             }
                         }
                     }

@@ -61,14 +61,14 @@ property var stackView: null
         spacing: 12
 
         Text {
-            text: "模组搜索"
+            text: I18n.tr("modSearch.title")
             font.pixelSize: 22
             font.weight: Font.Bold
             color: palette.text
         }
 
         Text {
-            text: "来源: Modrinth"
+            text: I18n.tr("modSearch.source")
             font.pixelSize: 11
             color: palette.placeholderText
         }
@@ -80,12 +80,12 @@ property var stackView: null
             TextField {
                 id: queryField
                 Layout.fillWidth: true
-                placeholderText: "搜索模组..."
+                placeholderText: I18n.tr("modSearch.placeholder")
                 onAccepted: root.doSearch()
             }
 
             Button {
-                text: "搜索"
+                text: I18n.tr("modSearch.search")
                 font.weight: Font.Normal
                 highlighted: true
                 enabled: !kernel.modManager.searching
@@ -98,7 +98,7 @@ property var stackView: null
             spacing: 8
 
             Text {
-                text: "游戏版本:"
+                text: I18n.tr("modSearch.gameVersion")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -106,7 +106,7 @@ property var stackView: null
             TextField {
                 id: versionField
                 Layout.preferredWidth: 120
-                placeholderText: "如 1.21.1，留空=所有"
+                placeholderText: I18n.tr("modSearch.versionPlaceholder")
                 font.pixelSize: 12
                 onTextEdited: root.mcVersion = versionField.text.trim()
                 onEditingFinished: root.doSearch()
@@ -114,7 +114,7 @@ property var stackView: null
             }
 
             Text {
-                text: "加载器:"
+                text: I18n.tr("modSearch.loader")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -123,7 +123,7 @@ property var stackView: null
                 id: loaderCombo
                 font.weight: Font.Medium
                 model: ListModel {
-                    ListElement { text: "所有"; key: "" }
+                    ListElement { text: I18n.tr("modSearch.all"), key: "" }
                     ListElement { text: "Fabric"; key: "fabric" }
                     ListElement { text: "Forge"; key: "forge" }
                     ListElement { text: "NeoForge"; key: "neoforge" }
@@ -143,7 +143,7 @@ property var stackView: null
             }
 
             Text {
-                text: "排序:"
+                text: I18n.tr("modSearch.sort")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -152,11 +152,11 @@ property var stackView: null
                 id: sortCombo
                 font.weight: Font.Medium
                 model: ListModel {
-                    ListElement { text: "相关度"; key: "relevance" }
-                    ListElement { text: "下载量"; key: "downloads" }
-                    ListElement { text: "关注量"; key: "follows" }
-                    ListElement { text: "最新发布"; key: "newest" }
-                    ListElement { text: "最近更新"; key: "updated" }
+                    ListElement { text: I18n.tr("modSearch.rel"); key: "relevance" }
+                    ListElement { text: I18n.tr("modSearch.downloads"); key: "downloads" }
+                    ListElement { text: I18n.tr("modSearch.follows"); key: "follows" }
+                    ListElement { text: I18n.tr("modSearch.newest"); key: "newest" }
+                    ListElement { text: I18n.tr("modSearch.updated"); key: "updated" }
                 }
                 textRole: "text"
                 currentIndex: 0
@@ -280,8 +280,8 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
 
             Text {
                 anchors.centerIn: parent
-                text: kernel.modManager.searching ? "搜索中..." :
-                      (root.results.length === 0 ? "没有找到相关模组" : "")
+                text: kernel.modManager.searching ? I18n.tr("modSearch.searching") :
+                      (root.results.length === 0 ? I18n.tr("modSearch.noResults") : "")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -293,13 +293,13 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
 
             Text {
                 Layout.fillWidth: true
-                text: "仅支持 Modrinth 模组下载与安装"
+                text: I18n.tr("modSearch.supportModrinth")
                 font.pixelSize: 11
                 color: palette.placeholderText
             }
 
             Button {
-                text: "打开 CurseForge 官网"
+                text: I18n.tr("modSearch.curseforge")
                 font.weight: Font.Normal
                 flat: true
                 onClicked: Qt.openUrlExternally("https://www.curseforge.com/minecraft/mc-mods")

@@ -61,14 +61,14 @@ property var stackView: null
         spacing: 12
 
         Text {
-            text: "整合包搜索"
+            text: I18n.tr("modpackSearch.title")
             font.pixelSize: 22
             font.weight: Font.Bold
             color: palette.text
         }
 
         Text {
-            text: "来源: Modrinth 整合包 · 安装时将新建独立实例"
+            text: I18n.tr("modpackSearch.source")
             font.pixelSize: 11
             color: palette.placeholderText
         }
@@ -80,12 +80,12 @@ property var stackView: null
             TextField {
                 id: queryField
                 Layout.fillWidth: true
-                placeholderText: "搜索整合包（如 All the Mods）..."
+                placeholderText: I18n.tr("modpackSearch.placeholder")
                 onAccepted: root.doSearch()
             }
 
             Button {
-                text: "搜索"
+                text: I18n.tr("modpackSearch.search")
                 font.weight: Font.Normal
                 highlighted: true
                 enabled: !kernel.modManager.searchingPacks
@@ -98,7 +98,7 @@ property var stackView: null
             spacing: 8
 
             Text {
-                text: "游戏版本:"
+                text: I18n.tr("modpackSearch.gameVersion")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -106,7 +106,7 @@ property var stackView: null
             TextField {
                 id: versionField
                 Layout.preferredWidth: 120
-                placeholderText: "如 1.20.1，留空=所有"
+                placeholderText: I18n.tr("modpackSearch.versionPlaceholder")
                 font.pixelSize: 12
                 onTextEdited: root.mcVersion = versionField.text.trim()
                 onEditingFinished: root.doSearch()
@@ -114,7 +114,7 @@ property var stackView: null
             }
 
             Text {
-                text: "排序:"
+                text: I18n.tr("modpackSearch.sort")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -123,11 +123,11 @@ property var stackView: null
                 id: sortCombo
                 font.weight: Font.Medium
                 model: ListModel {
-                    ListElement { text: "相关度"; key: "relevance" }
-                    ListElement { text: "下载量"; key: "downloads" }
-                    ListElement { text: "关注量"; key: "follows" }
-                    ListElement { text: "最新发布"; key: "newest" }
-                    ListElement { text: "最近更新"; key: "updated" }
+                    ListElement { text: I18n.tr("modpackSearch.rel"), key: "relevance" }
+                    ListElement { text: I18n.tr("modpackSearch.downloads"), key: "downloads" }
+                    ListElement { text: I18n.tr("modpackSearch.follows"), key: "follows" }
+                    ListElement { text: I18n.tr("modpackSearch.newest"), key: "newest" }
+                    ListElement { text: I18n.tr("modpackSearch.updated"), key: "updated" }
                 }
                 textRole: "text"
                 currentIndex: 0
@@ -251,8 +251,8 @@ root.stackView.push(Qt.resolvedUrl("ModpackDetailPage.qml"), {
 
             Text {
                 anchors.centerIn: parent
-                text: kernel.modManager.searchingPacks ? "搜索中..." :
-                      (root.results.length === 0 ? "没有找到相关整合包" : "")
+                text: kernel.modManager.searchingPacks ? I18n.tr("modpackSearch.searching") :
+                      (root.results.length === 0 ? I18n.tr("modpackSearch.noResults") : "")
                 font.pixelSize: 13
                 color: palette.placeholderText
             }
@@ -260,7 +260,7 @@ root.stackView.push(Qt.resolvedUrl("ModpackDetailPage.qml"), {
 
         Text {
             Layout.fillWidth: true
-            text: "整合包将以独立实例安装（含该包所需的游戏版本与加载器），不会影响原实例。"
+            text: I18n.tr("modpackSearch.info")
             font.pixelSize: 11
             color: palette.placeholderText
             wrapMode: Text.Wrap

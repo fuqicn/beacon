@@ -89,7 +89,7 @@ Item {
 
             // Java settings
             Text {
-                text: "Java 运行时"
+                text: I18n.tr("settings.javaRuntime")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -109,23 +109,23 @@ Item {
                         Layout.fillWidth: true
                         spacing: 12
 
-                        Text { text: "Java 路径"; color: palette.placeholderText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("settings.javaPath"); color: palette.placeholderText; font.pixelSize: 14 }
                         TextField {
                             id: javaPathInput
                             Layout.fillWidth: true
-                            placeholderText: "留空使用内置 Java"
+                            placeholderText: I18n.tr("settings.javaPlaceholder")
                             font.pixelSize: 13
                             onTextChanged: kernel.settingsManager.setValue("java/path", text)
                         }
                         Button {
-                            text: "扫描"
+                            text: I18n.tr("settings.scan")
                             font.weight: Font.Normal
                             onClicked: { kernel.javaManager.findJava() }
                         }
                     }
 
                     Text {
-                        text: "已检测到 " + kernel.javaManager.runtimes.length + " 个 Java 运行时"
+                        text: I18n.tr("settings.javaDetected").replace("%1", String(kernel.javaManager.runtimes.length))
                         font.pixelSize: 12; color: palette.placeholderText
                     }
                 }
@@ -133,7 +133,7 @@ Item {
 
             // Memory settings
             Text {
-                text: "内存设置"
+                text: I18n.tr("settings.memorySettings")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -165,7 +165,7 @@ Item {
 
             // Download settings
             Text {
-                text: "下载"
+                text: I18n.tr("download.mainTitle")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -301,7 +301,7 @@ Item {
 
             // Theme settings
             Text {
-                text: "外观"
+                text: I18n.tr("settings.appearance")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -428,7 +428,7 @@ Item {
 
             // System appearance settings
             Text {
-                text: "系统"
+                text: I18n.tr("settings.system")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -447,7 +447,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        Text { text: "始终显示滚动条"; color: palette.placeholderText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("settings.scrollbar"); color: palette.placeholderText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         Switch {
                             checked: Theme.alwaysScrollbars
@@ -457,7 +457,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12
-                        Text { text: "动画效果"; color: palette.placeholderText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("settings.animation"); color: palette.placeholderText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         Switch {
                             checked: Theme.animationsEnabled
@@ -472,7 +472,7 @@ Item {
 
             // Language
             Text {
-                text: "语言"
+                text: I18n.tr("settings.languageLabel")
                 font.pixelSize: 18; font.weight: Font.Medium
                 color: palette.text
             }
@@ -491,7 +491,7 @@ Item {
                     Item { Layout.fillWidth: true }
                     ComboBox {
                         id: langCombo
-                        model: [I18n.tr("settings.language.followSystem"), "中文", "English", "日本語", "Français"]
+                        model: [I18n.tr("settings.language.followSystem"), I18n.tr("settings.chinese"), "English", I18n.tr("settings.japanese"), "Français"]
                         Layout.preferredWidth: 130
                         onCurrentIndexChanged: {
                             kernel.settingsManager.setValue("language/index", currentIndex - 1)
@@ -521,7 +521,7 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 16
                     Text {
-                        text: "Launcher v1.0.0\n基于 Qt 6 的 Minecraft 启动器"
+                        text: I18n.tr("settings.version")
                         font.pixelSize: 13; color: palette.placeholderText
                         lineHeight: 1.4
                     }

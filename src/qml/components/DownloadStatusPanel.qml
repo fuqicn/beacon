@@ -113,15 +113,15 @@ Rectangle {
     }
 
     function statusText(status, progress, received, total) {
-        if (status === "queued") return "排队中"
+        if (status === "queued") return I18n.tr("status.queued")
         if (status === "downloading") {
-            if (total > 0) return "下载中 " + Math.round(progress * 100) + "%"
-            return "下载中..."
+            if (total > 0) return I18n.tr("status.downloading").replace("%1", String(Math.round(progress * 100)))
+            return I18n.tr("status.downloadingNoCount")
         }
-        if (status === "cancelling") return "取消中..."
-        if (status === "success") return "已完成"
-        if (status === "failed") return "失败"
-        if (status === "cancelled") return "已取消"
+        if (status === "cancelling") return I18n.tr("status.cancelling")
+        if (status === "success") return I18n.tr("status.success")
+        if (status === "failed") return I18n.tr("status.failed")
+        if (status === "cancelled") return I18n.tr("status.cancelled")
         return status
     }
 
@@ -160,7 +160,7 @@ Rectangle {
             progress: kernel.downloadManager.progress
             speedText: root.formatSpeed(kernel.downloadManager.speedBytes)
             fileCountText: kernel.downloadManager.totalFiles > 0
-                           ? kernel.downloadManager.completedFiles + "/" + kernel.downloadManager.totalFiles + " 文件"
+                           ? I18n.tr("downloadCard.fileCount").replace("%1", String(kernel.downloadManager.completedFiles)).replace("%2", String(kernel.downloadManager.totalFiles))
                            : ""
             statusText: Math.round(kernel.downloadManager.progress * 100) + "%"
             statusColor: Theme.primary
@@ -195,14 +195,14 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.activeModCount > 0 ? "模组下载  " + root.activeModCount + " 个任务" : "模组下载"
+                    text: root.activeModCount > 0 ? I18n.tr("status.modDownloadCount").replace("%1", String(root.activeModCount)) : I18n.tr("status.modDownload")
                     font.pixelSize: 12; font.weight: Font.DemiBold
                     color: palette.text; elide: Text.ElideRight
                     Layout.alignment: Qt.AlignVCenter
                 }
 
                 Text {
-                    text: kernel.modManager.busy ? "下载中..." : (root.modsFinished ? "已完成" : "")
+                    text: kernel.modManager.busy ? I18n.tr("status.modDownloading") : (root.modsFinished ? I18n.tr("status.modDone") : "")
                     font.pixelSize: 11
                     color: kernel.modManager.busy ? Theme.primary : palette.placeholderText
                     visible: text !== ""
@@ -249,7 +249,7 @@ Rectangle {
         DownloadCard {
             Layout.fillWidth: true
             visible: root.packBusy
-            title: "整合包安装"
+            title: I18n.tr("status.modpackInstall")
             subtitle: kernel.modpackManager.status
             progress: kernel.modpackManager.progress
             statusText: Math.round(kernel.modpackManager.progress * 100) + "%"

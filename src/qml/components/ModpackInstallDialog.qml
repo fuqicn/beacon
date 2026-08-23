@@ -70,7 +70,7 @@ Popup {
 
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: "正在加载版本信息..."
+                text: I18n.tr("modpackInstall.loading")
                 font.pixelSize: 12
                 color: palette.placeholderText
             }
@@ -83,7 +83,7 @@ Popup {
             visible: root.fileReady
 
             Text {
-                text: "安装 " + (root.projectName || "整合包")
+                text: I18n.tr("modpackInstall.title").replace("%1", root.projectName || "Modpack")
                 font.pixelSize: 18
                 font.weight: Font.Bold
                 color: palette.text
@@ -101,7 +101,7 @@ Popup {
             }
 
             Text {
-                text: "将创建一个新的独立实例并安装该整合包（含游戏版本与加载器），完成后可在实例页选择启动。"
+                text: I18n.tr("modpackInstall.desc")
                 font.pixelSize: 11
                 color: palette.placeholderText
                 wrapMode: Text.Wrap
@@ -116,13 +116,13 @@ Popup {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: "取消"
+                    text: I18n.tr("modpackInstall.cancel")
                     font.weight: Font.Normal
                     onClicked: root.close()
                 }
 
                 Button {
-                    text: "开始安装"
+                    text: I18n.tr("modpackInstall.start")
                     font.weight: Font.Normal
                     highlighted: true
                     onClicked: {
@@ -130,7 +130,7 @@ Popup {
                             var f = root.file
                             f.iconUrl = root.logoUrl || ""
                             kernel.modpackManager.installFromProject(f, root.targetDir)
-                            root.installed("已开始安装，可在下方下载面板查看进度")
+                            root.installed(I18n.tr("modpackInstall.started"))
                         }
                         root.close()
                     }

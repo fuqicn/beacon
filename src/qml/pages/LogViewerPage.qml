@@ -190,7 +190,7 @@ Item {
 
                 TextArea {
                     id: logTextArea
-                    text: "(暂无日志内容)"
+                    text: I18n.tr("log.empty")
                     readOnly: true
                     selectByMouse: true
                     font.family: "Consolas"

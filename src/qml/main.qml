@@ -381,7 +381,7 @@ ApplicationWindow {
         onClicked: kernel.killAllMinecraft()
         ToolTip.visible: hovered
         ToolTip.delay: 500
-        ToolTip.text: "关闭所有正在运行的 Minecraft"
+        ToolTip.text: I18n.tr("tooltip.killMinecraft")
 
         background: Rectangle {
             anchors.fill: parent

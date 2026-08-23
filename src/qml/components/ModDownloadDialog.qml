@@ -78,7 +78,7 @@ Popup {
 
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: "正在加载版本信息..."
+                text: I18n.tr("modDownload.loading")
                 font.pixelSize: 12
                 color: palette.placeholderText
             }
@@ -91,7 +91,7 @@ Popup {
             visible: root.fileReady
 
             Text {
-                text: "下载 " + (root.file.displayName || root.file.fileName || "模组")
+                text: I18n.tr("modDownload.title").replace("%1", root.file.displayName || root.file.fileName || "Mod")
                 font.pixelSize: 18
                 font.weight: Font.Bold
                 color: palette.text
@@ -113,7 +113,7 @@ Popup {
                 spacing: 8
 
                 Text {
-                    text: "下载目录"
+                    text: I18n.tr("modDownload.dirLabel")
                     font.pixelSize: 13
                     color: palette.placeholderText
                 }
@@ -128,14 +128,14 @@ Popup {
                 }
 
                 Button {
-                    text: "选择..."
+                    text: I18n.tr("modDownload.browse")
                     font.weight: Font.Normal
                     onClicked: dirDialog.open()
                 }
             }
 
             Text {
-                text: "模组将安装到所选目录的 mods 文件夹"
+                text: I18n.tr("modDownload.hint")
                 font.pixelSize: 11
                 color: palette.placeholderText
             }
@@ -148,19 +148,19 @@ Popup {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: "取消"
+                    text: I18n.tr("modDownload.cancel")
                     font.weight: Font.Normal
                     onClicked: root.close()
                 }
 
                 Button {
-                    text: "下载"
+                    text: I18n.tr("modDownload.download")
                     font.weight: Font.Normal
                     highlighted: true
                     onClicked: {
                         if (root.targetDir.length > 0) {
                             kernel.modManager.installMod(root.file, root.targetDir)
-                            root.installed("已加入下载队列，可在下方下载面板查看进度")
+                            root.installed(I18n.tr("modDownload.added"))
                         }
                         root.close()
                     }

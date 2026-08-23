@@ -67,8 +67,8 @@ Popup {
 
         Text {
             text: postInstallDownload
-                  ? "下载 " + root.installedLoaderVersionId
-                  : "下载 " + root.versionId
+                  ? I18n.tr("download.title").replace("%1", root.installedLoaderVersionId)
+                   : I18n.tr("download.title").replace("%1", root.versionId)
             font.pixelSize: 22
             font.weight: Font.Bold
             color: palette.text
@@ -76,8 +76,8 @@ Popup {
 
         Text {
             text: postInstallDownload
-                  ? "类型: " + (root.versionType !== "" ? root.versionType : "loader")
-                  : "类型: " + root.versionType
+                  ? I18n.tr("download.typeLabel").replace("%1", root.versionType !== "" ? root.versionType : "loader")
+                   : I18n.tr("download.typeLabel").replace("%1", root.versionType)
             font.pixelSize: 13
             color: palette.placeholderText
             visible: text !== "" && !postInstallDownload
@@ -89,7 +89,7 @@ Popup {
             visible: !postInstallDownload
 
             Text {
-                text: "下载目录"
+                text: I18n.tr("download.dirLabel")
                 font.pixelSize: 14
                 color: palette.placeholderText
             }
@@ -104,7 +104,7 @@ Popup {
             }
 
             Button {
-                text: "选择..."
+                text: I18n.tr("download.browse")
                 font.weight: Font.Normal
                 onClicked: dirDialog.open()
             }
@@ -119,7 +119,7 @@ Popup {
                 spacing: 12
 
                 Text {
-                    text: "安装类型"
+                    text: I18n.tr("download.installType")
                     font.pixelSize: 14
                     color: palette.placeholderText
                 }
@@ -129,7 +129,7 @@ Popup {
                     Layout.fillWidth: true
                     font.weight: Font.Medium
                     model: ListModel {
-                        ListElement { text: "原版"; loader: "" }
+                        ListElement { text: I18n.tr("download.typeVanilla"); loader: "" }
                         ListElement { text: "Fabric"; loader: "fabric" }
                         ListElement { text: "Forge"; loader: "forge" }
                         ListElement { text: "Quilt"; loader: "quilt" }
@@ -147,7 +147,7 @@ Popup {
                         if (loader !== "") {
                             loaderVersionCombo.visible = true
                             loaderVersionCombo.model.clear()
-                            loaderVersionCombo.model.append({ text: "正在获取...", value: "" })
+                            loaderVersionCombo.model.append({ text: I18n.tr("download.fetching"), value: "" })
                             loaderVersionCombo.currentIndex = 0
                             kernel.installManager.fetchLoaderVersions(root.versionId, loader)
                         } else {
@@ -162,7 +162,7 @@ Popup {
                 visible: loaderCombo.currentIndex > 0
 
                 Text {
-                    text: "Loader 版本"
+                    text: I18n.tr("download.loaderVersion")
                     font.pixelSize: 14
                     color: palette.placeholderText
                 }
@@ -184,11 +184,11 @@ Popup {
                 Button {
                     id: retryVersionsBtn
                     visible: false
-                    text: "重试"
+                    text: I18n.tr("download.retry")
                     onClicked: {
                         retryVersionsBtn.visible = false
                         loaderVersionCombo.model.clear()
-                        loaderVersionCombo.model.append({ text: "正在获取...", value: "" })
+                        loaderVersionCombo.model.append({ text: I18n.tr("download.fetching"), value: "" })
                         loaderVersionCombo.currentIndex = 0
                         kernel.installManager.fetchLoaderVersions(
                                     root.versionId,
@@ -208,13 +208,13 @@ Popup {
                 spacing: 8
 
                 Text {
-                    text: "下载说明"
+                    text: I18n.tr("download.info")
                     font.pixelSize: 12
                     color: palette.placeholderText
                 }
 
                 Text {
-                    text: "前 2 次使用 Mojang 官方源，第 3 次使用自动源。\n任何一次成功即停止。3 次均失败则提示错误。"
+                    text: I18n.tr("download.infoText")
                     font.pixelSize: 12
                     color: palette.placeholderText
                     wrapMode: Text.WordWrap
@@ -277,7 +277,7 @@ Popup {
 
                 Text {
                     text: downloadTotal > 0
-                          ? downloadCompleted + "/" + downloadTotal + " 文件"
+                          ? I18n.tr("download.files").replace("%1", String(downloadCompleted)).replace("%2", String(downloadTotal))
                           : ""
                     font.pixelSize: 11
                     color: palette.placeholderText
@@ -294,7 +294,7 @@ Popup {
 
             Button {
                 id: cancelBtn
-                text: postInstallDownload ? "关闭" : "取消"
+                text: postInstallDownload ? I18n.tr("download.close") : I18n.tr("download.cancel")
                 font.weight: Font.Normal
                 enabled: !postInstallDownload || !kernel.downloadManager.busy
                 onClicked: {
@@ -306,7 +306,7 @@ Popup {
 
             Button {
                 id: downloadBtn
-                text: postInstallDownload ? "正在下载..." : "开始下载"
+                text: postInstallDownload ? I18n.tr("download.downloading") : I18n.tr("download.start")
                 font.weight: Font.Normal
                 highlighted: !postInstallDownload
                 enabled: !postInstallDownload
@@ -323,7 +323,7 @@ Popup {
                         downloadBtn.enabled = false
                         cancelBtn.enabled = false
                         installSpinner.visible = true
-                        installStatus.text = "正在安装 " + loader + "..."
+                        installStatus.text = I18n.tr("download.installing").replace("%1", loader)
                         kernel.installManager.installLoader(root.versionId, loader, lver, "", root.downloadDir)
                     }
                 }
@@ -349,13 +349,13 @@ Popup {
                 retryVersionsBtn.visible = false
             } else {
                 // Empty result (e.g. network reset); offer a retry instead of a blank box
-                loaderVersionCombo.model.append({ text: "获取失败，请重试", value: "" })
+                loaderVersionCombo.model.append({ text: I18n.tr("download.fetchFailed"), value: "" })
                 loaderVersionCombo.currentIndex = 0
                 retryVersionsBtn.visible = true
             }
         }
         function onInstallCompleted(versionId) {
-            installStatus.text = "安装完成，正在下载资源文件..."
+            installStatus.text = I18n.tr("download.installComplete")
             installSpinner.visible = false
             downloadBtn.enabled = true
             cancelBtn.enabled = true
@@ -364,7 +364,7 @@ Popup {
             kernel.downloadManager.startDownload(versionId, root.downloadDir)
         }
         function onErrorOccurred(msg) {
-            installStatus.text = "错误: " + msg
+            installStatus.text = I18n.tr("download.error").replace("%1", msg)
             installSpinner.visible = false
             downloadBtn.enabled = true
             cancelBtn.enabled = true
@@ -385,9 +385,9 @@ Popup {
                 kernel.instanceManager.addRootDir(root.downloadDir)
             if (root.postInstallDownload) {
                 if (success)
-                    installStatus.text = "下载完成"
+                    installStatus.text = I18n.tr("download.downloadComplete")
                 else
-                    installStatus.text = "部分文件下载失败"
+                    installStatus.text = I18n.tr("download.partialFail")
                 root.postInstallDownload = false
                 root.close()
             }
@@ -398,7 +398,7 @@ Popup {
         }
         function onErrorOccurred(msg) {
             if (root.postInstallDownload) {
-                installStatus.text = "下载错误: " + msg
+                installStatus.text = I18n.tr("download.downloadError").replace("%1", msg)
             }
         }
     }

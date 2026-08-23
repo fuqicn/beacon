@@ -84,7 +84,7 @@ function selectCategory(index) {
         spacing: 12
 
         Text {
-            text: "下载"
+            text: I18n.tr("download.mainTitle")
             font.pixelSize: 22
             font.weight: Font.Bold
             color: palette.text
@@ -118,9 +118,9 @@ function selectCategory(index) {
 
                 Repeater {
                     model: [
-                        { label: "版本下载" },
-                        { label: "模组下载" },
-                        { label: "整合包下载" }
+                        { label: I18n.tr("download.tabVersion") },
+                        { label: I18n.tr("download.tabMod") },
+                        { label: I18n.tr("download.tabPack") }
                     ]
                     delegate: Item {
                         width: 100
@@ -340,8 +340,8 @@ Item {
 
                                     Text {
                                         text: {
-                                            if (modelData.id === kernel.versionManager.latestRelease) return "最新正式版"
-                                            if (modelData.id === kernel.versionManager.latestSnapshot) return "最新快照版"
+                                            if (modelData.id === kernel.versionManager.latestRelease) return I18n.tr("download.latestRelease")
+                                            if (modelData.id === kernel.versionManager.latestSnapshot) return I18n.tr("download.latestSnapshot")
                                             return ""
                                         }
                                         font.pixelSize: 11
@@ -366,7 +366,7 @@ Item {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "该分类暂无版本"
+                            text: I18n.tr("download.noVersions")
                             font.pixelSize: 14
                             color: palette.placeholderText
                             visible: !loading && filteredVersions.length === 0

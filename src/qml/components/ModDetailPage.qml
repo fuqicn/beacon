@@ -49,17 +49,17 @@ property var project: ({})
     }
 
     function releaseLabel(t) {
-        if (t === "release") return "正式"
+        if (t === "release") return I18n.tr("type.release")
         if (t === "beta") return "Beta"
         if (t === "alpha") return "Alpha"
         return t || ""
     }
 
     function depTypeLabel(t) {
-        if (t === "required") return "必需"
-        if (t === "optional") return "可选"
-        if (t === "incompatible") return "不兼容"
-        if (t === "embedded") return "内置"
+        if (t === "required") return I18n.tr("modDetail.required")
+        if (t === "optional") return I18n.tr("modDetail.optional")
+        if (t === "incompatible") return I18n.tr("modDetail.incompatible")
+        if (t === "embedded") return I18n.tr("modDetail.embedded")
         return t || ""
 }
 
@@ -138,7 +138,7 @@ function onVersionsLoaded(versions) {
                 spacing: 8
 
                 Button {
-                    text: "\u2190  返回"
+                    text: "\u2190  " + I18n.tr("modDetail.back")
                     flat: true
                     font.weight: Font.Normal
                     onClicked: {
@@ -157,7 +157,7 @@ function onVersionsLoaded(versions) {
                 }
 
                 Button {
-                    text: "在 Modrinth 打开"
+                    text: I18n.tr("modDetail.openInModrinth")
                     flat: true
                     font.weight: Font.Normal
                     onClicked: {
@@ -217,7 +217,7 @@ function onVersionsLoaded(versions) {
                         spacing: 2
                         Text {
                             Layout.fillWidth: true
-                            text: root.project.name || (root.projectLoaded ? root.projectId : "加载中...")
+                            text: root.project.name || (root.projectLoaded ? root.projectId : I18n.tr("modDetail.loading"))
                             font.pixelSize: 17
                             font.weight: Font.DemiBold
                             color: palette.text
@@ -251,7 +251,7 @@ function onVersionsLoaded(versions) {
                     spacing: 8
 
                     Text {
-                        text: "游戏版本:"
+                        text: I18n.tr("modDetail.gameVersion")
                         font.pixelSize: 13
                         color: palette.placeholderText
                     }
@@ -260,7 +260,7 @@ function onVersionsLoaded(versions) {
                         id: versionField
                         Layout.preferredWidth: 120
                         text: root.mcVersion
-                        placeholderText: "留空=所有"
+                        placeholderText: I18n.tr("modDetail.emptyAll")
                         font.pixelSize: 12
                         onTextEdited: {
                             root.mcVersion = text.trim()
@@ -271,7 +271,7 @@ function onVersionsLoaded(versions) {
                     }
 
                     Text {
-                        text: "加载器: " + (root.loader || "全部")
+                        text: I18n.tr("modDetail.loaderPrefix") + (root.loader || I18n.tr("modDetail.allLoaders"))
                         font.pixelSize: 13
                         color: palette.placeholderText
                     }
@@ -281,7 +281,7 @@ function onVersionsLoaded(versions) {
 
                 // Version files
                 Text {
-                    text: "版本文件"
+                    text: I18n.tr("modDetail.versionFiles")
                     font.pixelSize: 13
                     font.weight: Font.Medium
                     color: palette.placeholderText
@@ -389,7 +389,7 @@ Rectangle {
                                             Layout.fillWidth: true
                                             text: ver ? root.releaseLabel(ver.releaseType) +
                                                   (ver.releaseDate ? "   |   " + ver.releaseDate.slice(0, 10) : "") +
-                                                  "   |   " + root.formatCount(ver.downloadCount || 0) + " 下载" : ""
+                                                  "   |   " + root.formatCount(ver.downloadCount || 0) + I18n.tr("modDetail.downloads") : ""
                                             font.pixelSize: 10
                                             color: palette.placeholderText
                                             elide: Text.ElideRight
@@ -427,7 +427,7 @@ Rectangle {
                         Text {
                             anchors.centerIn: parent
                             visible: !root.versionsLoading && root.versions.length === 0
-                            text: "该加载器/版本下暂无可用文件"
+                            text: I18n.tr("modDetail.noVersions")
                             font.pixelSize: 12
                             color: palette.placeholderText
                         }
@@ -436,7 +436,7 @@ Rectangle {
 
                 // Dependencies of selected file
                 Text {
-                    text: "前置依赖"
+                    text: I18n.tr("modDetail.dependencies")
                     font.pixelSize: 13
                     font.weight: Font.Medium
                     color: palette.placeholderText
@@ -465,7 +465,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: (root.depNames[modelData.projectId] || "加载中...") +
+                                    text: (root.depNames[modelData.projectId] || I18n.tr("modDetail.loading")") +
                                           (modelData.fileName ? "   (" + modelData.fileName + ")" : "")
                                     font.pixelSize: 13
                                     color: palette.text

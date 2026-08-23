@@ -52,8 +52,8 @@ Item {
                 model: [
                     { name: I18n.tr("tools.modSearch"), desc: I18n.tr("tools.modSearchDesc"), icon: "magnifying-glass", page: 1, sub: "" },
                     { name: I18n.tr("tools.javaManage"), desc: I18n.tr("tools.javaManageDesc"), icon: "coffee", page: 1, sub: "" },
-                    { name: I18n.tr("tools.fileManage"), desc: I18n.tr("tools.fileManageDesc"), icon: "folder", page: 7, sub: "文件管理" },
-                    { name: I18n.tr("tools.logView"), desc: I18n.tr("tools.logViewDesc"), icon: "file-lines", page: 6, sub: "日志查看" }
+                    { name: I18n.tr("tools.fileManage"), desc: I18n.tr("tools.fileManageDesc"), icon: "folder", page: 7, sub: I18n.tr("tools.fileSub") },
+                    { name: I18n.tr("tools.logView"), desc: I18n.tr("tools.logViewDesc"), icon: "file-lines", page: 6, sub: I18n.tr("tools.logSub") }
                 ]
 
                 Frame {

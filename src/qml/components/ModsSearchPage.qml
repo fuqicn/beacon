@@ -123,7 +123,7 @@ property var stackView: null
                 id: loaderCombo
                 font.weight: Font.Medium
                 model: ListModel {
-                    ListElement { text: I18n.tr("modSearch.all"), key: "" }
+                    ListElement { text: "所有"; key: "" }
                     ListElement { text: "Fabric"; key: "fabric" }
                     ListElement { text: "Forge"; key: "forge" }
                     ListElement { text: "NeoForge"; key: "neoforge" }

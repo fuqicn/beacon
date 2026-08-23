@@ -465,7 +465,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: (root.depNames[modelData.projectId] || I18n.tr("modDetail.loading")") +
+                                    text: (root.depNames[modelData.projectId] || I18n.tr("modDetail.loading")) +
                                           (modelData.fileName ? "   (" + modelData.fileName + ")" : "")
                                     font.pixelSize: 13
                                     color: palette.text

@@ -353,7 +353,7 @@ Item {
                             editable: true
                             value: root.readInstanceSetting("launch/resolutionW", 0)
                             onValueModified: root.writeInstanceSetting("launch/resolutionW", value)
-                            textFromValue: function(v, locale) { return v === 0 ? I18n.tr("instance.resWidthLabel") + ":" + (v === 0 ? I18n.tr("instance.default") : String(v)) }
+                            textFromValue: function(v, locale) { if (v === 0) return I18n.tr("instance.default"); return I18n.tr("instance.resWidthLabel") + ":" + String(v) }
                             valueFromText: function(t, locale) { var n = parseInt(t); return isNaN(n) ? 0 : n }
                         }
 
@@ -363,7 +363,7 @@ Item {
                             editable: true
                             value: root.readInstanceSetting("launch/resolutionH", 0)
                             onValueModified: root.writeInstanceSetting("launch/resolutionH", value)
-                            textFromValue: function(v, locale) { return v === 0 ? I18n.tr("instance.resHeightLabel") + ":" + (v === 0 ? I18n.tr("instance.default") : String(v)) }
+                            textFromValue: function(v, locale) { if (v === 0) return I18n.tr("instance.default"); return I18n.tr("instance.resHeightLabel") + ":" + String(v) }
                             valueFromText: function(t, locale) { var n = parseInt(t); return isNaN(n) ? 0 : n }
                         }
                     }
@@ -715,7 +715,7 @@ Item {
             }
 
             Text {
-                I18n.tr("instance.deleteConfirmFull").replace("%1", instanceData.id || "")
+                text: I18n.tr("instance.deleteConfirmFull").replace("%1", instanceData.id || "")
                 font.pixelSize: 13
                 color: palette.placeholderText
                 wrapMode: Text.WordWrap

@@ -533,9 +533,6 @@ def build_linux(args, version, build_dir, qt_dir):
     qt_plugin = download(QT_PLUGIN_URL, tools_dir / "linuxdeploy-plugin-qt", args.proxy)
     appimagetool = download(APPIMAGETOOL_URL, tools_dir / "appimagetool", args.proxy)
 
-    # Patch linuxdeploy's embedded strip to handle Fedora 44's .relr.dyn
-    linuxdeploy = patch_linuxdeploy_strip(tools_dir)
-
     runtime = None
     if args.runtime:
         runtime = Path(args.runtime)
@@ -544,27 +541,6 @@ def build_linux(args, version, build_dir, qt_dir):
         log("using runtime file: %s" % runtime)
     else:
         runtime = download(RUNTIME_URL, tools_dir / "runtime", args.proxy)
-
-    log("--- Running linuxdeploy (bundle shared libraries) ---")
-    run([str(linuxdeploy), "--appdir", str(app_appdir)],
-        cwd=work,
-        env={"APPIMAGE_EXTRACT_AND_RUN": "1", "SKIP_UPDATEINFO": "1",
-             "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
-
-    log("--- Running linuxdeploy-plugin-qt (bundle Qt plugins/QML) ---")
-    run([str(qt_plugin), "--appdir", str(app_appdir),
-         "--exclude-library", "libqtiff.so",
-         "--exclude-library", "libtiff.so*"],
-        cwd=work,
-        env={"QMAKE": str(qt_dir / "bin" / "qmake"), "APPIMAGE_EXTRACT_AND_RUN": "1",
-             "SKIP_UPDATEINFO": "1", "UPDATE_DESKTOP_DATABASE": "/bin/true",
-             "gtk_update_icon_cache": "/bin/true"})
-
-    log("--- Installing AppRun ---")
-    apprun = app_appdir / "AppRun"
-    shutil.copy2(script_dir / "apprun.sh", apprun)
-    os.chmod(apprun, 0o755)
 
     log("--- Building beacon-app.AppImage ---")
     payload_img = work / "beacon-app.AppImage"

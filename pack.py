@@ -287,11 +287,12 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
-def bundle_dependencies(appdir_path):
+def bundle_dependencies(appdir_path, qt_lib_dir=None):
     """Copy all shared library dependencies into the AppDir.
 
     Uses ldd to find dependencies, copies them to usr/lib, and sets rpath
-    so the binary can find them at runtime.
+    so the binary can find them at runtime. For Qt, copies the entire Qt lib
+    directory to ensure versioned symlinks are complete.
     """
     import shutil as sh
     import subprocess as sp
@@ -303,7 +304,34 @@ def bundle_dependencies(appdir_path):
 
     log("bundling dependencies for %s" % binary)
 
-    # Use ldd to find all shared library dependencies
+    lib_dir = appdir_path / "usr" / "lib"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+
+    # If we have a Qt lib directory, copy the entire Qt libs
+    if qt_lib_dir and Path(qt_lib_dir).exists():
+        log("copying entire Qt library tree from %s" % qt_lib_dir)
+        # Copy all .so files and symlinks
+        for src_file in Path(qt_lib_dir).rglob("*.so*"):
+            if src_file.is_file():
+                dst = lib_dir / src_file.name
+                if not dst.exists():
+                    try:
+                        sh.copy2(src_file, dst)
+                    except Exception as e:
+                        log("WARNING: failed to copy %s: %s" % (src_file.name, e))
+        log("copied Qt libraries from %s" % qt_lib_dir)
+        # Set rpath
+        patchelf = sh.which("patchelf")
+        if patchelf:
+            try:
+                sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(binary)],
+                       capture_output=True, check=True)
+                log("set rpath to $ORIGIN/../lib")
+            except Exception as e:
+                log("WARNING: patchelf failed: %s" % e)
+        return
+
+    # Fallback: use ldd to find dependencies
     try:
         result = sp.run(["ldd", str(binary)], capture_output=True, text=True)
         if result.returncode != 0:
@@ -313,15 +341,11 @@ def bundle_dependencies(appdir_path):
         log("WARNING: ldd execution failed: %s" % e)
         return
 
-    lib_dir = appdir_path / "usr" / "lib"
-    lib_dir.mkdir(parents=True, exist_ok=True)
-
     copied = []
     for line in result.stdout.splitlines():
         line = line.strip()
         if not line:
             continue
-        # Parse ldd output
         lib_path = None
         parts = line.split()
         if len(parts) >= 3 and parts[1] == "=>":
@@ -341,7 +365,7 @@ def bundle_dependencies(appdir_path):
         except Exception:
             real_src = src
 
-        # Copy the library and all symlinks in the chain
+        # Copy the library
         dst = lib_dir / real_src.name
         if not dst.exists():
             try:
@@ -349,17 +373,6 @@ def bundle_dependencies(appdir_path):
                 copied.append(real_src.name)
             except Exception as e:
                 log("WARNING: failed to copy %s: %s" % (real_src.name, e))
-
-        # Also copy any symlinks pointing to this library
-        if real_src.is_symlink() or src.is_symlink():
-            try:
-                link_target = os.readlink(real_src if real_src.is_symlink() else src)
-                symlink_name = real_src.name if real_src.is_symlink() else src.name
-                dst_symlink = lib_dir / symlink_name
-                if not dst_symlink.exists():
-                    os.symlink(link_target, dst_symlink)
-            except Exception:
-                pass
 
     log("copied %d libraries" % len(copied))
 
@@ -646,7 +659,9 @@ Categories=Game;
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
     # Bundle all shared library dependencies
-    bundle_dependencies(tmp_appdir)
+    # Pass Qt lib directory to ensure complete versioned symlinks are copied
+    qt_lib_dir = qt_dir / "lib" if qt_dir else None
+    bundle_dependencies(tmp_appdir, qt_lib_dir)
     # Download runtime if needed
     runtime = None
     if args.runtime:

@@ -287,6 +287,93 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
+def bundle_dependencies(appdir_path):
+    """Copy all shared library dependencies into the AppDir.
+
+    Uses ldd to find dependencies, copies them to usr/lib, and sets rpath
+    so the binary can find them at runtime.
+    """
+    import shutil as sh
+    import subprocess as sp
+
+    binary = appdir_path / "usr" / "bin" / "Beacon"
+    if not binary.exists():
+        log("WARNING: Beacon binary not found, skipping dependency bundling")
+        return
+
+    log("bundling dependencies for %s" % binary)
+
+    # Use ldd to find all shared library dependencies
+    try:
+        result = sp.run(["ldd", str(binary)], capture_output=True, text=True)
+        if result.returncode != 0:
+            log("WARNING: ldd failed: %s" % result.stderr[:200])
+            return
+    except Exception as e:
+        log("WARNING: ldd execution failed: %s" % e)
+        return
+
+    lib_dir = appdir_path / "usr" / "lib"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Parse: "libname.so.1 => /path/to/lib (0x...)" or "/path/to/lib (0x...)"
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == "=>":
+            lib_path = parts[2]
+        elif len(parts) >= 1 and parts[0].endswith(".so*"):
+            lib_path = parts[0]
+        else:
+            continue
+
+        # Skip if it's a system path (not needed since we're bundling)
+        # Actually, we should copy ALL dependencies
+        if not lib_path or lib_path == "(null)":
+            continue
+
+        src = Path(lib_path)
+        if not src.exists():
+            continue
+
+        # Find the real path (handle symlinks)
+        try:
+            real_src = src.resolve()
+        except Exception:
+            real_src = src
+
+        # Copy the library and any symlinks
+        dst = lib_dir / real_src.name
+        if not dst.exists():
+            try:
+                sh.copy2(real_src, dst)
+                copied.append(real_src.name)
+                # Also copy symlinks
+                if real_src.is_symlink():
+                    link_target = os.readlink(real_src)
+                    # Create symlink in dest
+                    if dst.is_symlink():
+                        dst.unlink()
+                    os.symlink(link_target, dst)
+            except Exception as e:
+                log("WARNING: failed to copy %s: %s" % (real_src.name, e))
+
+    log("copied %d libraries" % len(copied))
+
+    # Set rpath using patchelf if available
+    patchelf = sh.which("patchelf")
+    if patchelf:
+        try:
+            sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(binary)],
+                   capture_output=True, check=True)
+            log("set rpath to $ORIGIN/../lib")
+        except Exception as e:
+            log("WARNING: patchelf failed: %s" % e)
+
+
 def patch_linuxdeploy_strip(tools_dir):
     """Replace linuxdeploy's bundled strip with system strip.
 
@@ -543,6 +630,8 @@ Categories=Game;
     tmp_appdir = tmp_work / "appdir"
     tmp_payload = tmp_work / "beacon-app.AppImage"
     shutil.copytree(app_appdir, tmp_appdir, dirs_exist_ok=True)
+    # Bundle all shared library dependencies
+    bundle_dependencies(tmp_appdir)
     # Download runtime if needed
     runtime = None
     if args.runtime:

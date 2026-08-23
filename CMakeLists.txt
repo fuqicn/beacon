@@ -195,11 +195,6 @@ add_custom_command(TARGET Beacon POST_BUILD
 )
 
 # ---- Install rules (Linux/macOS packaging) ----
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    # Enable static linking for self-contained binary on Linux
-    target_link_options(Beacon PRIVATE "-static")
-endif()
-
 install(TARGETS Beacon
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     BUNDLE DESTINATION .

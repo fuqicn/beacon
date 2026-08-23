@@ -288,35 +288,35 @@ def download(url, dest, proxy):
 
 
 def patch_rpaths(appdir_path):
-    """Set rpath to $ORIGIN/../lib on all ELF binaries in an AppDir.
+    """Set rpath to $ORIGIN/../lib on executables in usr/bin.
 
     This replaces the rpath-setting step that linuxdeploy used to do.
-    Without this, bundled Qt libraries won't be found at runtime.
+    Only patch the main executable, not plugins or system libraries.
     """
     import subprocess as sp
     patchelf = shutil.which("patchelf")
     if not patchelf:
         log("WARNING: patchelf not found, skipping rpath patching")
         return
-    log("patching rpaths in %s" % appdir_path)
-    for root, dirs, files in os.walk(appdir_path):
-        for f in files:
-            fpath = Path(root) / f
-            if not fpath.is_file():
+    # Only patch executables in usr/bin
+    bin_dir = Path(appdir_path) / "usr" / "bin"
+    if not bin_dir.exists():
+        log("WARNING: usr/bin not found, skipping rpath patching")
+        return
+    log("patching rpaths in %s" % bin_dir)
+    for f in bin_dir.iterdir():
+        if not f.is_file():
+            continue
+        try:
+            with open(f, 'rb') as fh:
+                magic = fh.read(4)
+            if magic != b'\x7fELF':
                 continue
-            # Check if it's an ELF file
-            try:
-                with open(fpath, 'rb') as fh:
-                    magic = fh.read(4)
-                if magic != b'\x7fELF':
-                    continue
-            except Exception:
-                continue
-            try:
-                sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(fpath)],
-                       capture_output=True, check=True)
-            except Exception as e:
-                log("WARNING: patchelf failed for %s: %s" % (fpath.name, e))
+            sp.run([patchelf, "--set-rpath", "$ORIGIN/../lib", str(f)],
+                   capture_output=True, check=True)
+            log("patched: %s" % f.name)
+        except Exception as e:
+            log("WARNING: patchelf failed for %s: %s" % (f.name, e))
 
 
 def patch_linuxdeploy_strip(tools_dir):

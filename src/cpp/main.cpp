@@ -543,11 +543,20 @@ static QString resolveLauncherDir()
     }
 #ifdef Q_OS_WIN
     QString exeDir = QCoreApplication::applicationDirPath();
-    // If running from .../x1/beacon/, use .../x1/game/ for persistent data.
+    // Beacon.exe lives inside a "beacon" subdir (e.g. .../x1/beacon/Beacon.exe).
+    // Persistent user data (auth, .minecraft, cache, .runtime) goes to the
+    // sibling "game/" directory so it survives launcher updates.
     QFileInfo exeInfo(exeDir);
     if (exeInfo.dir().dirName() == QLatin1String("beacon")) {
         QString gameDir = exeInfo.dir().path() + QLatin1String("/..")
                         + QLatin1String("/game");
+        QDir().mkpath(gameDir);
+        return gameDir;
+    }
+    // Launcher exe is directly in the project/dist root (next to a sibling
+    // "game" directory created by the packager or on first extraction).
+    {
+        QString gameDir = exeDir + QLatin1String("/game");
         QDir().mkpath(gameDir);
         return gameDir;
     }
@@ -581,7 +590,7 @@ int main(int argc, char *argv[])
     if (downloadJavaVersion > 0) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.2");
+        app.setApplicationVersion("1.0.1");
         (void)QLocale::system(); // init system locale before worker threads start
 
         // Log to file for capture
@@ -631,7 +640,7 @@ int main(int argc, char *argv[])
     if (!downloadVersionId.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.2");
+        app.setApplicationVersion("1.0.1");
         (void)QLocale::system(); // init system locale before worker threads start
 
         // Log to file for capture
@@ -683,7 +692,7 @@ int main(int argc, char *argv[])
     if (testMod) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.2");
+        app.setApplicationVersion("1.0.1");
         (void)QLocale::system(); // init system locale before worker threads start
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/mod-test.log").toUtf8().constData());
@@ -825,7 +834,7 @@ KernelBridge::shutdown();
     if (!testDlUrl.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.2");
+        app.setApplicationVersion("1.0.1");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
@@ -900,7 +909,7 @@ KernelBridge::shutdown();
     if (!testInstallUrl.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.2");
+        app.setApplicationVersion("1.0.1");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/install-test.log").toUtf8().constData());
@@ -977,7 +986,7 @@ KernelBridge::shutdown();
     if (!testBatchUrl.isEmpty() && testBatchCount > 0) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.2");
+        app.setApplicationVersion("1.0.1");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
@@ -1080,7 +1089,7 @@ return 0;
     // compose properly and resizing the window leaves a stale, non-repainted
     // region (a fixed-size gray/white block that no longer matches the window).
     QQuickWindow::setDefaultAlphaBuffer(true);
-    app.setApplicationVersion("1.0.2");
+    app.setApplicationVersion("1.0.1");
     app.setOrganizationName("Beacon");
     (void)QLocale::system(); // init system locale before worker threads start
 

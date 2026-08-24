@@ -545,10 +545,10 @@ static QString resolveLauncherDir()
 #ifdef Q_OS_WIN
     // On Windows, persistent data goes to parent/game/ so it survives launcher
     // updates (beacon/ gets replaced, game/ is preserved).
-    QString gameDir = QFileInfo(QCoreApplication::applicationDirPath()).absolutePath()
-                      + QLatin1String("/game");
+    QString gameDir = QDir(QCoreApplication::applicationDirPath()).path()
+                      + QLatin1String("/../game");
     QDir().mkpath(gameDir);
-    return gameDir;
+    return QDir(gameDir).canonicalPath();
 #elif defined(Q_OS_LINUX)
     QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");
     QDir().mkpath(xdg);

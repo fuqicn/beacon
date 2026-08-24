@@ -43,6 +43,7 @@
 #include <QFile>
 #include <QDesktopServices>
 #include <QFileInfo>
+#include <QUrl>
 #include <QPixmapCache>
 #include <QCache>
 #include <QTimer>

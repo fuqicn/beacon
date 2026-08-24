@@ -365,55 +365,16 @@ def build_windows(args, version, build_dir, qt_dir):
 # ---------------------------------------------------------------- Linux -----
 
 def build_linux(args, version, build_dir, qt_dir):
-    """Build and package for Linux (tar.gz archive)."""
+    """Build and package for Linux (tar.gz + .deb + Arch)."""
     log("=== Building Beacon for Linux ===")
-    if not args.skip_build:
-        configure_and_build(args, build_dir, qt_dir)
-
-    dist = Path(args.dist_dir)
-    dist.mkdir(parents=True, exist_ok=True)
-
-    # Create staging directory
-    staging = Path(args.work_dir) / "linux-staging" / ("beacon-%s" % version)
-    if staging.exists():
-        shutil.rmtree(staging)
-    staging.mkdir(parents=True)
-
-    # Copy binary
-    binary = Path(build_dir) / "Beacon"
-    if not binary.exists():
-        raise PackError("Binary not found: %s" % binary)
-    shutil.copy2(binary, staging / "Beacon")
-    os.chmod(staging / "Beacon", 0o755)
-    log("copied Beacon -> staging/")
-
-    # Copy mirrors.json
-    mirrors_src = ROOT / "third_party" / "minecraft-launcher-kernel" / "mirrors.json"
-    if mirrors_src.exists():
-        shutil.copy2(mirrors_src, staging / "mirrors.json")
-        log("copied mirrors.json")
-
-    # Copy icon
-    svg_src = ROOT / "Untitled.svg"
-    if svg_src.exists():
-        shutil.copy2(svg_src, staging / "beacon.svg")
-        log("copied icon")
-
-    # Create desktop file
-    desktop = staging / "io.github.fuqicn.beacon.desktop"
-    desktop.write_text("""[Desktop Entry]
-Name=Beacon
-Exec=%(dir)s/Beacon
-Icon=%(dir)s/beacon.svg
-Type=Application
-Categories=Game;
-""" % {"dir": "."}, encoding="utf-8")
-
-    # Create tar.gz
-    tarball = dist / ("beacon-%s-linux.tar.gz" % version)
-    run(["tar", "czf", str(tarball), "-C", str(staging.parent), staging.name])
-    log("Linux tarball: %s (%d bytes)" % (tarball, tarball.stat().st_size))
-
+    # Delegate to pack_linux.py which handles tar.gz, .deb, and Arch packaging
+    linux_script = ROOT / "pack_linux.py"
+    if not linux_script.exists():
+        raise PackError("pack_linux.py not found")
+    cmd = [sys.executable, str(linux_script), "--version", version]
+    if args.skip_build:
+        cmd.append("--skip-build")
+    run(cmd)
     log("=== Linux build done ===")
 
 

@@ -274,5 +274,6 @@
   "downloadCard.failed": "Failed",
   "downloadCard.cancelled": "Cancelled",
   "instance.resWidthLabel": "W",
-  "instance.resHeightLabel": "H"
+  "instance.resHeightLabel": "H",
+  "download.cancel": "Cancel"
 }

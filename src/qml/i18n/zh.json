@@ -275,5 +275,6 @@
   "downloadCard.failed": "失败",
   "downloadCard.cancelled": "已取消",
   "instance.resWidthLabel": "宽",
-  "instance.resHeightLabel": "高"
+  "instance.resHeightLabel": "高",
+  "download.cancel": "取消"
 }

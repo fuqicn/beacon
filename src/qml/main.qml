@@ -44,8 +44,12 @@ ApplicationWindow {
     // Only override palette.highlight on styles that need it.
     // Fusion and Imagine already use correct highlights; forcing Theme.primary
     // on Fusion light mode makes ComboBox dropdown text invisible (white on white).
+    // Override highlight and highlightedText for styles that have wrong defaults.
+    // On Fusion/Imagine, forcing Theme.primary alone makes dropdown text invisible
+    // (white on white in light mode) because highlightedText stays the default.
     readonly property bool _forceHighlight: uiStyleName !== "fusion" && uiStyleName !== "imagine"
     palette.highlight: _forceHighlight ? Theme.primary : palette.highlight
+    palette.highlightedText: _forceHighlight ? Theme.onPrimary : palette.highlightedText
 
     onClosing: {
         close.accepted = true

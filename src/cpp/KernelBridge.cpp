@@ -53,6 +53,7 @@
 #include <QProcess>
 #include <QCoreApplication>
 #include <QGuiApplication>
+#include <QApplication>
 #include <QStyleHints>
 #include <thread>
 #include <QNetworkAccessManager>

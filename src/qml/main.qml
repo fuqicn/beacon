@@ -41,10 +41,10 @@ ApplicationWindow {
     // Quick Controls (Button/ComboBox/TabButton hover & selection, Fusion and
     // Windows styles) follow Theme.primary on platforms whose style palette
     // defaults to a wrong/white Highlight (Windows 10, GNOME/Linux).
-    // Force correct highlight colors: dark text on primary background in light mode,
+    // Force correct highlight colors: black text on primary background in light mode,
     // white text on primary background in dark mode.
     palette.highlight: Theme.primary
-    palette.highlightedText: kernel.highlightedTextColor
+    palette.highlightedText: kernel.windowColor().lightness() < 128 ? Qt.white : Qt.black
 
     onClosing: {
         close.accepted = true

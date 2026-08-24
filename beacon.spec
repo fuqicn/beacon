@@ -7,7 +7,7 @@ URL:            https://github.com/fuqicn/beacon
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  cmake
 BuildRequires:  gcc-c++
-BuildRequires:  ninja
+BuildRequires:  ninja-build
 # Qt6 dependencies
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtdeclarative-devel

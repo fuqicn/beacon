@@ -34,6 +34,7 @@
 #include <QThread>
 #include <QPointer>
 #include <QPalette>
+#include <QStyle>
 #include <QQuickWindow>
 #include <QQmlEngine>
 #include "WindowEffects.h"

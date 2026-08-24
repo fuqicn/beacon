@@ -539,20 +539,15 @@ static QString resolveLauncherDir()
     if (env && env[0]) {
         QString dir = QString::fromUtf8(env) + "/beacon";
         QDir().mkpath(dir);
+        mc_info("[Dir] env BEACON_LAUNCHER_DIR=%s -> %s", env, qPrintable(dir));
         return dir;
     }
 #ifdef Q_OS_WIN
-    QString exeDir = QCoreApplication::applicationDirPath();
-    // Beacon.exe lives inside a "beacon" subdir (e.g. dist/beacon/Beacon.exe).
-    // Persistent user data (auth, .minecraft, cache, .runtime) goes to the
-    // sibling "game/" directory so it survives launcher updates.
-    QFileInfo exeInfo(exeDir);
-    if (exeInfo.dir().dirName() == QLatin1String("beacon")) {
-        QString gameDir = exeInfo.dir().path() + QLatin1String("/game");
-        QDir().mkpath(gameDir);
-        return gameDir;
-    }
-    return exeDir;
+    // On Windows, persistent data goes to parent/game/ so it survives launcher
+    // updates (beacon/ gets replaced, game/ is preserved).
+    QString gameDir = QDir(QCoreApplication::applicationDirPath() + "/../game").canonicalPath();
+    QDir().mkpath(gameDir);
+    return gameDir;
 #elif defined(Q_OS_LINUX)
     QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");
     QDir().mkpath(xdg);

@@ -543,20 +543,13 @@ static QString resolveLauncherDir()
     }
 #ifdef Q_OS_WIN
     QString exeDir = QCoreApplication::applicationDirPath();
-    // Beacon.exe lives inside a "beacon" subdir (e.g. .../x1/beacon/Beacon.exe).
+    // Beacon.exe lives inside a "beacon" subdir (e.g. dist/beacon/Beacon.exe).
     // Persistent user data (auth, .minecraft, cache, .runtime) goes to the
     // sibling "game/" directory so it survives launcher updates.
     QFileInfo exeInfo(exeDir);
     if (exeInfo.dir().dirName() == QLatin1String("beacon")) {
         QString gameDir = exeInfo.dir().path() + QLatin1String("/..")
                         + QLatin1String("/game");
-        QDir().mkpath(gameDir);
-        return gameDir;
-    }
-    // Launcher exe is directly in the project/dist root (next to a sibling
-    // "game" directory created by the packager or on first extraction).
-    {
-        QString gameDir = exeDir + QLatin1String("/game");
         QDir().mkpath(gameDir);
         return gameDir;
     }

@@ -41,6 +41,7 @@
 #include <QThreadPool>
 #include <QVector>
 #include <QFile>
+#include <QDesktopServices>
 #include <QFileInfo>
 #include <QPixmapCache>
 #include <QCache>

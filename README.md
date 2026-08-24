@@ -30,6 +30,12 @@ cmake -B build -S .
 cmake --build build --target Beacon
 ```
 
+Or
+
+```bash
+python pack.py
+```
+
 The launcher kernel is bundled in `third_party/minecraft-launcher-kernel`.
 
 ## License

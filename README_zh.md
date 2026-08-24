@@ -28,6 +28,11 @@ cmake -B build -S .
 cmake --build build --target Beacon
 ```
 
+或者
+
+```bash
+python pack.py
+```
 启动器内核已随仓库打包在 `third_party/minecraft-launcher-kernel`。
 
 ## 许可证

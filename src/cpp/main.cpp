@@ -527,7 +527,10 @@ private:
 // Resolve the persistent launcher data directory.
 // In AppImage mode BEACON_LAUNCHER_DIR is set by the GTK launcher (beacon_gtk.c)
 // to the directory containing the .AppImage file; data lives in <that>/beacon/.
-// Outside AppImage, fall back to the directory containing the executable.
+// Outside AppImage:
+//   Windows: if the exe is inside a "beacon" subdir, store data in the sibling
+//             "game" directory (parent/game/) so user data survives launcher updates.
+//   Linux:   use the XDG user data directory (~/.local/share/beacon-launcher).
 static QString resolveLauncherDir()
 {
     const char *env = getenv("BEACON_LAUNCHER_DIR");
@@ -536,7 +539,24 @@ static QString resolveLauncherDir()
         QDir().mkpath(dir);
         return dir;
     }
+#ifdef Q_OS_WIN
+    QString exeDir = QCoreApplication::applicationDirPath();
+    // If running from .../x1/beacon/, use .../x1/game/ for persistent data.
+    QFileInfo exeInfo(exeDir);
+    if (exeInfo.dir().dirName() == QLatin1String("beacon")) {
+        QString gameDir = exeInfo.dir().path() + QLatin1String("/..")
+                        + QLatin1String("/game");
+        QDir().mkpath(gameDir);
+        return gameDir;
+    }
+    return exeDir;
+#elif defined(Q_OS_LINUX)
+    QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");
+    QDir().mkpath(xdg);
+    return xdg;
+#else
     return QCoreApplication::applicationDirPath();
+#endif
 }
 
 int main(int argc, char *argv[])

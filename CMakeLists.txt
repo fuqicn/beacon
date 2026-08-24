@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Beacon VERSION 1.0.1 LANGUAGES CXX)
+project(Beacon VERSION 1.0.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -156,6 +156,7 @@ set(QML_SOURCES
     src/qml/components/ModpackDetailPage.qml
     src/qml/components/ModpackInstallDialog.qml
     src/qml/components/OverlayScrollBar.qml
+    src/qml/components/UpdateDialog.qml
 )
 
 # Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged

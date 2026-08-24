@@ -80,7 +80,7 @@ def resolve_version(args):
     if args.version:
         return args.version
     m = re.search(r"project\(\s*Beacon\s+VERSION\s+([^\s)]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
-    return m.group(1) if m else "1.0.1"
+    return m.group(1) if m else "1.0.2"
 
 
 def _clean_cache_value(value):
@@ -410,7 +410,21 @@ Categories=Game;
 """ % {"dir": "."}, encoding="utf-8")
 
     # Create tar.gz
-    tarball = dist / ("beacon-%s-linux.tar.gz" % version)
+    # Detect package type for appropriate output format
+    pkg_type = None
+    for c in ("dpkg", "rpm", "pacman"):
+        if shutil.which(c):
+            pkg_type = {"dpkg": "deb", "rpm": "rpm", "pacman": "arch"}[c]
+            break
+
+    if pkg_type == "deb":
+        tarball = dist / ("BeaconLauncher-deb.deb")
+    elif pkg_type == "rpm":
+        tarball = dist / ("BeaconLauncher-redhat.rpm")
+    elif pkg_type == "arch":
+        tarball = dist / ("BeaconLauncher-arch.pkg.tar.zst")
+    else:
+        tarball = dist / ("BeaconLauncher-%s-linux.tar.gz" % version)
     run(["tar", "czf", str(tarball), "-C", str(staging.parent), staging.name])
     log("Linux tarball: %s (%d bytes)" % (tarball, tarball.stat().st_size))
 

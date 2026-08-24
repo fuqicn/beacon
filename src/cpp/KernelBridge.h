@@ -116,6 +116,21 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     QColor lightColor() const;
     QColor darkColor() const;
     QColor shadowColor() const;
+    // Version management (used by auto-update)
+    Q_INVOKABLE QString readVersion() const;
+    Q_INVOKABLE void writeVersion(const QString &version);
+    Q_INVOKABLE void checkForUpdate();
+    Q_INVOKABLE void downloadUpdate();
+    Q_INVOKABLE void cancelUpdate();
+
+    Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
+    Q_PROPERTY(bool checkingUpdate READ checkingUpdate NOTIFY checkingUpdateChanged)
+    Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
+    Q_PROPERTY(QString updateDownloadProgress READ updateDownloadProgress NOTIFY updateDownloadProgressChanged)
+    bool updateAvailable() const { return m_updateAvailable; }
+    bool checkingUpdate() const { return m_checkingUpdate; }
+    QString latestVersion() const { return m_latestVersion; }
+    QString updateDownloadProgress() const { return m_updateDownloadProgress; }
     Q_INVOKABLE void launchGame(int memory = 4096);
     Q_INVOKABLE void cancelLaunch();
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());
@@ -136,6 +151,8 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE int getRequiredJavaVersion() const;
     Q_INVOKABLE bool isAnyMinecraftRunning() const;
     Q_INVOKABLE void killAllMinecraft();
+    // Auto-update helpers
+    Q_INVOKABLE QString detectLinuxPackageType() const;
     Q_INVOKABLE void qmlCollectGarbage();
 
     // Log viewer helpers
@@ -153,6 +170,10 @@ signals:
     void javaDownloadingChanged();
     void minecraftRunningChanged();
     void paletteChanged();
+    void updateAvailableChanged();
+    void checkingUpdateChanged();
+    void latestVersionChanged();
+    void updateDownloadProgressChanged();
 
 private:
     void doAuthAndLaunch();
@@ -183,6 +204,11 @@ private:
     InstanceManager *m_instanceManager = nullptr;
     SettingsManager *m_settingsManager = nullptr;
     SkinManager *m_skinManager = nullptr;
+
+    bool m_updateAvailable = false;
+    bool m_checkingUpdate = false;
+    QString m_latestVersion;
+    QString m_updateDownloadProgress;
 };
 
 #endif

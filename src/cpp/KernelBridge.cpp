@@ -54,6 +54,13 @@
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <thread>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QUrl>
+#include <QRegularExpression>
 #include <mc_log.h>
 #include <mc_i18n.h>
 #include <mc_path.h>
@@ -242,6 +249,220 @@ void KernelBridge::shutdown()
 
     mc_qt_download_cleanup();
     mc_info("[Bridge] Shutdown complete");
+}
+
+void KernelBridge::writeVersion(const QString &version)
+{
+    QString path = s_launcherDir + "/version.txt";
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        f.write((version + "\n").toUtf8());
+    mc_info("[Update] wrote version: %s", version.toUtf8().constData());
+}
+
+QString KernelBridge::readVersion() const
+{
+    QString path = s_launcherDir + "/version.txt";
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+    QByteArray raw = f.readAll().trimmed();
+    f.close();
+    return QString::fromUtf8(raw);
+}
+
+QString KernelBridge::detectLinuxPackageType() const
+{
+    QFile f("/etc/os-release");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QByteArray data = f.readAll();
+        f.close();
+        QString os_content = QString::fromUtf8(data);
+        if (os_content.contains("ubuntu") || os_content.contains("debian") || os_content.contains("pop"))
+            return "deb";
+        if (os_content.contains("fedora") || os_content.contains("rhel") || os_content.contains("centos")
+            || os_content.contains("redhat") || os_content.contains("rhcos"))
+            return "rpm";
+    }
+    QProcess proc;
+    proc.start("uname", QStringList() << "-s");
+    proc.waitForFinished(2000);
+    QString sys = proc.readAllStandardOutput().trimmed().toLower();
+    if (sys == "linux") {
+        proc.start("which", QStringList() << "dpkg");
+        proc.waitForFinished(1000);
+        if (proc.exitCode() == 0) return "deb";
+        proc.start("which", QStringList() << "rpm");
+        proc.waitForFinished(1000);
+        if (proc.exitCode() == 0) return "rpm";
+        proc.start("which", QStringList() << "pacman");
+        proc.waitForFinished(1000);
+        if (proc.exitCode() == 0) return "arch";
+    }
+    return QString();
+}
+
+void KernelBridge::cancelUpdate()
+{
+    m_updateAvailable = false;
+    m_checkingUpdate = false;
+    emit checkingUpdateChanged();
+    emit updateAvailableChanged();
+}
+
+void KernelBridge::checkForUpdate()
+{
+    if (m_checkingUpdate) return;
+    m_checkingUpdate = true;
+    emit checkingUpdateChanged();
+
+    QString curVer = readVersion();
+    if (curVer.startsWith("v")) curVer = curVer.mid(1);
+    if (curVer.isEmpty()) {
+        m_checkingUpdate = false;
+        emit checkingUpdateChanged();
+        return;
+    }
+
+    auto checkDone = [this, curVer](const QString &newVer) {
+        m_checkingUpdate = false;
+        emit checkingUpdateChanged();
+        if (!newVer.isEmpty() && newVer != curVer) {
+            m_latestVersion = newVer;
+            m_updateAvailable = true;
+            emit latestVersionChanged();
+            emit updateAvailableChanged();
+        }
+    };
+
+    QNetworkAccessManager *nm = new QNetworkAccessManager(this);
+    QNetworkRequest req(QUrl("https://api.github.com/repos/fuqicn/beacon/releases/latest"));
+    req.setRawHeader("Accept", "application/vnd.github.v3+json");
+    req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+
+    auto *reply = nm->get(req);
+    QPointer<KernelBridge> guard(this);
+    connect(reply, &QNetworkReply::finished, this, [reply, nm, guard, curVer, checkDone]() {
+        if (!guard) { delete reply; delete nm; return; }
+        QString newVer;
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray data = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(data);
+            QString tag = doc.object().value("tag_name").toString();
+            if (tag.startsWith("v")) tag = tag.mid(1);
+            newVer = tag;
+        }
+        delete reply;
+
+        // Fallback via gh-proxy
+        if (newVer.isEmpty()) {
+            QNetworkRequest req2(QUrl("https://gh-proxy.com/https://api.github.com/repos/fuqicn/beacon/releases/latest"));
+            req2.setRawHeader("Accept", "application/vnd.github.v3+json");
+            req2.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+            auto *reply2 = nm->get(req2);
+            connect(reply2, &QNetworkReply::finished, guard.data(), [reply2, nm, curVer, checkDone]() {
+                if (reply2->error() == QNetworkReply::NoError) {
+                    QByteArray data = reply2->readAll();
+                    QString tag = QJsonDocument::fromJson(data).object().value("tag_name").toString();
+                    if (tag.startsWith("v")) tag = tag.mid(1);
+                    checkDone(tag);
+                } else {
+                    checkDone(QString());
+                }
+                delete reply2;
+                delete nm;
+            });
+            return;
+        }
+        checkDone(newVer);
+        delete nm;
+    });
+
+void KernelBridge::downloadUpdate()
+{
+    if (!m_updateAvailable) return;
+    m_updateDownloadProgress = "Downloading...";
+    emit updateDownloadProgressChanged();
+
+    QString ver = m_latestVersion.startsWith("v") ? m_latestVersion.mid(1) : m_latestVersion;
+    QString curVer = readVersion();
+    if (curVer.startsWith("v")) curVer = curVer.mid(1);
+
+#ifdef Q_OS_WIN
+    // Download self-extracting launcher exe
+    QString url = "https://github.com/fuqicn/beacon/releases/download/v" + ver
+                  + "/BeaconLauncher-windows-amd64.exe";
+    QString dest = QCoreApplication::applicationFilePath();
+#elif defined(Q_OS_LINUX)
+    // Detect package type and download appropriate package
+    QString url = "https://github.com/fuqicn/beacon/releases/download/v" + ver;
+    QString pkgType = detectLinuxPackageType();
+    if (pkgType.isEmpty()) {
+        m_updateDownloadProgress = "";
+        emit updateDownloadProgressChanged();
+        return;
+    }
+    url += "/BeaconLauncher-" + pkgType + "." + (pkgType == "deb" ? "deb"
+                      : (pkgType == "rpm" ? "rpm" : "pkg.tar.zst"));
+    QString dest = s_launcherDir + "/.update_pkg";
+#else
+    m_updateDownloadProgress = "";
+    emit updateDownloadProgressChanged();
+    return;
+#endif
+
+    QNetworkAccessManager *nm = new QNetworkAccessManager(this);
+    QNetworkRequest req(url);
+    req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+
+    auto *reply = nm->get(req);
+    QPointer<KernelBridge> guard(this);
+    connect(reply, &QNetworkReply::finished, this, [reply, nm, guard, ver, dest]() {
+        if (!guard) { delete reply; delete nm; return; }
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray data = reply->readAll();
+            QFile f(dest);
+            if (f.open(QIODevice::WriteOnly)) {
+                f.write(data);
+                f.close();
+                writeVersion("v" + ver);  // Write new version for Windows exe replacement
+#ifdef Q_OS_WIN
+                // On Windows, we replace the exe directly; next launch self-extracts
+                mc_info("[Update] downloaded update to %s", dest.toUtf8().constData());
+#else
+                mc_info("[Update] downloaded package to %s", dest.toUtf8().constData());
+#endif
+                guard->m_updateAvailable = false;
+                emit guard->updateAvailableChanged();
+            }
+        } else {
+            mc_error("[Update] download failed: %s", reply->errorString().toUtf8().constData());
+            // Fallback via gh-proxy
+            QString fallbackUrl = "https://gh-proxy.com/" + url;
+            QNetworkRequest req2(fallbackUrl);
+            req2.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+            auto *reply2 = nm->get(req2);
+            connect(reply2, &QNetworkReply::finished, guard.data(), [reply2, nm, ver, dest]() {
+                if (reply2->error() == QNetworkReply::NoError) {
+                    QByteArray data = reply2->readAll();
+                    QFile f(dest);
+                    if (f.open(QIODevice::WriteOnly)) {
+                        f.write(data);
+                        f.close();
+                        writeVersion("v" + ver);
+                        mc_info("[Update] downloaded via proxy to %s", dest.toUtf8().constData());
+                    }
+                }
+                delete reply2;
+                delete nm;
+            });
+        }
+        guard->m_updateDownloadProgress = "";
+        emit guard->updateDownloadProgressChanged();
+        delete reply;
+    });
+}
+
 }
 
 KernelBridge::KernelBridge(QObject *parent) : QObject(parent) {}

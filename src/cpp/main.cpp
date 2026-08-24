@@ -579,7 +579,7 @@ int main(int argc, char *argv[])
     if (downloadJavaVersion > 0) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system(); // init system locale before worker threads start
 
         // Log to file for capture
@@ -629,7 +629,7 @@ int main(int argc, char *argv[])
     if (!downloadVersionId.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system(); // init system locale before worker threads start
 
         // Log to file for capture
@@ -681,7 +681,7 @@ int main(int argc, char *argv[])
     if (testMod) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system(); // init system locale before worker threads start
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/mod-test.log").toUtf8().constData());
@@ -823,7 +823,7 @@ KernelBridge::shutdown();
     if (!testDlUrl.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
@@ -898,7 +898,7 @@ KernelBridge::shutdown();
     if (!testInstallUrl.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/install-test.log").toUtf8().constData());
@@ -975,7 +975,7 @@ KernelBridge::shutdown();
     if (!testBatchUrl.isEmpty() && testBatchCount > 0) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
@@ -1078,7 +1078,7 @@ return 0;
     // compose properly and resizing the window leaves a stale, non-repainted
     // region (a fixed-size gray/white block that no longer matches the window).
     QQuickWindow::setDefaultAlphaBuffer(true);
-    app.setApplicationVersion("1.0.1");
+    app.setApplicationVersion("1.0.2");
     app.setOrganizationName("Beacon");
     (void)QLocale::system(); // init system locale before worker threads start
 
@@ -1281,6 +1281,62 @@ return 0;
 
     KernelBridge::setLauncherDir(resolveLauncherDir());
     KernelBridge::initialize("zh", resolveLauncherDir() + "/.minecraft");
+
+    // Pre-launch update check (Linux: open pending package; Windows: schedule check)
+#ifdef Q_OS_LINUX
+    {
+        QString pkgPath = resolveLauncherDir() + "/.update_pkg";
+        if (QFile::exists(pkgPath)) {
+            QString curVer = KernelBridge::instance()->readVersion();
+            QString pkgVer;
+            // Try dpkg-deb to extract version
+            QProcess dpkgProc;
+            dpkgProc.start("dpkg-deb", QStringList() << "--info" << pkgPath);
+            if (dpkgProc.waitForFinished(3000)) {
+                QByteArray info = dpkgProc.readAllStandardOutput();
+                QRegularExpression re("Version:\\s*(.+)\\n");
+                QRegularExpressionMatch m = re.match(info);
+                if (m.hasMatch()) pkgVer = m.captured(1).trimmed();
+            }
+            // Fallback to rpm
+            if (pkgVer.isEmpty()) {
+                QProcess rpmProc;
+                rpmProc.start("rpm", QStringList() << "--query" << "--package" << pkgPath
+                              << "--queryformat" << "%{VERSION}");
+                if (rpmProc.waitForFinished(3000))
+                    pkgVer = rpmProc.readAllStandardOutput().trimmed();
+            }
+            // Fallback to arch: extract .PKGINFO from tar
+            if (pkgVer.isEmpty() && pkgPath.endsWith(".pkg.tar.zst")) {
+                QProcess tarProc;
+                tarProc.start("tar", QStringList() << "-xOf" << pkgPath
+                              << "--wildcards" << "*.PKGINFO");
+                if (tarProc.waitForFinished(3000)) {
+                    QByteArray info = tarProc.readAllStandardOutput();
+                    QRegularExpression re("^version\\s*=\\s*(.+)",
+                                          QRegularExpression::MultilineOption);
+                    QRegularExpressionMatch m = re.match(info);
+                    if (m.hasMatch()) pkgVer = m.captured(1).trimmed();
+                }
+            }
+            if (!pkgVer.isEmpty() && pkgVer != curVer) {
+                mc_info("[Update] new package %s found, opening for install", pkgVer.toUtf8().constData());
+                QDesktopServices::openUrl(QUrl::fromLocalFile(pkgPath));
+                std::_Exit(0);
+            }
+            if (QFile::exists(pkgPath)) {
+                QFile::remove(pkgPath);
+                mc_info("[Update] removed stale package");
+            }
+        }
+    }
+#else
+    // On Windows: schedule update check after UI is ready
+    QTimer::singleShot(2000, []() {
+        if (auto *kb = KernelBridge::instance())
+            kb->checkForUpdate();
+    });
+#endif
 
     // A crash during installPack can leave the mrpack download / extraction
     // temp dirs behind; sweep them at startup so the next install starts from a

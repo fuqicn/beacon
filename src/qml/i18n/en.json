@@ -275,5 +275,9 @@
   "downloadCard.cancelled": "Cancelled",
   "instance.resWidthLabel": "W",
   "instance.resHeightLabel": "H",
-  "download.cancel": "Cancel"
+  "download.cancel": "Cancel",
+  "update.title": "New version %1 available (current: %2)",
+  "update.desc": "A new version is available. Would you like to download and update?",
+  "update.cancel": "Cancel",
+  "update.download": "Download Update"
 }

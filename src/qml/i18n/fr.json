@@ -113,5 +113,9 @@
   "type.release": "Stable",
   "type.snapshot": "Snapshot",
   "type.old_beta": "Bêta ancienne",
-  "type.old_alpha": "Alpha ancienne"
+  "type.old_alpha": "Alpha ancienne",
+  "update.title": "Nouvelle version %1 disponible (actuelle: %2)",
+  "update.desc": "Une nouvelle version est disponible. Voulez-vous télécharger et mettre à jour?",
+  "update.cancel": "Annuler",
+  "update.download": "Télécharger la mise à jour"
 }

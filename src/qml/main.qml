@@ -408,6 +408,13 @@ ApplicationWindow {
         }
     }
 
+    // Auto-update prompt
+    UpdateDialog {
+        id: updateDialog
+        visible: kernel.updateAvailable
+        onVisibleChanged: { if (!visible) kernel.cancelUpdate() }
+    }
+
     property bool mcRunning: false
 
     function refreshMcRunning() {

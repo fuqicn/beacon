@@ -41,14 +41,10 @@ ApplicationWindow {
     // Quick Controls (Button/ComboBox/TabButton hover & selection, Fusion and
     // Windows styles) follow Theme.primary on platforms whose style palette
     // defaults to a wrong/white Highlight (Windows 10, GNOME/Linux).
-    // Only override palette.highlight on styles that need it.
-    // Fusion and Imagine already use correct highlights; forcing Theme.primary
-    // on Fusion light mode makes ComboBox dropdown text invisible (white on white).
-    // Override highlight and highlightedText for styles that have wrong defaults.
-    // On Fusion/Imagine, forcing Theme.primary alone makes dropdown text invisible
-    // (white on white in light mode) because highlightedText stays the default.
+    // Force correct highlight colors: dark text on primary background in light mode,
+    // white text on primary background in dark mode.
     palette.highlight: Theme.primary
-    palette.highlightedText: Theme.onPrimary
+    palette.highlightedText: kernel.highlightedTextColor
 
     onClosing: {
         close.accepted = true

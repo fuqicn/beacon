@@ -565,8 +565,7 @@ QPalette KernelBridge::paletteForScheme(bool dark)
         p.setColor(QPalette::Light, QColor(0xef, 0xef, 0xef));
         p.setColor(QPalette::Dark, QColor(0x70, 0x70, 0x70));
         p.setColor(QPalette::Shadow, Qt::black);
-        // Keep the OS default for HighlightedText in light mode so that
-        // Fusion/Imagine dropdowns show readable dark text on the blue highlight.
+        p.setColor(QPalette::HighlightedText, Qt::black);
     }
     return p;
 }

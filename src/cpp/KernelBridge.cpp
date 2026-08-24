@@ -608,6 +608,26 @@ void KernelBridge::applyThemeMode(const QString &mode)
     // for both light and dark modes.
     QGuiApplication::setPalette(paletteForScheme(dark));
 
+    // Fusion style in light mode: the dropdown popup uses QPalette::Window as its
+    // background, which is 0xf3f3f3 (light gray) here. Override to pure white so
+    // the combo box popup looks clean. Only applies to Fusion, not other styles.
+    {
+        const QStyle *style = QGuiApplication::style();
+        bool isFusion = style && style->metaObject()->className().contains("Fusion", Qt::CaseInsensitive);
+        if (!dark && isFusion) {
+            QPalette p = QGuiApplication::palette();
+            const QColor white(Qt::white);
+            p.setColor(QPalette::Window,      white);
+            p.setColor(QPalette::Base,        white);
+            p.setColor(QPalette::AlternateBase, white);
+            p.setColor(QPalette::Button,      white);
+            p.setColor(QPalette::ButtonText,  Qt::black);
+            p.setColor(QPalette::Text,        Qt::black);
+            p.setColor(QPalette::WindowText,  Qt::black);
+            QGuiApplication::setPalette(p);
+        }
+    }
+
     // Notify QML that the palette has changed so SystemPalette bindings update
     emit paletteChanged();
 

@@ -547,12 +547,8 @@ static QString resolveLauncherDir()
     // Persistent user data (auth, .minecraft, cache, .runtime) goes to the
     // sibling "game/" directory so it survives launcher updates.
     QFileInfo exeInfo(exeDir);
-    if (exeInfo.dir().dirName() == QLatin1String("beacon")) {
-        QString gameDir = exeInfo.dir().path() + QLatin1String("/..")
-                        + QLatin1String("/game");
-        QDir().mkpath(gameDir);
-        return gameDir;
-    }
+    if (exeInfo.dir().dirName() == QLatin1String("beacon"))
+        return exeInfo.dir().path() + QLatin1String("/game");
     return exeDir;
 #elif defined(Q_OS_LINUX)
     QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");
@@ -589,7 +585,7 @@ int main(int argc, char *argv[])
         // Log to file for capture
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/java-test.log").toUtf8().constData());
 
-        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        QString mcDir = resolveLauncherDir() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
         mc_log_set_level(MC_LOG_DEBUG); // override after KernelBridge::initialize resets it
         auto *dl = KernelBridge::instance()->downloadManager();
@@ -639,7 +635,7 @@ int main(int argc, char *argv[])
         // Log to file for capture
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/version-test.log").toUtf8().constData());
 
-        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        QString mcDir = resolveLauncherDir() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
         mc_log_set_level(MC_LOG_DEBUG); // override after KernelBridge::initialize resets it
         auto *dl = KernelBridge::instance()->downloadManager();
@@ -690,7 +686,7 @@ int main(int argc, char *argv[])
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/mod-test.log").toUtf8().constData());
 
-        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        QString mcDir = resolveLauncherDir() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
         mc_log_set_level(MC_LOG_DEBUG);
         auto *mm = KernelBridge::instance()->modManager();
@@ -832,7 +828,7 @@ KernelBridge::shutdown();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
 
-        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        QString mcDir = resolveLauncherDir() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
         mc_log_set_level(MC_LOG_DEBUG);
 
@@ -909,7 +905,7 @@ KernelBridge::shutdown();
 #ifdef Q_OS_WIN
         installCrashHandlers();
 #endif
-        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        QString mcDir = resolveLauncherDir() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
         mc_log_set_level(MC_LOG_DEBUG);
         mc_info("[TESTINST] url=%s out=%s root=%s", testInstallUrl.toUtf8().constData(),
@@ -984,7 +980,7 @@ KernelBridge::shutdown();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
 
-        QString mcDir = QCoreApplication::applicationDirPath() + "/.minecraft";
+        QString mcDir = resolveLauncherDir() + "/.minecraft";
         KernelBridge::initialize("zh", mcDir);
         mc_log_set_level(MC_LOG_DEBUG);
 

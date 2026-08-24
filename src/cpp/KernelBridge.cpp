@@ -613,8 +613,8 @@ void KernelBridge::applyThemeMode(const QString &mode)
     // background, which is 0xf3f3f3 (light gray) here. Override to pure white so
     // the combo box popup looks clean. Only applies to Fusion, not other styles.
     {
-        const QStyle *style = QGuiApplication::style();
-        bool isFusion = style && style->metaObject()->className().contains("Fusion", Qt::CaseInsensitive);
+        const QStyle *style = QApplication::style();
+        bool isFusion = style && QString(style->metaObject()->className()).contains("Fusion", Qt::CaseInsensitive);
         if (!dark && isFusion) {
             QPalette p = QGuiApplication::palette();
             const QColor white(Qt::white);

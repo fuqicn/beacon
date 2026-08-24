@@ -186,6 +186,14 @@ void InstanceManager::setDefaultRootDir(const QString &mcDir)
         m_currentRootDir = m_rootDirs.contains(mcDir) ? mcDir : m_rootDirs.first();
         saveConfig();
         emit currentRootDirChanged();
+    } else if (!m_rootDirs.contains(local)) {
+        // Launcher moved to a new data directory — replace stale paths.
+        m_rootDirs.clear();
+        m_rootDirs << local;
+        m_currentRootDir = local;
+        saveConfig();
+        emit rootDirsChanged();
+        emit currentRootDirChanged();
     }
 }
 

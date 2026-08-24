@@ -377,6 +377,7 @@ void KernelBridge::checkForUpdate()
         checkDone(newVer);
         delete nm;
     });
+}
 
 void KernelBridge::downloadUpdate()
 {
@@ -417,7 +418,7 @@ void KernelBridge::downloadUpdate()
 
     auto *reply = nm->get(req);
     QPointer<KernelBridge> guard(this);
-    connect(reply, &QNetworkReply::finished, this, [reply, nm, guard, ver, dest]() {
+    connect(reply, &QNetworkReply::finished, this, [reply, nm, &guard, ver, dest, this, url]() {
         if (!guard) { delete reply; delete nm; return; }
         if (reply->error() == QNetworkReply::NoError) {
             QByteArray data = reply->readAll();
@@ -442,14 +443,14 @@ void KernelBridge::downloadUpdate()
             QNetworkRequest req2(fallbackUrl);
             req2.setRawHeader("User-Agent", "BeaconLauncher/1.0");
             auto *reply2 = nm->get(req2);
-            connect(reply2, &QNetworkReply::finished, guard.data(), [reply2, nm, ver, dest]() {
+            connect(reply2, &QNetworkReply::finished, guard.data(), [reply2, nm, ver, dest, this, &guard]() {
                 if (reply2->error() == QNetworkReply::NoError) {
                     QByteArray data = reply2->readAll();
                     QFile f(dest);
                     if (f.open(QIODevice::WriteOnly)) {
                         f.write(data);
                         f.close();
-                        writeVersion("v" + ver);
+                        guard.data()->writeVersion("v" + ver);
                         mc_info("[Update] downloaded via proxy to %s", dest.toUtf8().constData());
                     }
                 }
@@ -463,7 +464,6 @@ void KernelBridge::downloadUpdate()
     });
 }
 
-}
 
 KernelBridge::KernelBridge(QObject *parent) : QObject(parent) {}
 KernelBridge::~KernelBridge() = default;

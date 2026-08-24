@@ -1,5 +1,5 @@
 Name:           beacon
-Version:        1.0.0
+Version:        1.0.1
 Release:        0
 Summary:        Cross-platform Minecraft launcher
 License:        GPL-3.0-or-later
@@ -44,5 +44,5 @@ cmake --install build --prefix %{buildroot}/usr
 /usr/share/beacon/mirrors.json
 
 %changelog
-* Mon Aug 25 2025 fuqicn <fuqi2012cn@outlook.com> - 1.0.0-0
+* Mon Aug 25 2025 fuqicn <fuqi2012cn@outlook.com> - 1.0.1-0
 - Initial package for openSUSE Build Service

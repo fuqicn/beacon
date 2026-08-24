@@ -80,7 +80,7 @@ def resolve_version(args):
     if args.version:
         return args.version
     m = re.search(r"project\(\s*Beacon\s+VERSION\s+([^\s)]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
-    return m.group(1) if m else "1.0.0"
+    return m.group(1) if m else "1.0.1"
 
 
 def _clean_cache_value(value):

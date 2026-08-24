@@ -194,7 +194,7 @@
   "settings.animation": "动画效果",
   "settings.languageLabel": "语言",
   "settings.chinese": "中文",
-  "settings.version": "Launcher v1.0.0\n基于 Qt 6 的 Minecraft 启动器",
+  "settings.version": "Launcher v1.0.1\n基于 Qt 6 的 Minecraft 启动器",
   "tools.fileSub": "文件管理",
   "tools.logSub": "日志查看",
   "launch.manageInstances": "实例管理",

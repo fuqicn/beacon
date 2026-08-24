@@ -95,7 +95,7 @@ static void ensure_launcher_profiles(const char *mc_dir) {
     if (mc_path_exists(path)) return;
     FILE *f = fopen(path, "w");
     if (f) {
-        fputs("{\"profiles\":{},\"selectedProfile\":\"(Default)\",\"clientToken\":\"00000000-0000-0000-0000-000000000000\",\"launcherVersion\":{\"format\":21,\"name\":\"1.0.0\"}}", f);
+        fputs("{\"profiles\":{},\"selectedProfile\":\"(Default)\",\"clientToken\":\"00000000-0000-0000-0000-000000000000\",\"launcherVersion\":{\"format\":21,\"name\":\"1.0.1\"}}", f);
         fclose(f);
         mc_info("Created launcher_profiles.json");
     }

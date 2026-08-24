@@ -547,8 +547,11 @@ static QString resolveLauncherDir()
     // Persistent user data (auth, .minecraft, cache, .runtime) goes to the
     // sibling "game/" directory so it survives launcher updates.
     QFileInfo exeInfo(exeDir);
-    if (exeInfo.dir().dirName() == QLatin1String("beacon"))
-        return exeInfo.dir().path() + QLatin1String("/game");
+    if (exeInfo.dir().dirName() == QLatin1String("beacon")) {
+        QString gameDir = exeInfo.dir().path() + QLatin1String("/game");
+        QDir().mkpath(gameDir);
+        return gameDir;
+    }
     return exeDir;
 #elif defined(Q_OS_LINUX)
     QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");

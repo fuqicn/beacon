@@ -11,6 +11,7 @@
         <file alias="redstoneblock.png">../src/icons/instances/RedstoneBlock.png</file>
     </qresource>
     <qresource prefix="/icons">
+        <file alias="beacon.svg">../Untitled.svg</file>
         <file alias="play.svg">../src/icons/play.svg</file>
         <file alias="home.svg">../src/icons/home.svg</file>
         <file alias="download.svg">../src/icons/download.svg</file>

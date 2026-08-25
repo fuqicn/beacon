@@ -37,6 +37,7 @@
 #include <QQuickImageResponse>
 #include <QQuickTextureFactory>
 #include <QSettings>
+#include <QIcon>
 #include <QStyleHints>
 #include <QThreadPool>
 #include <QVector>
@@ -1080,6 +1081,15 @@ return 0;
     app.setApplicationVersion("1.0.1");
     app.setOrganizationName("Beacon");
     (void)QLocale::system(); // init system locale before worker threads start
+
+#ifdef Q_OS_LINUX
+    // The installed .desktop file only covers the menu entry; the *running*
+    // window's taskbar/dock icon comes from the application windowIcon
+    // (_NET_WM_ICON under XWayland) plus a desktop file name for Wayland
+    // app_id matching. Without these the dock shows a generic placeholder.
+    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.fuqicn.beacon"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/beacon.svg")));
+#endif
 
     qint64 tProc = QDateTime::currentMSecsSinceEpoch();
 

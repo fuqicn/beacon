@@ -65,3 +65,5 @@ Untitled.ico
 
 __pycache__/
 *.pyc
+game/
+build-linux/

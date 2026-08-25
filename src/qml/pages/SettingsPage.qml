@@ -25,6 +25,8 @@ Item {
     id: root
 
     property bool restartNeeded: false
+    // Set once a user-triggered check finishes so result text can show.
+    property bool manualChecked: false
 
     function styleOptions() {
         var opts = [{ text: I18n.tr("settings.styleAuto"), key: "auto" }]
@@ -467,6 +469,79 @@ Item {
                             }
                         }
                     }
+                }
+            }
+
+            // Updates
+            Text {
+                text: I18n.tr("settings.updates")
+                font.pixelSize: 18; font.weight: Font.Medium
+                color: palette.text
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: updInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: Theme.surfaceContainer
+                ColumnLayout {
+                    id: updInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Text {
+                            text: I18n.tr("settings.autoUpdate")
+                            color: palette.placeholderText; font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Switch {
+                            checked: kernel.settingsManager.value("update/auto", true)
+                            onToggled: kernel.settingsManager.setValue("update/auto", checked)
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        Text {
+                            id: updateStatusText
+                            Layout.fillWidth: true
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                            color: kernel.updateAvailable ? Theme.primary : palette.placeholderText
+                            text: {
+                                if (kernel.checkingUpdate)
+                                    return I18n.tr("settings.checkUpdate.checking")
+                                if (root.manualChecked) {
+                                    if (kernel.updateAvailable)
+                                        return I18n.tr("settings.checkUpdate.new")
+                                                .replace("%1", kernel.latestVersion)
+                                    return I18n.tr("settings.checkUpdate.latest")
+                                }
+                                return ""
+                            }
+                        }
+
+                        Button {
+                            text: I18n.tr("settings.checkUpdate")
+                            enabled: !kernel.checkingUpdate && !kernel.updateDownloading
+                            onClicked: root.manualChecked = false
+                                       , kernel.checkForUpdate()
+                        }
+                    }
+                }
+            }
+
+            Connections {
+                target: kernel
+                function onCheckingUpdateChanged() {
+                    if (!kernel.checkingUpdate)
+                        root.manualChecked = true
                 }
             }
 

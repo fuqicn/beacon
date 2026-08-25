@@ -114,8 +114,16 @@
   "type.snapshot": "スナップショット",
   "type.old_beta": "旧ベータ版",
   "type.old_alpha": "旧アルファ版",
-  "update.title": "新版本 %1 が利用可能です（現在: %2）",
+  "update.title": "新バージョン %1 が利用可能",
   "update.desc": "新しいバージョンが利用可能です。ダウンロードして更新しますか？",
   "update.cancel": "キャンセル",
-  "update.download": "アップデートをダウンロード"
+  "update.download": "アップデートをダウンロード",
+  "settings.updates": "アップデート",
+  "settings.autoUpdate": "自動でアップデートを確認",
+  "settings.checkUpdate": "アップデートを確認",
+  "settings.checkUpdate.checking": "アップデートを確認中...",
+  "settings.checkUpdate.new": "新バージョン %1 があります — 右下の通知からダウンロードできます",
+  "settings.checkUpdate.latest": "最新バージョンをご利用中です",
+  "status.updateDownload": "アップデート %1 をダウンロード中",
+  "update.later": "後で通知"
 }

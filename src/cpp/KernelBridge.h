@@ -38,6 +38,8 @@
 
 class QQuickWindow;
 class QQmlEngine;
+class QNetworkAccessManager;
+class QNetworkReply;
 
 class KernelBridge : public QObject
 {
@@ -119,18 +121,36 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     // Version management (used by auto-update)
     Q_INVOKABLE QString readVersion() const;
     Q_INVOKABLE void writeVersion(const QString &version);
+    // Race GitHub vs Gitee release APIs, pick the lower-latency source.
     Q_INVOKABLE void checkForUpdate();
     Q_INVOKABLE void downloadUpdate();
-    Q_INVOKABLE void cancelUpdate();
+    Q_INVOKABLE void cancelUpdate();          // dismiss the prompt
+    Q_INVOKABLE void cancelUpdateDownload();  // abort transfer + delete temp file
+    // Window-close hook: cancel every in-flight task and sweep temp files.
+    Q_INVOKABLE void prepareShutdown();
 
+private:
+    void startUpdateTransfer(const QString &primaryUrl, const QString &fallbackUrl,
+                             const QString &partFile, const QString &dest);
+    void finishUpdateDownload(bool ok, const QString &error, bool silent = false);
+
+public:
     Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
     Q_PROPERTY(bool checkingUpdate READ checkingUpdate NOTIFY checkingUpdateChanged)
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
-    Q_PROPERTY(QString updateDownloadProgress READ updateDownloadProgress NOTIFY updateDownloadProgressChanged)
+    Q_PROPERTY(bool updateDownloading READ updateDownloading NOTIFY updateStatsChanged)
+    Q_PROPERTY(qreal updateProgress READ updateProgress NOTIFY updateStatsChanged)
+    Q_PROPERTY(qint64 updateReceived READ updateReceived NOTIFY updateStatsChanged)
+    Q_PROPERTY(qint64 updateTotal READ updateTotal NOTIFY updateStatsChanged)
+    Q_PROPERTY(qint64 updateSpeedBytes READ updateSpeedBytes NOTIFY updateStatsChanged)
     bool updateAvailable() const { return m_updateAvailable; }
     bool checkingUpdate() const { return m_checkingUpdate; }
     QString latestVersion() const { return m_latestVersion; }
-    QString updateDownloadProgress() const { return m_updateDownloadProgress; }
+    bool updateDownloading() const { return m_updateDownloading; }
+    qreal updateProgress() const { return m_updateProgress; }
+    qint64 updateReceived() const { return m_updateReceived; }
+    qint64 updateTotal() const { return m_updateTotal; }
+    qint64 updateSpeedBytes() const { return m_updateSpeedBytes; }
     Q_INVOKABLE void launchGame(int memory = 4096);
     Q_INVOKABLE void cancelLaunch();
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());
@@ -173,7 +193,7 @@ signals:
     void updateAvailableChanged();
     void checkingUpdateChanged();
     void latestVersionChanged();
-    void updateDownloadProgressChanged();
+    void updateStatsChanged();
 
 private:
     void doAuthAndLaunch();
@@ -208,7 +228,19 @@ private:
     bool m_updateAvailable = false;
     bool m_checkingUpdate = false;
     QString m_latestVersion;
-    QString m_updateDownloadProgress;
+    // Update transfer state (rendered by the download status panel)
+    bool m_updateDownloading = false;
+    qreal m_updateProgress = 0.0;
+    qint64 m_updateReceived = 0;
+    qint64 m_updateTotal = 0;
+    qint64 m_updateSpeedBytes = 0;
+    // Winning release host from the latency race ("github" / "gitee").
+    QString m_updateSource = QStringLiteral("github");
+    // Active transfer targets so cancel/close can sweep the exact temp file.
+    QString m_updatePartPath;
+    QString m_updateDestPath;
+    QNetworkReply *m_updateReply = nullptr;   // active transfer, owned by nam
+    QNetworkAccessManager *m_updateNam = nullptr;
 };
 
 #endif

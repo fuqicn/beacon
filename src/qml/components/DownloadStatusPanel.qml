@@ -31,7 +31,8 @@ Rectangle {
     readonly property bool dlBusy: kernel.downloadManager.busy
     readonly property var modTasks: kernel.modManager.tasks || []
     readonly property bool packBusy: kernel.modpackManager.busy
-    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy
+    readonly property bool updBusy: kernel.updateDownloading
+    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.updBusy
 
     height: root.anyVisible ? content.implicitHeight + 32 : 0
     radius: Theme.shapeExtraLarge
@@ -167,14 +168,31 @@ Rectangle {
             onCancelRequested: kernel.downloadManager.cancelAll()
         }
 
+        // ================= Update download =================
+        DownloadCard {
+            Layout.fillWidth: true
+            visible: root.updBusy
+            title: I18n.tr("status.updateDownload").replace("%1", kernel.latestVersion)
+            subtitle: kernel.updateTotal > 0
+                      ? root.formatBytes(kernel.updateReceived) + " / " + root.formatBytes(kernel.updateTotal)
+                      : ""
+            progress: kernel.updateProgress
+            indeterminate: kernel.updateTotal <= 0
+            speedText: root.formatSpeed(kernel.updateSpeedBytes)
+            statusText: kernel.updateTotal > 0 ? Math.round(kernel.updateProgress * 100) + "%" : ""
+            statusColor: Theme.primary
+            onCancelRequested: kernel.cancelUpdateDownload()
+        }
+
         // ================= separator =================
         Rectangle {
             Layout.fillWidth: true
             height: 1
             color: palette.mid
             opacity: 0.3
-            visible: (root.dlBusy && (root.modTasks.length > 0 || root.packBusy))
-                     || (root.modTasks.length > 0 && root.packBusy)
+            visible: (root.dlBusy && (root.modTasks.length > 0 || root.packBusy || root.updBusy))
+                     || (root.modTasks.length > 0 && (root.packBusy || root.updBusy))
+                     || (root.packBusy && root.updBusy)
         }
 
         // ================= Mod install tasks =================

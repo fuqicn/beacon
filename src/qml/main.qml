@@ -47,6 +47,8 @@ ApplicationWindow {
     palette.highlightedText: kernel.windowColor().lightness() < 128 ? Qt.white : Qt.black
 
     onClosing: {
+        // Cancel every in-flight download and sweep temp files before quitting.
+        kernel.prepareShutdown()
         close.accepted = true
         Qt.quit()
     }
@@ -54,6 +56,9 @@ ApplicationWindow {
     Component.onCompleted: {
         kernel.applyThemeMode(Theme.themeMode)
         refreshMcRunning()
+        // Auto update check honours the user's setting (default: on).
+        if (kernel.settingsManager.value("update/auto", true))
+            kernel.checkForUpdate()
     }
     readonly property string _uiFont: Qt.platform.os === "osx" ? "PingFang SC" : Qt.platform.os === "linux" ? "Noto Sans CJK SC" : "Microsoft YaHei"
     font.family: _uiFont
@@ -404,11 +409,14 @@ ApplicationWindow {
         }
     }
 
-    // Auto-update prompt
-    UpdateDialog {
-        id: updateDialog
-        visible: kernel.updateAvailable
-        onVisibleChanged: { if (!visible) kernel.cancelUpdate() }
+    // Auto-update prompt (bottom-right, non-blocking; progress shows in the
+    // unified download status panel while downloading).
+    UpdatePopup {
+        id: updatePopup
+        // Stack above whatever occupies the bottom-right corner.
+        bottomMargin: 24
+                              + (downloadPanel.opacity > 0 ? downloadPanel.height + 12 : 0)
+                              + (isCompact ? navBar.height + 8 : 0)
     }
 
     property bool mcRunning: false

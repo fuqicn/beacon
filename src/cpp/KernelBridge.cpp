@@ -58,6 +58,9 @@
 #include <thread>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QElapsedTimer>
+#include <memory>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -317,158 +320,330 @@ void KernelBridge::cancelUpdate()
     emit updateAvailableChanged();
 }
 
+void KernelBridge::cancelUpdateDownload()
+{
+    if (m_updateReply) {
+        disconnect(m_updateReply, nullptr, this, nullptr);
+        m_updateReply->abort();          // no slot connected anymore
+        m_updateReply->deleteLater();
+        m_updateReply = nullptr;
+    }
+    if (m_updateDownloading) {
+        m_updateDownloading = false;
+        m_updateProgress = 0.0;
+        m_updateReceived = 0;
+        m_updateTotal = 0;
+        m_updateSpeedBytes = 0;
+        emit updateStatsChanged();
+    }
+    // Remove any half-written temp payload at its exact location.
+    if (!m_updatePartPath.isEmpty())
+        QFile::remove(m_updatePartPath);
+    if (!m_updateDestPath.isEmpty())
+        QFile::remove(m_updateDestPath);
+}
+
+void KernelBridge::prepareShutdown()
+{
+    mc_info("[Bridge] prepareShutdown: cancelling in-flight tasks");
+
+    // Abort the update transfer and drop its temp file.
+    cancelUpdateDownload();
+
+    // Cancel every manager-driven task.
+    if (m_downloadManager) m_downloadManager->cancelAll();
+    if (m_installManager) m_installManager->cancelAll();
+    if (m_modpackManager) m_modpackManager->cancelAll();
+
+    // Signal the shared download pool to stop issuing new work.
+    mc_qt_download_set_cancel(1);
+
+    // Sweep stale modpack temp dirs left behind by cancelled installs.
+    const QStringList staleTemps = {
+        m_mcDir + "/versions/.mrpack_dl",
+        m_mcDir + "/versions/.mrpack_tmp"
+    };
+    for (const QString &stale : staleTemps)
+        QDir(stale).removeRecursively();
+}
+
+// Fire one release-API probe. Returns the reply; latency is measured by the
+// caller via QElapsedTimer around the whole request.
+static QNetworkReply *probeRelease(QNetworkAccessManager *nam, const QString &apiUrl)
+{
+    QNetworkRequest req(apiUrl);
+    req.setRawHeader("Accept", "application/vnd.github.v3+json");
+    req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+    return nam->get(req);
+}
+
 void KernelBridge::checkForUpdate()
 {
     if (m_checkingUpdate) return;
+    QString curVer = readVersion();
+    if (curVer.startsWith("v")) curVer = curVer.mid(1);
+    if (curVer.isEmpty()) return;
+
     m_checkingUpdate = true;
     emit checkingUpdateChanged();
 
-    QString curVer = readVersion();
-    if (curVer.startsWith("v")) curVer = curVer.mid(1);
-    if (curVer.isEmpty()) {
-        m_checkingUpdate = false;
-        emit checkingUpdateChanged();
-        return;
-    }
+    // Shared race state lives on the heap: both reply handlers and the
+    // timeout timer outlive this stack frame.
+    struct RaceState {
+        bool resolved = false;
+        bool ghDone = false;
+        bool geDone = false;
+        QPointer<QNetworkReply> ghReply;
+        QPointer<QNetworkReply> geReply;
+    };
+    auto st = std::make_shared<RaceState>();
+    int *pending = new int(2);            // freed with the nam teardown below
+    QPointer<KernelBridge> guard(this);
+    QPointer<QNetworkAccessManager> nmGuard;
 
-    auto checkDone = [this, curVer](const QString &newVer) {
-        m_checkingUpdate = false;
-        emit checkingUpdateChanged();
-        if (!newVer.isEmpty() && newVer != curVer) {
-            m_latestVersion = newVer;
-            m_updateAvailable = true;
-            emit latestVersionChanged();
-            emit updateAvailableChanged();
+    auto teardown = [nmGuard, pending]() {
+        if (--(*pending) <= 0) {
+            delete pending;
+            if (!nmGuard.isNull()) nmGuard->deleteLater();
         }
     };
 
-    QNetworkAccessManager *nm = new QNetworkAccessManager(this);
-    QNetworkRequest req(QUrl("https://api.github.com/repos/fuqicn/beacon/releases/latest"));
-    req.setRawHeader("Accept", "application/vnd.github.v3+json");
-    req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
-
-    auto *reply = nm->get(req);
-    QPointer<KernelBridge> guard(this);
-    connect(reply, &QNetworkReply::finished, this, [reply, nm, guard, curVer, checkDone]() {
-        if (!guard) { delete reply; delete nm; return; }
-        QString newVer;
-        if (reply->error() == QNetworkReply::NoError) {
-            QByteArray data = reply->readAll();
-            QJsonDocument doc = QJsonDocument::fromJson(data);
-            QString tag = doc.object().value("tag_name").toString();
-            if (tag.startsWith("v")) tag = tag.mid(1);
-            newVer = tag;
+    auto checkDone = [this, guard](const QString &newVer, QString curVer) {
+        if (guard) {
+            m_checkingUpdate = false;
+            emit checkingUpdateChanged();
+            if (!newVer.isEmpty() && newVer != curVer) {
+                m_latestVersion = newVer;
+                m_updateAvailable = true;
+                emit latestVersionChanged();
+                emit updateAvailableChanged();
+                mc_info("[Update] new release %s (source=%s)",
+                        qPrintable(newVer), qPrintable(m_updateSource));
+            }
         }
-        delete reply;
+    };
 
-        // Fallback via gh-proxy
-        if (newVer.isEmpty()) {
-            QNetworkRequest req2(QUrl("https://gh-proxy.com/https://api.github.com/repos/fuqicn/beacon/releases/latest"));
-            req2.setRawHeader("Accept", "application/vnd.github.v3+json");
-            req2.setRawHeader("User-Agent", "BeaconLauncher/1.0");
-            auto *reply2 = nm->get(req2);
-            connect(reply2, &QNetworkReply::finished, guard.data(), [reply2, nm, curVer, checkDone]() {
-                if (reply2->error() == QNetworkReply::NoError) {
-                    QByteArray data = reply2->readAll();
-                    QString tag = QJsonDocument::fromJson(data).object().value("tag_name").toString();
-                    if (tag.startsWith("v")) tag = tag.mid(1);
-                    checkDone(tag);
-                } else {
-                    checkDone(QString());
-                }
-                delete reply2;
-                delete nm;
-            });
+    if (!m_updateNam) {
+        m_updateNam = new QNetworkAccessManager(this);
+        connect(m_updateNam, &QObject::destroyed, this, [this]() {
+            m_updateNam = nullptr;
+        });
+    }
+    nmGuard = QPointer<QNetworkAccessManager>(m_updateNam);
+
+    auto probeLogic = [this, guard, st, checkDone, curVer, teardown](
+                          const char *name, QNetworkReply *reply) {
+        QString ver;
+        if (reply->error() == QNetworkReply::NoError)
+            ver = QJsonDocument::fromJson(reply->readAll())
+                      .object().value("tag_name").toString();
+        reply->deleteLater();
+        teardown();
+
+        if (!guard || st->resolved) return;
+        const bool isGh = (name[4] == 'u');   // "github" vs "gitee"
+        if (isGh) st->ghDone = true; else st->geDone = true;
+
+        if (!ver.isEmpty()) {
+            st->resolved = true;
+            m_updateSource = QString::fromLatin1(name);
+            checkDone(ver, curVer);           // fastest usable answer wins
             return;
         }
-        checkDone(newVer);
-        delete nm;
+        // Empty result: wait for the other host before giving up.
+        if ((isGh ? st->geDone : st->ghDone)) {
+            st->resolved = true;
+            checkDone(QString(), curVer);
+        }
+    };
+
+    auto fire = [this, probeLogic](const char *name, const char *url) -> QNetworkReply * {
+        QNetworkRequest req(QUrl(QString::fromLatin1(url)));
+        req.setRawHeader("Accept", "application/vnd.github.v3+json");
+        req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+        QNetworkReply *r = m_updateNam->get(req);
+        connect(r, &QNetworkReply::finished, this,
+                [this, name, r, probeLogic]() { probeLogic(name, r); });
+        return r;
+    };
+    st->ghReply = fire("github", "https://api.github.com/repos/fuqicn/beacon/releases/latest");
+    st->geReply = fire("gitee",  "https://gitee.com/api/v5/repos/fuqicn/beacon/releases/latest");
+
+    // Hard timeout so neither hanging host stalls startup feedback forever.
+    QTimer::singleShot(8000, this, [this, guard, st, checkDone, curVer]() {
+        if (!guard || st->resolved) return;
+        st->resolved = true;
+        // Abort the stragglers; their finished handlers still run teardown.
+        if (st->ghReply) { st->ghReply->abort(); st->ghReply->deleteLater(); }
+        if (st->geReply) { st->geReply->abort(); st->geReply->deleteLater(); }
+        checkDone(QString(), curVer);
+        mc_info("[Update] release probe timed out");
     });
 }
 
 void KernelBridge::downloadUpdate()
 {
-    if (!m_updateAvailable) return;
-    m_updateDownloadProgress = "Downloading...";
-    emit updateDownloadProgressChanged();
+    if (m_updateDownloading || m_latestVersion.isEmpty()) return;
 
     QString ver = m_latestVersion.startsWith("v") ? m_latestVersion.mid(1) : m_latestVersion;
-    QString curVer = readVersion();
-    if (curVer.startsWith("v")) curVer = curVer.mid(1);
-
+    QString asset;
 #ifdef Q_OS_WIN
-    // Download self-extracting launcher exe
-    QString url = "https://github.com/fuqicn/beacon/releases/download/v" + ver
-                  + "/BeaconLauncher-windows-amd64.exe";
-    QString dest = QCoreApplication::applicationFilePath();
+    asset = "BeaconLauncher-windows-amd64.exe";
 #elif defined(Q_OS_LINUX)
-    // Detect package type and download appropriate package
-    QString url = "https://github.com/fuqicn/beacon/releases/download/v" + ver;
-    QString pkgType = detectLinuxPackageType();
+    const QString pkgType = detectLinuxPackageType();
     if (pkgType.isEmpty()) {
-        m_updateDownloadProgress = "";
-        emit updateDownloadProgressChanged();
+        mc_info("[Update] unsupported distro family, skip download");
         return;
     }
-    url += "/BeaconLauncher-" + pkgType + "." + (pkgType == "deb" ? "deb"
-                      : (pkgType == "rpm" ? "rpm" : "pkg.tar.zst"));
-    QString dest = s_launcherDir + "/.update_pkg";
+    asset = "BeaconLauncher-" + pkgType + "."
+            + (pkgType == "deb" ? "deb" : pkgType == "rpm" ? "rpm" : "pkg.tar.zst");
 #else
-    m_updateDownloadProgress = "";
-    emit updateDownloadProgressChanged();
     return;
 #endif
 
-    QNetworkAccessManager *nm = new QNetworkAccessManager(this);
-    QNetworkRequest req(url);
-    req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+    // Preferred host from the latency race; the other host is the fallback.
+    const QString tag = "v-" + ver;   // release tags use the v-x.y.z form
+    const char *primary = m_updateSource == "gitee"
+        ? "https://gitee.com/fuqicn/beacon/releases/download/"
+        : "https://github.com/fuqicn/beacon/releases/download/";
+    const char *fallback = m_updateSource == "gitee"
+        ? "https://github.com/fuqicn/beacon/releases/download/"
+        : "https://gitee.com/fuqicn/beacon/releases/download/";
 
-    auto *reply = nm->get(req);
-    QPointer<KernelBridge> guard(this);
-    connect(reply, &QNetworkReply::finished, this, [reply, nm, &guard, ver, dest, this, url]() {
-        if (!guard) { delete reply; delete nm; return; }
-        if (reply->error() == QNetworkReply::NoError) {
-            QByteArray data = reply->readAll();
-            QFile f(dest);
-            if (f.open(QIODevice::WriteOnly)) {
-                f.write(data);
-                f.close();
-                writeVersion("v" + ver);  // Write new version for Windows exe replacement
 #ifdef Q_OS_WIN
-                // On Windows, we replace the exe directly; next launch self-extracts
-                mc_info("[Update] downloaded update to %s", dest.toUtf8().constData());
+    // Replace the outer self-extractor (it has exited by now); next launch
+    // detects the version mismatch and re-extracts.
+    const QString exeDir = QCoreApplication::applicationDirPath();
+    QString dest = QDir(QDir(exeDir).filePath("../")).canonicalPath();
+    if (dest.isEmpty())
+        dest = QDir(exeDir).filePath("..");
+    dest += "/BeaconLauncher.exe";
 #else
-                mc_info("[Update] downloaded package to %s", dest.toUtf8().constData());
+    const QString dest = s_launcherDir + "/.update_pkg";
 #endif
-                guard->m_updateAvailable = false;
-                emit guard->updateAvailableChanged();
-            }
-        } else {
-            mc_error("[Update] download failed: %s", reply->errorString().toUtf8().constData());
-            // Fallback via gh-proxy
-            QString fallbackUrl = "https://gh-proxy.com/" + url;
-            QNetworkRequest req2(fallbackUrl);
-            req2.setRawHeader("User-Agent", "BeaconLauncher/1.0");
-            auto *reply2 = nm->get(req2);
-            connect(reply2, &QNetworkReply::finished, guard.data(), [reply2, nm, ver, dest, this, &guard]() {
-                if (reply2->error() == QNetworkReply::NoError) {
-                    QByteArray data = reply2->readAll();
-                    QFile f(dest);
-                    if (f.open(QIODevice::WriteOnly)) {
-                        f.write(data);
-                        f.close();
-                        guard.data()->writeVersion("v" + ver);
-                        mc_info("[Update] downloaded via proxy to %s", dest.toUtf8().constData());
-                    }
-                }
-                delete reply2;
-                delete nm;
-            });
+
+    startUpdateTransfer(QString(primary) + tag + "/" + asset,
+                        QString(fallback) + tag + "/" + asset,
+                        dest + ".part", dest);
+}
+
+struct UpdateTransferState {
+    QElapsedTimer timer;
+    qint64 lastBytes = 0;
+};
+
+void KernelBridge::startUpdateTransfer(const QString &primaryUrl,
+                                       const QString &fallbackUrl,
+                                       const QString &partFile,
+                                       const QString &dest)
+{
+    if (!m_updateNam) {
+        m_updateNam = new QNetworkAccessManager(this);
+        connect(m_updateNam, &QObject::destroyed, this, [this]() {
+            m_updateNam = nullptr;
+            m_updateReply = nullptr;
+        });
+    }
+
+    m_updateDownloading = true;
+    m_updateProgress = 0.0;
+    m_updateReceived = 0;
+    m_updateTotal = 0;
+    m_updateSpeedBytes = 0;
+    emit updateStatsChanged();
+
+    QNetworkRequest req(primaryUrl);
+    req.setRawHeader("User-Agent", "BeaconLauncher/1.0");
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    auto st = std::make_shared<UpdateTransferState>();
+    st->timer.start();
+    m_updatePartPath = partFile;
+    m_updateDestPath = dest;
+    m_updateReply = m_updateNam->get(req);
+    QNetworkReply *reply = m_updateReply;
+
+    connect(reply, &QNetworkReply::downloadProgress, this,
+            [this, guard = QPointer<KernelBridge>(this), st](qint64 rec, qint64 tot) {
+        if (!guard) return;
+        m_updateReceived = rec;
+        m_updateTotal = tot;
+        m_updateProgress = tot > 0 ? qreal(rec) / qreal(tot) : 0.0;
+        const qreal secs = qreal(st->timer.restart()) / 1000.0;
+        if (secs > 0.05) {
+            const qint64 inst = qint64(qreal(rec - st->lastBytes) / secs);
+            m_updateSpeedBytes = m_updateSpeedBytes > 0
+                ? qint64(m_updateSpeedBytes * 0.6 + inst * 0.4) : inst;
+            st->lastBytes = rec;
         }
-        guard->m_updateDownloadProgress = "";
-        emit guard->updateDownloadProgressChanged();
-        delete reply;
+        emit updateStatsChanged();
     });
+
+    connect(reply, &QNetworkReply::finished, this,
+            [this, guard = QPointer<KernelBridge>(this), st, reply,
+             primaryUrl, fallbackUrl, partFile, dest]() {
+        if (!guard || m_updateReply != reply) {
+            reply->deleteLater();
+            return;
+        }
+        m_updateReply = nullptr;
+        const QNetworkReply::NetworkError err = reply->error();
+        const bool aborted = err == QNetworkReply::OperationCanceledError;
+        QByteArray data = (!aborted && err == QNetworkReply::NoError)
+                              ? reply->readAll() : QByteArray();
+        const QString errStr = reply->errorString();
+        reply->deleteLater();
+
+        if (aborted) {                       // user cancel / window close
+            QFile::remove(partFile);
+            finishUpdateDownload(false, QString(), /*silent*/ true);
+            return;
+        }
+        if (err == QNetworkReply::NoError && !data.isEmpty()) {
+            QFile f(partFile);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                    && f.write(data) == data.size()) {
+                f.close();
+                QFile::remove(dest);
+                if (QFile::rename(partFile, dest)) {
+                    finishUpdateDownload(true, QString());
+                    return;
+                }
+            }
+            f.close();
+            QFile::remove(partFile);
+            finishUpdateDownload(false, QStringLiteral("cannot write file"));
+            return;
+        }
+
+        QFile::remove(partFile);
+        if (!fallbackUrl.isEmpty()) {
+            mc_info("[Update] primary failed (%s), trying mirror",
+                    qPrintable(errStr));
+            startUpdateTransfer(fallbackUrl, QString(), partFile, dest);
+            return;
+        }
+        finishUpdateDownload(false, errStr);
+    });
+}
+
+void KernelBridge::finishUpdateDownload(bool ok, const QString &error, bool silent)
+{
+    m_updateDownloading = false;
+    m_updateProgress = 0.0;
+    m_updateReceived = 0;
+    m_updateTotal = 0;
+    m_updateSpeedBytes = 0;
+    emit updateStatsChanged();
+
+    if (ok) {
+        m_updateAvailable = false;
+        emit updateAvailableChanged();
+        mc_info("[Update] package saved (%s source)", qPrintable(m_updateSource));
+    } else if (!silent) {
+        mc_error("[Update] download failed: %s", qPrintable(error));
+    }
 }
 
 

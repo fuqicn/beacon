@@ -1336,11 +1336,8 @@ return 0;
         }
     }
 #else
-    // On Windows: schedule update check after UI is ready
-    QTimer::singleShot(2000, []() {
-        if (auto *kb = KernelBridge::instance())
-            kb->checkForUpdate();
-    });
+    // Windows/macOS: the update check is triggered from QML once the UI is
+    // ready, gated by the user's auto-update setting.
 #endif
 
     // A crash during installPack can leave the mrpack download / extraction

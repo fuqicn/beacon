@@ -276,8 +276,16 @@
   "instance.resWidthLabel": "W",
   "instance.resHeightLabel": "H",
   "download.cancel": "Cancel",
-  "update.title": "New version %1 available (current: %2)",
+  "update.title": "New version %1 available",
   "update.desc": "A new version is available. Would you like to download and update?",
   "update.cancel": "Cancel",
-  "update.download": "Download Update"
+  "update.download": "Download Update",
+  "settings.updates": "Updates",
+  "settings.autoUpdate": "Check for updates automatically",
+  "settings.checkUpdate": "Check for updates",
+  "settings.checkUpdate.checking": "Checking for updates...",
+  "settings.checkUpdate.new": "New version %1 available — see the prompt at the bottom-right corner",
+  "settings.checkUpdate.latest": "You are on the latest version",
+  "status.updateDownload": "Downloading update %1",
+  "update.later": "Remind me later"
 }

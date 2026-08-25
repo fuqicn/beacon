@@ -38,6 +38,11 @@ python pack.py
 
 The launcher kernel is bundled in `third_party/minecraft-launcher-kernel`.
 
+## Thanks to:
+opencode
+deepseek
+agnes
+
 ## License
 
 Copyright (C) 2024-2026 fuqicn

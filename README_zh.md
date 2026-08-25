@@ -35,6 +35,11 @@ python pack.py
 ```
 启动器内核已随仓库打包在 `third_party/minecraft-launcher-kernel`。
 
+## 鸣谢列表:
+opencode
+deepseek
+agnes
+
 ## 许可证
 
 版权所有（C）2024-2026 fuqicn

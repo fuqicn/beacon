@@ -309,6 +309,28 @@ def build_windows(args, version, build_dir, qt_dir):
     shutil.copy2(exe, beacon_dir / "Beacon.exe")
     log("copied Beacon.exe -> %s" % (beacon_dir / "Beacon.exe"))
 
+    # Toolchain dir shared by strip/windres/gcc below.
+    mingw_bin = resolve_mingw_bin(args, build_dir)
+
+    # Strip the deployed binary to cut package size. The unstripped original
+    # stays in build/ so crash.log symbolization keeps working in dev builds.
+    if mingw_bin:
+        strip = None
+        for name in ("strip.exe", "strip"):
+            cand = mingw_bin / name
+            if cand.is_file():
+                strip = cand
+                break
+        if strip:
+            deployed = beacon_dir / "Beacon.exe"
+            before = deployed.stat().st_size
+            run([str(strip), "--strip-all", str(deployed)])
+            after = deployed.stat().st_size
+            log("stripped Beacon.exe: %d -> %d bytes (-%.0f%%)"
+                % (before, after, 100.0 * (before - after) / max(before, 1)))
+        else:
+            log("WARNING: strip not found in %s; Beacon.exe not stripped" % mingw_bin)
+
     qt_root = qt_dir or resolve_qt_dir(args, build_dir)
     windeployqt = None
     if qt_root:
@@ -337,7 +359,6 @@ def build_windows(args, version, build_dir, qt_dir):
 
     log("--- Building C launcher ---")
     sync_c_version(version)
-    mingw_bin = resolve_mingw_bin(args, build_dir)
     windres = None
     gcc = None
     if mingw_bin:
@@ -500,6 +521,16 @@ def stage_install_tree(args, version, build_dir):
 
     run([str(cmake), "--install", str(build_dir), "--prefix",
          str((staging / "usr").resolve())])
+
+    # Strip the staged binary when a toolchain strip is available (OBS builds
+    # get distro-managed stripping; this covers the plain tarball fallback).
+    strip = shutil.which("strip")
+    staged_bin = staging / "usr" / "bin" / BIN_NAME
+    if strip and staged_bin.is_file():
+        before = staged_bin.stat().st_size
+        run([strip, "--strip-all", str(staged_bin)])
+        log("stripped %s: %d -> %d bytes"
+            % (staged_bin, before, staged_bin.stat().st_size))
 
     # Desktop entry (Exec uses the packaged binary name only)
     apps = staging / "usr/share/applications"

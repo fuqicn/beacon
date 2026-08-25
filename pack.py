@@ -4,10 +4,15 @@ Beacon cross-platform packaging script.
 
 Auto-detects the host platform and builds + packages accordingly:
 
-  Windows  -> dist/BeaconLauncher.exe (self-extracting C launcher embedding
-              dist/beacon.zip) and dist/beacon.zip. Qt is deployed with
+  Windows  -> dist/BeaconLauncher-windows-<arch>.exe (self-extracting C launcher
+              embedding dist/beacon.zip) and dist/beacon.zip. Qt is deployed with
               windeployqt so the result runs on a clean machine.
-  Linux    -> RPM/DEB package via rpmbuild/debhelper.
+  Linux    -> native packages built from a `cmake --install` staging tree:
+                dist/BeaconLauncher-deb.deb          (dpkg-deb)
+                dist/BeaconLauncher-redhat.rpm       (rpmbuild + .spec)
+                dist/BeaconLauncher-arch.pkg.tar.zst (makepkg + PKGBUILD)
+              Missing tooling for one format only skips that format; if no
+              tooling exists at all, a plain tar.gz fallback is produced.
 
 Stdlib only: zipfile, shutil, subprocess, platform, argparse, urllib, ...
 Requires cmake/ninja + the platform toolchain (mingw on Windows, gcc/g++ on Linux).
@@ -350,7 +355,8 @@ def build_windows(args, version, build_dir, qt_dir):
         raise PackError("windres/gcc not found (pass --mingw-bin or configure a mingw toolchain)")
     res = pack_tmp / "beacon.res"
     run([str(windres), "-O", "coff", str(packager / "beacon.rc"), "-o", str(res)])
-    launcher = dist / "BeaconLauncher.exe"
+    arch_tag = "amd64" if platform.machine().lower() in ("x86_64", "amd64") else platform.machine().lower()
+    launcher = dist / ("BeaconLauncher-windows-%s.exe" % arch_tag)
     run([str(gcc), str(packager / "main.c"), str(res), "-o", str(launcher),
          "-lshell32", "-luser32", "-lgdi32", "-lcomctl32", "-O2", "-s", "-mwindows"])
 
@@ -364,71 +370,289 @@ def build_windows(args, version, build_dir, qt_dir):
 
 # ---------------------------------------------------------------- Linux -----
 
-def build_linux(args, version, build_dir, qt_dir):
-    """Build and package for Linux (tar.gz archive)."""
-    log("=== Building Beacon for Linux ===")
-    if not args.skip_build:
-        configure_and_build(args, build_dir, qt_dir)
+MAINTAINER = "fuqicn <fuqi2012cn@outlook.com>"
+HOMEPAGE = "https://github.com/fuqicn/beacon"
+APP_ID = "io.github.fuqicn.beacon"
+BIN_NAME = "Beacon"
 
-    dist = Path(args.dist_dir)
-    dist.mkdir(parents=True, exist_ok=True)
+DESKTOP_ENTRY = """[Desktop Entry]
+Type=Application
+Name=Beacon
+Comment=A cross-platform Minecraft launcher
+Exec=%(bin)s
+TryExec=%(bin)s
+Icon=%(app_id)s
+Terminal=false
+Categories=Game;ActionGame;
+Keywords=minecraft;launcher;beacon;
+"""
 
-    # Create staging directory
-    staging = Path(args.work_dir) / "linux-staging" / ("beacon-%s" % version)
+DEB_DEPS = ("libqt6core6t64 | libqt6core6, libqt6gui6, libqt6network6, "
+            "libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, "
+            "libqt6svg6, libqt6widgets6")
+
+RPM_SPEC_TEMPLATE = """Name:           beacon-launcher
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        A cross-platform Minecraft launcher
+
+License:        GPL-3.0-or-later
+URL:            @HOMEPAGE@
+BuildArch:      @ARCH@
+
+Requires:       qt6-qtbase >= 6.4
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtsvg
+Requires:       zlib
+
+%description
+Beacon is a Qt 6 based Minecraft launcher featuring Microsoft and offline
+login, version/mod/modpack downloads and per-instance management.
+
+%prep
+%build
+
+%install
+mkdir -p %{buildroot}%{_bindir}
+mkdir -p %{buildroot}%{_datadir}/applications
+mkdir -p %{buildroot}%{_datadir}/icons/hicolor/scalable/apps
+mkdir -p %{buildroot}%{_datadir}/beacon
+install -m 0755 '@STAGING@/usr/bin/@BIN@'      %{buildroot}%{_bindir}/@BIN@
+install -m 0644 '@STAGING@/usr/share/applications/@APPID@.desktop'  %{buildroot}%{_datadir}/applications/@APPID@.desktop
+install -m 0644 '@STAGING@/usr/share/icons/hicolor/scalable/apps/@APPID@.svg' %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/@APPID@.svg
+install -m 0644 '@STAGING@/usr/share/beacon/mirrors.json'  %{buildroot}%{_datadir}/beacon/mirrors.json
+install -m 0644 '@STAGING@/usr/share/beacon/version.txt'   %{buildroot}%{_datadir}/beacon/version.txt
+
+%files
+%{_bindir}/@BIN@
+%{_datadir}/applications/@APPID@.desktop
+%{_datadir}/icons/hicolor/scalable/apps/@APPID@.svg
+%{_datadir}/beacon/mirrors.json
+%{_datadir}/beacon/version.txt
+
+%changelog
+* @RPM_DATE@ fuqicn <fuqi2012cn@outlook.com> - @VERSION@-1
+- Upstream release @VERSION@
+"""
+
+PKGBUILD_TEMPLATE = """# Maintainer: fuqicn <fuqi2012cn@outlook.com>
+pkgname=beacon-launcher
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='A cross-platform Minecraft launcher'
+arch=('@ARCH@')
+url='@HOMEPAGE@'
+license=('GPL3')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg')
+
+package() {
+    install -Dm755 '@STAGING@/usr/bin/@BIN@' "${pkgdir}/usr/bin/@BIN@"
+    install -Dm644 '@STAGING@/usr/share/applications/@APPID@.desktop' "${pkgdir}/usr/share/applications/@APPID@.desktop"
+    install -Dm644 '@STAGING@/usr/share/icons/hicolor/scalable/apps/@APPID@.svg' "${pkgdir}/usr/share/icons/hicolor/scalable/apps/@APPID@.svg"
+    install -Dm644 '@STAGING@/usr/share/beacon/mirrors.json' "${pkgdir}/usr/share/beacon/mirrors.json"
+    install -Dm644 '@STAGING@/usr/share/beacon/version.txt' "${pkgdir}/usr/share/beacon/version.txt"
+}
+"""
+
+
+def map_arch():
+    """Map host machine to (deb_arch, rpm_arch, pacman_arch)."""
+    m = platform.machine().lower()
+    if m in ("x86_64", "amd64"):
+        return {"deb": "amd64", "rpm": "x86_64", "pacman": "x86_64"}
+    if m in ("aarch64", "arm64"):
+        return {"deb": "arm64", "rpm": "aarch64", "pacman": "aarch64"}
+    raise PackError("unsupported architecture: %s" % m)
+
+
+def detect_linux_family():
+    """Best-effort detection of the host distro family."""
+    if shutil.which("dpkg"):
+        return "debian"
+    if shutil.which("rpmbuild") or shutil.which("rpm"):
+        return "fedora"
+    if shutil.which("makepkg"):
+        return "arch"
+    osr = Path("/etc/os-release")
+    if osr.is_file():
+        text = osr.read_text(encoding="utf-8", errors="replace").lower()
+        ids = []
+        for line in text.splitlines():
+            m = re.match(r"^id(?:_like)?=(.*)$", line.strip())
+            if m:
+                ids += [x.strip().strip('"') for x in m.group(1).split()]
+        if any(i in ids for i in ("debian", "ubuntu")):
+            return "debian"
+        if any(i in ids for i in ("fedora", "rhel", "centos", "rocky", "alma")):
+            return "fedora"
+        if any(i in ids for i in ("arch", "manjaro")):
+            return "arch"
+    return None
+
+
+def stage_install_tree(args, version, build_dir):
+    """Install the build tree into a staging prefix and add desktop metadata."""
+    cmake = resolve_cmake(build_dir)
+    staging = Path(args.work_dir) / "linux-staging"
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
 
-    # Copy binary
-    binary = Path(build_dir) / "Beacon"
-    if not binary.exists():
+    run([str(cmake), "--install", str(build_dir), "--prefix",
+         str((staging / "usr").resolve())])
+
+    # Desktop entry (Exec uses the packaged binary name only)
+    apps = staging / "usr/share/applications"
+    apps.mkdir(parents=True, exist_ok=True)
+    (apps / ("%s.desktop" % APP_ID)).write_text(
+        DESKTOP_ENTRY % {"bin": BIN_NAME, "app_id": APP_ID}, encoding="utf-8")
+
+    # Runtime version file consumed by the in-app updater on Linux
+    ver_dir = staging / "usr/share/beacon"
+    ver_dir.mkdir(parents=True, exist_ok=True)
+    write_version_file(ver_dir / "version.txt", version)
+    return staging
+
+
+def build_deb(staging, version, dist):
+    """Build the Debian package via dpkg-deb."""
+    if not shutil.which("dpkg-deb"):
+        log("WARNING: dpkg-deb not found; skipping .deb package")
+        return None
+    arch = map_arch()["deb"]
+    root = staging.parent / "deb-pkg"
+    if root.exists():
+        shutil.rmtree(root)
+    shutil.copytree(staging, root)          # root/usr/...
+
+    size_kb = sum(f.stat().st_size for f in root.rglob("*") if f.is_file()) // 1024
+    debian = root / "DEBIAN"
+    debian.mkdir()
+    control = (
+        "Package: beacon-launcher\n"
+        "Version: %s\n"
+        "Section: games\n"
+        "Priority: optional\n"
+        "Architecture: %s\n"
+        "Installed-Size: %d\n"
+        "Maintainer: %s\n"
+        "Depends: %s\n"
+        "Homepage: %s\n"
+        "Description: A cross-platform Minecraft launcher\n"
+        " Beacon is a Qt 6 based Minecraft launcher featuring Microsoft and\n"
+        " offline login, version/mod/modpack downloads and per-instance\n"
+        " management.\n" % (version, arch, size_kb, MAINTAINER, DEB_DEPS, HOMEPAGE))
+    (debian / "control").write_text(control, encoding="utf-8")
+
+    out = Path(dist) / "BeaconLauncher-deb.deb"
+    out.unlink(missing_ok=True)
+    run(["dpkg-deb", "--build", "--root-owner-group", str(root.resolve()), str(out)])
+    return out
+
+
+def build_rpm(staging, version, dist):
+    """Build the RPM package via rpmbuild."""
+    rpmbuild = shutil.which("rpmbuild")
+    if not rpmbuild:
+        log("WARNING: rpmbuild not found; skipping .rpm package")
+        return None
+    arch = map_arch()["rpm"]
+    top = staging.parent / "rpm-top"
+    if top.exists():
+        shutil.rmtree(top)
+    for sub in ("BUILD", "RPMS", "SOURCES", "SPECS", "SRPMS"):
+        (top / sub).mkdir(parents=True)
+
+    spec_path = top / "SPECS" / "beacon-launcher.spec"
+    rpm_date = time.strftime("%a %b %d %Y")
+    spec_path.write_text(
+        RPM_SPEC_TEMPLATE
+        .replace("@VERSION@", version)
+        .replace("@ARCH@", arch)
+        .replace("@HOMEPAGE@", HOMEPAGE)
+        .replace("@STAGING@", str(Path(staging).resolve()))
+        .replace("@BIN@", BIN_NAME)
+        .replace("@APPID@", APP_ID)
+        .replace("@RPM_DATE@", rpm_date),
+        encoding="utf-8")
+
+    run([rpmbuild, "-bb", "--define", "_topdir %s" % top.resolve(),
+         "--target", "%s-pc-linux-gnu" % arch, str(spec_path)])
+    produced = list((top / "RPMS").rglob("*.rpm"))
+    if not produced:
+        raise PackError("rpmbuild produced no package")
+    out = Path(dist) / "BeaconLauncher-redhat.rpm"
+    out.unlink(missing_ok=True)
+    shutil.copy2(produced[0], out)
+    return out
+
+
+def build_arch_pkg(staging, version, dist):
+    """Build the Arch package via makepkg."""
+    if not shutil.which("makepkg"):
+        log("WARNING: makepkg not found; skipping Arch package")
+        return None
+    arch = map_arch()["pacman"]
+    work = staging.parent / "arch-pkg"
+    if work.exists():
+        shutil.rmtree(work)
+    work.mkdir(parents=True)
+
+    cmd = ["makepkg", "-f", "-d"]     # -f force overwrite, -d skip dep check
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        cmd.append("--asroot")         # CI containers often run as root
+    (work / "PKGBUILD").write_text(
+        PKGBUILD_TEMPLATE
+        .replace("@VERSION@", version)
+        .replace("@ARCH@", arch)
+        .replace("@HOMEPAGE@", HOMEPAGE)
+        .replace("@STAGING@", str(Path(staging).resolve()))
+        .replace("@BIN@", BIN_NAME)
+        .replace("@APPID@", APP_ID),
+        encoding="utf-8")
+    run(cmd, cwd=work)
+
+    produced = sorted(work.glob("*.pkg.tar.*"))
+    if not produced:
+        raise PackError("makepkg produced no package")
+    out = Path(dist) / "BeaconLauncher-arch.pkg.tar.zst"
+    out.unlink(missing_ok=True)
+    shutil.copy2(produced[-1], out)
+    return out
+
+
+def build_linux(args, version, build_dir, qt_dir):
+    """Build and package native packages for Debian/Fedora/Arch."""
+    log("=== Building Beacon for Linux ===")
+    if not args.skip_build:
+        configure_and_build(args, build_dir, qt_dir)
+
+    binary = Path(build_dir) / BIN_NAME
+    if not binary.is_file():
         raise PackError("Binary not found: %s" % binary)
-    shutil.copy2(binary, staging / "Beacon")
-    os.chmod(staging / "Beacon", 0o755)
-    log("copied Beacon -> staging/")
 
-    # Copy mirrors.json
-    mirrors_src = ROOT / "third_party" / "minecraft-launcher-kernel" / "mirrors.json"
-    if mirrors_src.exists():
-        shutil.copy2(mirrors_src, staging / "mirrors.json")
-        log("copied mirrors.json")
+    dist = Path(args.dist_dir)
+    dist.mkdir(parents=True, exist_ok=True)
 
-    # Copy icon
-    svg_src = ROOT / "Untitled.svg"
-    if svg_src.exists():
-        shutil.copy2(svg_src, staging / "beacon.svg")
-        log("copied icon")
+    family = detect_linux_family()
+    log("detected distro family: %s" % (family or "unknown"))
 
-    # Create desktop file
-    desktop = staging / "io.github.fuqicn.beacon.desktop"
-    desktop.write_text("""[Desktop Entry]
-Name=Beacon
-Exec=%(dir)s/Beacon
-Icon=%(dir)s/beacon.svg
-Type=Application
-Categories=Game;
-""" % {"dir": "."}, encoding="utf-8")
+    staging = stage_install_tree(args, version, build_dir)
 
-    # Create tar.gz
-    # Detect package type for appropriate output format
-    pkg_type = None
-    for c in ("dpkg", "rpm", "pacman"):
-        if shutil.which(c):
-            pkg_type = {"dpkg": "deb", "rpm": "rpm", "pacman": "arch"}[c]
-            break
+    made = [p for p in (build_deb(staging, version, dist),
+                        build_rpm(staging, version, dist),
+                        build_arch_pkg(staging, version, dist)) if p]
 
-    if pkg_type == "deb":
-        tarball = dist / ("BeaconLauncher-deb.deb")
-    elif pkg_type == "rpm":
-        tarball = dist / ("BeaconLauncher-redhat.rpm")
-    elif pkg_type == "arch":
-        tarball = dist / ("BeaconLauncher-arch.pkg.tar.zst")
-    else:
-        tarball = dist / ("BeaconLauncher-%s-linux.tar.gz" % version)
-    run(["tar", "czf", str(tarball), "-C", str(staging.parent), staging.name])
-    log("Linux tarball: %s (%d bytes)" % (tarball, tarball.stat().st_size))
+    if not made:
+        # No packaging tooling available — fall back to an installable tarball.
+        tarball = dist / ("beacon-%s-linux-%s.tar.gz"
+                          % (version, map_arch()["pacman"]))
+        run(["tar", "-czf", str(tarball), "-C", str(staging), "usr"])
+        made.append(tarball)
 
-    log("=== Linux build done ===")
+    log("=== Linux packages done ===")
+    for p in made:
+        log("  %s (%d bytes)" % (p, p.stat().st_size))
 
 
 def build_macos(args, version):

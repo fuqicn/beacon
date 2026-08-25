@@ -1273,8 +1273,14 @@ return 0;
     }
 #endif
 
-    // Load mirror configuration from mirrors.json next to the executable
+    // Load mirror configuration from mirrors.json in the launcher data dir.
+    // Packaged Linux installs ship the config under the system data dir
+    // (/usr/share/beacon/) since the user XDG dir starts out empty.
     QString mirrorPath = resolveLauncherDir() + "/mirrors.json";
+#ifdef Q_OS_LINUX
+    if (!QFile::exists(mirrorPath))
+        mirrorPath = QStringLiteral("/usr/share/beacon/mirrors.json");
+#endif
     if (QFile::exists(mirrorPath))
         mc_mirror_load_config(mirrorPath.toUtf8().constData());
 

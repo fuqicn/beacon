@@ -266,6 +266,11 @@ QString KernelBridge::readVersion() const
 {
     QString path = s_launcherDir + "/version.txt";
     QFile f(path);
+#ifdef Q_OS_LINUX
+    // Packaged installs keep the version under the system data dir.
+    if (!f.exists())
+        path = QStringLiteral("/usr/share/beacon/version.txt");
+#endif
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return QString();
     QByteArray raw = f.readAll().trimmed();

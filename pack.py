@@ -8,9 +8,9 @@ Auto-detects the host platform and builds + packages accordingly:
               embedding dist/beacon.zip) and dist/beacon.zip. Qt is deployed with
               windeployqt so the result runs on a clean machine.
   Linux    -> native packages built from a `cmake --install` staging tree:
-                dist/BeaconLauncher-deb.deb          (dpkg-deb)
-                dist/BeaconLauncher-redhat.rpm       (rpmbuild + .spec)
-                dist/BeaconLauncher-arch.pkg.tar.zst (makepkg + PKGBUILD)
+                dist/BeaconLauncher-deb-<deb_arch>.deb          (dpkg-deb)
+                dist/BeaconLauncher-redhat-<rpm_arch>.rpm       (rpmbuild + .spec)
+                dist/BeaconLauncher-arch-<pacman_arch>.pkg.tar.zst (makepkg + PKGBUILD)
               Missing tooling for one format only skips that format; if no
               tooling exists at all, a plain tar.gz fallback is produced.
 
@@ -544,7 +544,7 @@ def build_deb(staging, version, dist):
         " management.\n" % (version, arch, size_kb, MAINTAINER, DEB_DEPS, HOMEPAGE))
     (debian / "control").write_text(control, encoding="utf-8")
 
-    out = Path(dist) / "BeaconLauncher-deb.deb"
+    out = Path(dist) / ("BeaconLauncher-deb-%s.deb" % arch)
     out.unlink(missing_ok=True)
     run(["dpkg-deb", "--build", "--root-owner-group", str(root.resolve()), str(out)])
     return out
@@ -581,7 +581,7 @@ def build_rpm(staging, version, dist):
     produced = list((top / "RPMS").rglob("*.rpm"))
     if not produced:
         raise PackError("rpmbuild produced no package")
-    out = Path(dist) / "BeaconLauncher-redhat.rpm"
+    out = Path(dist) / ("BeaconLauncher-redhat-%s.rpm" % arch)
     out.unlink(missing_ok=True)
     shutil.copy2(produced[0], out)
     return out
@@ -615,7 +615,7 @@ def build_arch_pkg(staging, version, dist):
     produced = sorted(work.glob("*.pkg.tar.*"))
     if not produced:
         raise PackError("makepkg produced no package")
-    out = Path(dist) / "BeaconLauncher-arch.pkg.tar.zst"
+    out = Path(dist) / ("BeaconLauncher-arch-%s.pkg.tar.zst" % arch)
     out.unlink(missing_ok=True)
     shutil.copy2(produced[-1], out)
     return out

@@ -60,6 +60,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QElapsedTimer>
+#include <QSysInfo>
 #include <memory>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -495,7 +496,19 @@ void KernelBridge::downloadUpdate()
         mc_info("[Update] unsupported distro family, skip download");
         return;
     }
-    asset = "BeaconLauncher-" + pkgType + "."
+    // Release assets carry an architecture suffix matching each family's
+    // convention: dpkg amd64/arm64, rpm & pacman x86_64/aarch64.
+    const QString cpu = QSysInfo::currentCpuArchitecture();
+    QString archToken;
+    if (cpu == QLatin1String("x86_64"))
+        archToken = pkgType == QLatin1String("deb") ? QStringLiteral("amd64")
+                                                    : QStringLiteral("x86_64");
+    else if (cpu == QLatin1String("arm64"))
+        archToken = pkgType == QLatin1String("deb") ? QStringLiteral("arm64")
+                                                    : QStringLiteral("aarch64");
+    else
+        archToken = cpu;
+    asset = "BeaconLauncher-" + pkgType + "-" + archToken + "."
             + (pkgType == "deb" ? "deb" : pkgType == "rpm" ? "rpm" : "pkg.tar.zst");
 #else
     return;

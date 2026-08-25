@@ -1,0 +1,3 @@
+# Packaging files must keep LF endings — CRLF breaks debian/rules,
+# PKGBUILD, .spec and .desktop on Linux builders.
+packaging/** text eol=lf

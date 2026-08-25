@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+
+# QML AOT cache generation cannot resolve the launcher's context properties
+# on Linux (Qt 6.8 qmlcachegen emits broken fallback code); keep it off.
+CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=Release -DLINUX_NO_CACHEGEN=ON
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(CMAKE_FLAGS)
+
+override_dh_auto_test:
+	# No test suite.

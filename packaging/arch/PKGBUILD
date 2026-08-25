@@ -1,0 +1,28 @@
+# Maintainer: fuqicn <fuqi2012cn@outlook.com>
+# Built on OBS or locally via `makepkg -f -d`.
+pkgname=beacon-launcher
+pkgver=1.0.1
+pkgrel=1
+pkgdesc='A cross-platform Minecraft launcher'
+arch=('x86_64' 'aarch64')
+url='https://github.com/fuqicn/beacon'
+license=('GPL3')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'zlib' 'gcc-libs')
+makedepends=('cmake' 'ninja')
+source=("$pkgname-v-$pkgver.tar.gz::https://github.com/fuqicn/beacon/archive/refs/tags/v-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cmake \
+        -S "$srcdir/beacon-v-$pkgver" \
+        -B "$srcdir/build" \
+        -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLINUX_NO_CACHEGEN=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build "$srcdir/build" --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}

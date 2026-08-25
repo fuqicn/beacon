@@ -222,3 +222,15 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/Untitled.svg"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
     RENAME io.github.fuqicn.beacon.svg
 )
+
+if(UNIX AND NOT APPLE)
+    # Desktop entry for distro packages (deb/rpm/arch all consume this via
+    # `cmake --install`, keeping the packaging declarations thin).
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.fuqicn.beacon.desktop"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+
+    # Version marker consumed by the in-app updater on Linux.
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.txt" "${PROJECT_VERSION}\n")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/beacon)
+endif()

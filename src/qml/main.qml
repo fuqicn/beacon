@@ -44,7 +44,7 @@ ApplicationWindow {
     // Force correct highlight colors: black text on primary background in light mode,
     // white text on primary background in dark mode.
     palette.highlight: Theme.primary
-    palette.highlightedText: kernel.windowColor().lightness() < 128 ? Qt.white : Qt.black
+    palette.highlightedText: kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
 
     onClosing: {
         // Cancel every in-flight download and sweep temp files before quitting.
@@ -414,7 +414,7 @@ ApplicationWindow {
     UpdatePopup {
         id: updatePopup
         // Stack above whatever occupies the bottom-right corner.
-        bottomMargin: 24
+        bottomGap: 24
                               + (downloadPanel.opacity > 0 ? downloadPanel.height + 12 : 0)
                               + (isCompact ? navBar.height + 8 : 0)
     }

@@ -35,8 +35,9 @@ Popup {
     x: parent.width - width - 24
     // Bottom offset is bound from main.qml so the prompt stacks above the
     // download status panel / compact nav bar instead of overlapping them.
-    property real bottomMargin: 24
-    y: parent.height - height - bottomMargin
+    // (Named bottomGap: Popup itself declares a FINAL bottomMargin.)
+    property real bottomGap: 24
+    y: parent.height - height - bottomGap
 
     visible: kernel.updateAvailable && !kernel.updateDownloading && !dismissed
     property bool dismissed: false

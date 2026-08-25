@@ -13,7 +13,7 @@ A cross-platform Minecraft launcher built with Qt 6 Quick/QML, powered by the
 - Mod / modpack search and download
 - Java runtime management and auto-download
 - Instance management with per-instance settings
-- System-following theme / transparency settings
+- System-following theme
 - Cross-platform: Windows, Linux, macOS
 
 ## Build

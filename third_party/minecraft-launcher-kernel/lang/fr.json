@@ -130,5 +130,9 @@
     "loader_type": "Type de loader",
     "output_dir": "Répertoire de sortie",
     "show_help": "Afficher cette aide",
-    "threads": "Threads"
+    "threads": "Threads",
+    "mod_page": "Numéro de page (à partir de 0)",
+    "packsearch_desc": "Rechercher des modpacks sur Modrinth",
+    "pack_none": "Aucun modpack trouvé",
+    "pack_none_query": "Aucun modpack trouvé pour"
 }

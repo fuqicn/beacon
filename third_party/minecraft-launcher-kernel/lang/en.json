@@ -158,5 +158,9 @@
     "mod_mcver_filter": "Filter by MC version",
     "mod_loader_filter": "Filter by loader",
     "json_opt": "Output log in JSON lines format",
-    "debug_opt": "Enable verbose debug output"
+    "debug_opt": "Enable verbose debug output",
+    "mod_page": "Page number (0-based)",
+    "packsearch_desc": "Search and browse modpacks from Modrinth",
+    "pack_none": "No modpacks found",
+    "pack_none_query": "No modpacks found for"
 }

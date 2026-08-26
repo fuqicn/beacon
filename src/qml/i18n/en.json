@@ -287,5 +287,6 @@
   "settings.checkUpdate.new": "New version %1 available — see the prompt at the bottom-right corner",
   "settings.checkUpdate.latest": "You are on the latest version",
   "status.updateDownload": "Downloading update %1",
-  "update.later": "Remind me later"
+  "update.later": "Remind me later",
+  "search.loadingMore": "Loading more..."
 }

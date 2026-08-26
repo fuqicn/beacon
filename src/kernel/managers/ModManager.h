@@ -74,11 +74,13 @@ public:
     Q_INVOKABLE void search(const QString &query, const QString &sort = "relevance",
                             int limit = 20,
                             const QString &mcVersion = QString(),
-                            const QString &loader = QString());
+                            const QString &loader = QString(),
+                            int offset = 0);
     Q_INVOKABLE void searchPacks(const QString &query, const QString &sort = "relevance",
                                  int limit = 20,
                                  const QString &mcVersion = QString(),
-                                 const QString &loader = QString());
+                                 const QString &loader = QString(),
+                                 int offset = 0);
     Q_INVOKABLE void getProject(const QString &projectId);
     Q_INVOKABLE void getVersions(const QString &projectId,
                                  const QString &mcVersion = QString(),

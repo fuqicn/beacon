@@ -74,13 +74,13 @@ void mc_mod_set_mirror(const char *mirror);
 void mc_mod_warmup_mirror(void);
 
 int mc_mod_search(const char *query, const char *mc_version, const char *loader,
-                  int source, int limit, int sort,
-                  McModProject *results, int max_results);
+                   int source, int limit, int offset, int sort,
+                   McModProject *results, int max_results);
 
 // Search Modrinth for modpacks (project_type=modpack). Same result struct.
 int mc_mod_search_pack(const char *query, const char *mc_version, const char *loader,
-                       int limit, int sort,
-                       McModProject *results, int max_results);
+                        int limit, int offset, int sort,
+                        McModProject *results, int max_results);
 
 int mc_mod_get_project(const char *project_id, int source,
                        McModProject *project);

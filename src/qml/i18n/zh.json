@@ -288,5 +288,6 @@
   "settings.checkUpdate.new": "发现新版本 %1，可在右下角提示中下载",
   "settings.checkUpdate.latest": "当前已是最新版本",
   "status.updateDownload": "正在下载更新 %1",
-  "update.later": "稍后提醒"
+  "update.later": "稍后提醒",
+  "search.loadingMore": "加载更多..."
 }

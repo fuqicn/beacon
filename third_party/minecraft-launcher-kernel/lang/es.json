@@ -130,5 +130,9 @@
     "loader_type": "Tipo de loader",
     "output_dir": "Directorio de salida",
     "show_help": "Mostrar esta ayuda",
-    "threads": "Hilos"
+    "threads": "Hilos",
+    "mod_page": "Número de página (empezando en 0)",
+    "packsearch_desc": "Buscar modpacks en Modrinth",
+    "pack_none": "No se encontraron modpacks",
+    "pack_none_query": "No se encontraron modpacks para"
 }

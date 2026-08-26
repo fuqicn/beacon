@@ -31,6 +31,11 @@ property var stackView: null
     property string mcVersion: ""
     property var results: []
 
+    // Pagination: Modrinth offset-based, auto-load on near-bottom scroll.
+    readonly property int pageSize: 20
+    property int pendingOffset: 0
+    property bool hasMore: false
+
     function formatCount(n) {
         if (n >= 1000000) return (n / 1000000).toFixed(1) + "M"
         if (n >= 1000) return (n / 1000).toFixed(1) + "k"
@@ -70,22 +75,49 @@ property var stackView: null
         return (loaderPart + (verPart ? " " + verPart : "")).trim()
     }
 
+    function requestPage(offset) {
+        root.pendingOffset = offset
+        kernel.modManager.search(root.query, root.sortKey, root.pageSize,
+                                 root.mcVersion, root.loader, offset)
+    }
+
     function doSearch() {
         root.query = queryField.text.trim()
         root.mcVersion = versionField.text.trim()
-        kernel.modManager.search(root.query, root.sortKey, 20, root.mcVersion, root.loader)
+        resultList.contentY = 0
+        root.hasMore = false
+        root.requestPage(0)
     }
 
     Component.onCompleted: {
         if (!kernel.modManager.searching)
-            kernel.modManager.search("", "relevance", 20)
+            root.requestPage(0)
     }
 
     Connections {
         target: kernel.modManager
         function onSearchCompleted(results) {
-            root.results = results
+            if (root.pendingOffset > 0)
+                root.results = root.results.concat(results)
+            else
+                root.results = results
+            root.hasMore = results.length >= root.pageSize
         }
+    }
+
+    // Auto-load next page when scrolled near the bottom.
+    function maybeLoadMore() {
+        if (kernel.modManager.searching || !root.hasMore) return
+        if (resultList.contentHeight <= 0) return
+        if (resultList.contentY >= resultList.contentHeight - resultList.height - 80)
+            root.requestPage(root.results.length)
+    }
+    Timer {
+        id: bottomTracker
+        interval: 400
+        repeat: true
+        running: root.visible
+        onTriggered: root.maybeLoadMore()
     }
 
     ColumnLayout {
@@ -320,6 +352,22 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                       (root.results.length === 0 ? I18n.tr("modSearch.noResults") : "")
                 font.pixelSize: 13
                 color: palette.placeholderText
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            height: kernel.modManager.searching && root.pendingOffset > 0 ? 26 : 0
+            visible: height > 0
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 8
+                BusyIndicator { running: true; implicitWidth: 18; implicitHeight: 18 }
+                Text {
+                    text: I18n.tr("search.loadingMore")
+                    font.pixelSize: 11
+                    color: palette.placeholderText
+                }
             }
         }
 

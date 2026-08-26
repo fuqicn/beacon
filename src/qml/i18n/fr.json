@@ -125,5 +125,6 @@
   "settings.checkUpdate.new": "Nouvelle version %1 disponible — voir l'invite en bas à droite",
   "settings.checkUpdate.latest": "Vous utilisez déjà la dernière version",
   "status.updateDownload": "Téléchargement de la mise à jour %1",
-  "update.later": "Me le rappeler plus tard"
+  "update.later": "Me le rappeler plus tard",
+  "search.loadingMore": "Chargement..."
 }

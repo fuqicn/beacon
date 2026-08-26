@@ -130,5 +130,9 @@
     "loader_type": "ローダータイプ",
     "output_dir": "出力ディレクトリ",
     "show_help": "このヘルプを表示",
-    "threads": "スレッド数"
+    "threads": "スレッド数",
+    "mod_page": "ページ番号（0始まり）",
+    "packsearch_desc": "Modrinthのmodpackを検索",
+    "pack_none": "modpackが見つかりません",
+    "pack_none_query": "一致するmodpackが見つかりません"
 }

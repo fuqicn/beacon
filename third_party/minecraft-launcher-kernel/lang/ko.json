@@ -130,5 +130,9 @@
     "loader_type": "로더 유형",
     "output_dir": "출력 디렉터리",
     "show_help": "도움말 표시",
-    "threads": "스레드 수"
+    "threads": "스레드 수",
+    "mod_page": "페이지 번호 (0부터 시작)",
+    "packsearch_desc": "Modrinth의 모드팩 검색",
+    "pack_none": "모드팩을 찾을 수 없습니다",
+    "pack_none_query": "일치하는 모드팩을 찾을 수 없습니다"
 }

@@ -158,5 +158,9 @@
     "mod_mcver_filter": "按 MC 版本过滤",
     "mod_loader_filter": "按加载器过滤",
     "json_opt": "以 JSON lines 格式输出日志",
-    "debug_opt": "启用详细调试输出"
+    "debug_opt": "启用详细调试输出",
+    "mod_page": "页码（从0开始）",
+    "packsearch_desc": "搜索和浏览 Modrinth 的整合包",
+    "pack_none": "未找到整合包",
+    "pack_none_query": "未找到匹配的整合包"
 }

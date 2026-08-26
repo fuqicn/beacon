@@ -82,7 +82,7 @@ public:
 
 public slots:
     void doSearch(const QString &query, const QString &sort, int limit,
-                  const QString &mcVersion, const QString &loader)
+                  const QString &mcVersion, const QString &loader, int offset)
     {
         int maxResults = qBound(1, limit, 100);
         std::vector<McModProject> results(maxResults);
@@ -92,14 +92,14 @@ public slots:
             query.isEmpty() ? nullptr : query.toUtf8().constData(),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
             loader.isEmpty() ? nullptr : loader.toUtf8().constData(),
-            MC_MOD_MODRINTH, maxResults, sortFromString(sort),
+            MC_MOD_MODRINTH, maxResults, qMax(offset, 0), sortFromString(sort),
             results.data(), maxResults);
 
         emit searchCompleted(projectsToVariant(results, count));
     }
 
     void doSearchPacks(const QString &query, const QString &sort, int limit,
-                       const QString &mcVersion, const QString &loader)
+                       const QString &mcVersion, const QString &loader, int offset)
     {
         int maxResults = qBound(1, limit, 100);
         std::vector<McModProject> results(maxResults);
@@ -109,7 +109,7 @@ public slots:
             query.isEmpty() ? nullptr : query.toUtf8().constData(),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
             loader.isEmpty() ? nullptr : loader.toUtf8().constData(),
-            maxResults, sortFromString(sort),
+            maxResults, qMax(offset, 0), sortFromString(sort),
             results.data(), maxResults);
 
         emit packSearchCompleted(projectsToVariant(results, count));
@@ -279,26 +279,26 @@ QString ModManager::modsDir(const QString &rootDir) const
 }
 
 void ModManager::search(const QString &query, const QString &sort, int limit,
-                        const QString &mcVersion, const QString &loader)
+                        const QString &mcVersion, const QString &loader, int offset)
 {
     if (m_searching) return;
     m_searching = true;
     emit searchingChanged();
 
-    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader]() {
-        w->doSearch(query, sort, limit, mcVersion, loader);
+    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader, offset]() {
+        w->doSearch(query, sort, limit, mcVersion, loader, offset);
     });
 }
 
 void ModManager::searchPacks(const QString &query, const QString &sort, int limit,
-                            const QString &mcVersion, const QString &loader)
+                            const QString &mcVersion, const QString &loader, int offset)
 {
     if (m_searchingPacks) return;
     m_searchingPacks = true;
     emit searchingPacksChanged();
 
-    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader]() {
-        w->doSearchPacks(query, sort, limit, mcVersion, loader);
+    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader, offset]() {
+        w->doSearchPacks(query, sort, limit, mcVersion, loader, offset);
     });
 }
 

@@ -14,8 +14,8 @@
 #include <string>
 
 static void print_help(void) {
-    mc_console_printf("modsearch - %s\n", mc_i18n("modsearch_desc"));
-    mc_console_printf("%s: modsearch [query] [%s]\n\n", mc_i18n("usage"), mc_i18n("options"));
+    mc_console_printf("packsearch - %s\n", mc_i18n("packsearch_desc"));
+    mc_console_printf("%s: packsearch [query] [%s]\n\n", mc_i18n("usage"), mc_i18n("options"));
     mc_console_printf("%s:\n", mc_i18n("options"));
     mc_console_printf("  --sort <downloads|relevance|follows|newest>  %s\n", mc_i18n("mod_sort"));
     mc_console_printf("  --limit <n>  %s (default: 20)\n", mc_i18n("mod_limit"));
@@ -25,10 +25,9 @@ static void print_help(void) {
     mc_console_printf("  --json          %s\n", mc_i18n("json_opt"));
     mc_console_printf("  --debug         %s\n", mc_i18n("debug_opt"));
     mc_console_printf("\n%s:\n", mc_i18n("examples"));
-    mc_console_printf("  modsearch\n");
-    mc_console_printf("  modsearch sodium\n");
-    mc_console_printf("  modsearch sodium --sort downloads\n");
-    mc_console_printf("  modsearch --page 1 --limit 30\n");
+    mc_console_printf("  packsearch\n");
+    mc_console_printf("  packsearch skyfactory\n");
+    mc_console_printf("  packsearch --sort downloads --page 1 --limit 30\n");
 }
 
 int main(int argc, char **argv) {
@@ -72,25 +71,21 @@ int main(int argc, char **argv) {
         }
     }
 
-    // when no query, default sort is downloads (popular mods)
-    if (!query) {
-        sort = MC_MOD_SORT_DOWNLOADS;
-    } else if (sort == MC_MOD_SORT_DOWNLOADS) {
-        sort = MC_MOD_SORT_RELEVANCE;
-    }
+    if (!query) { sort = MC_MOD_SORT_DOWNLOADS; }
+    else if (sort == MC_MOD_SORT_DOWNLOADS) { sort = MC_MOD_SORT_RELEVANCE; }
 
     if (mirror) mc_mod_set_mirror(mirror);
 
     McModProject results[200];
     int offset = page * limit;
-    int count = mc_mod_search(query, nullptr, nullptr,
-                               MC_MOD_MODRINTH, limit, offset, sort, results, 200);
+    int count = mc_mod_search_pack(query, nullptr, nullptr,
+                                   limit, offset, sort, results, 200);
 
     if (count == 0) {
         if (query)
-            mc_console_printf("%s '%s'\n", mc_i18n("mod_none_query"), query);
+            mc_console_printf("%s '%s'\n", mc_i18n("pack_none_query"), query);
         else
-            mc_console_printf("%s\n", mc_i18n("mod_none"));
+            mc_console_printf("%s\n", mc_i18n("pack_none"));
         return 1;
     }
 

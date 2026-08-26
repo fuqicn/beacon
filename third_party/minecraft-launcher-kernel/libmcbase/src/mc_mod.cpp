@@ -173,10 +173,13 @@ static McHttpResponse *http_get_json(const char *url) {
 
 // ---- Modrinth search ----
 static int search_modrinth(const char *query, const char *mc_version, const char *loader,
-                           int limit, int sort, const char *project_type,
+                           int limit, int offset, int sort, const char *project_type,
                            McModProject *results, int max_results) {
     QString url = QString("%1/search?limit=%2")
         .arg(MR_BASE).arg(qMin(limit, 50));
+
+    if (offset > 0)
+        url += "&offset=" + QString::number(offset);
 
     if (sort == MC_MOD_SORT_DOWNLOADS) url += "&index=downloads";
     else if (sort == MC_MOD_SORT_FOLLOWS) url += "&index=follows";
@@ -257,22 +260,22 @@ static int search_modrinth(const char *query, const char *mc_version, const char
 }
 
 int mc_mod_search(const char *query, const char *mc_version, const char *loader,
-                  int source, int limit, int sort,
+                  int source, int limit, int offset, int sort,
                   McModProject *results, int max_results) {
     if (!results || max_results <= 0) return 0;
 
     if (source != MC_MOD_MODRINTH && source != MC_MOD_ANY)
         return 0;
 
-    return search_modrinth(query, mc_version, loader, limit, sort, "mod",
+    return search_modrinth(query, mc_version, loader, limit, offset, sort, "mod",
                            results, max_results);
 }
 
 int mc_mod_search_pack(const char *query, const char *mc_version, const char *loader,
-                       int limit, int sort,
-                       McModProject *results, int max_results) {
+                        int limit, int offset, int sort,
+                        McModProject *results, int max_results) {
     if (!results || max_results <= 0) return 0;
-    return search_modrinth(query, mc_version, loader, limit, sort, "modpack",
+    return search_modrinth(query, mc_version, loader, limit, offset, sort, "modpack",
                            results, max_results);
 }
 

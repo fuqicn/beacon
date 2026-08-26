@@ -1234,8 +1234,18 @@ return 0;
 
     QString uiStyle;
     {
-        QSettings styleSettings(QCoreApplication::applicationDirPath() + "/settings.ini", QSettings::IniFormat);
-        uiStyle = styleSettings.value("ui/style", "auto").toString();
+        // ui/style lives in the persistent data dir (game/), which is where
+        // SettingsManager writes it. Fall back to the legacy copy next to the
+        // executable for installs predating the data-dir split.
+        QSettings styleSettings(resolveLauncherDir() + "/settings.ini",
+                                QSettings::IniFormat);
+        uiStyle = styleSettings.value("ui/style").toString();
+        if (uiStyle.isEmpty()) {
+            QSettings legacy(QCoreApplication::applicationDirPath()
+                                 + "/settings.ini",
+                             QSettings::IniFormat);
+            uiStyle = legacy.value("ui/style", "auto").toString();
+        }
     }
 
     // Resolved active style, exposed to QML so corners can follow it

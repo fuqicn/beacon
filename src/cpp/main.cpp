@@ -213,7 +213,9 @@ class ModIconProvider : public QQuickAsyncImageProvider
 public:
     ModIconProvider()
     {
-        m_memCache.setMaxCost(512);
+        // Byte-accounted cache: cost is KiB per entry, 16 MiB ceiling.
+        // Entries are pre-scaled thumbnails, so hundreds of items fit.
+        m_memCache.setMaxCost(16 * 1024);
         m_pool.setMaxThreadCount(8);
         m_pool.setExpiryTimeout(30000);
     }
@@ -224,9 +226,24 @@ public:
         QDir().mkpath(m_iconsDir);
     }
 
+    // Downscale to what the UI actually shows. Without this, full-resolution
+    // Modrinth covers (~1 MB decoded each) land in both the in-memory cache
+    // and the scene graph texture pool. Falls back to a 256px cap when QML
+    // sends no sourceSize so stray large requests stay bounded.
+    static QImage fitThumbnail(const QImage &img, const QSize &requested)
+    {
+        if (img.isNull()) return img;
+        QSize target = requested;
+        if (!target.isValid() || target.isEmpty()) {
+            constexpr int kMaxDim = 256;
+            if (img.width() <= kMaxDim && img.height() <= kMaxDim) return img;
+            target = QSize(kMaxDim, kMaxDim);
+        }
+        return img.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+
     QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize) override
     {
-        Q_UNUSED(requestedSize);
         QByteArray decoded = QByteArray::fromBase64(id.toUtf8());
         QString url = QString::fromUtf8(decoded);
         if (url.isEmpty())
@@ -244,30 +261,39 @@ public:
         if (QFile::exists(cachePath)) {
             QImage img(cachePath);
             if (!img.isNull()) {
-                m_memCache.insert(url, new QImage(img));
+                QImage scaled = fitThumbnail(img, requestedSize);
+                if (scaled.sizeInBytes() > 0)
+                    m_memCache.insert(url, new QImage(scaled),
+                                      qMax(1, scaled.sizeInBytes() / 1024));
                 ModIconResponse *r = new ModIconResponse(url);
-                QTimer::singleShot(0, r, [r, img]() { r->deliver(img); });
+                QTimer::singleShot(0, r, [r, scaled]() { r->deliver(scaled); });
                 return r;
             }
         }
 
         ModIconResponse *r = new ModIconResponse(url);
-        startDownload(r, url, cachePath);
+        startDownload(r, url, cachePath, requestedSize);
         return r;
     }
 
 private:
-    void startDownload(ModIconResponse *resp, const QString &url, const QString &cachePath)
+    void startDownload(ModIconResponse *resp, const QString &url,
+                       const QString &cachePath, const QSize &requested)
     {
         QPointer<ModIconResponse> guard(resp);
-        m_pool.start([guard, url, cachePath, this]() {
+        m_pool.start([guard, url, cachePath, requested, this]() {
             QImage image = fetch(url, cachePath);
             if (!guard.isNull()) {
-                QMetaObject::invokeMethod(guard.data(), [guard, image, this]() {
-                    if (guard.isNull())
+                QMetaObject::invokeMethod(guard.data(), [guard, image, requested, this]() {
+                    if (guard.isNull()) return;
+                    if (!image.isNull()) {
+                        QImage scaled = fitThumbnail(image, requested);
+                        if (scaled.sizeInBytes() > 0)
+                            m_memCache.insert(guard->url(), new QImage(scaled),
+                                              qMax(1, scaled.sizeInBytes() / 1024));
+                        guard->deliver(scaled);
                         return;
-                    if (!image.isNull())
-                        m_memCache.insert(guard->url(), new QImage(image));
+                    }
                     guard->deliver(image);
                 }, Qt::QueuedConnection);
             }

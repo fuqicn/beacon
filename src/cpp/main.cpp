@@ -224,6 +224,34 @@ public:
     {
         m_iconsDir = dir;
         QDir().mkpath(m_iconsDir);
+        // Prune the on-disk cache in the background so startup IO stays off
+        // the UI thread.
+        m_pool.start([dir]() { pruneIconCache(dir); });
+    }
+
+    // Keep the on-disk cover cache bounded. Once total size crosses
+    // kHighBytes, delete the oldest files until it falls back under
+    // kLowBytes (LRU by file mtime).
+    static void pruneIconCache(const QString &dir)
+    {
+        constexpr qint64 kHighBytes = 200LL * 1024 * 1024;
+        constexpr qint64 kLowBytes = 150LL * 1024 * 1024;
+        const QFileInfoList files =
+            QDir(dir).entryInfoList(QStringList() << QStringLiteral("*.png"),
+                                    QDir::Files,
+                                    QDir::Time | QDir::Reversed);   // oldest first
+        qint64 total = 0;
+        for (const QFileInfo &fi : files)
+            total += fi.size();
+        if (total <= kHighBytes)
+            return;
+        for (const QFileInfo &fi : files) {
+            if (total <= kLowBytes)
+                break;
+            if (QFile::remove(fi.absoluteFilePath()))
+                total -= fi.size();
+        }
+        mc_info("[Icons] pruned cover cache, now ~%lld MB", (long long)(total >> 20));
     }
 
     // Downscale to what the UI actually shows. Without this, full-resolution

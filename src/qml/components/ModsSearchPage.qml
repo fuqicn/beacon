@@ -97,11 +97,25 @@ property var stackView: null
     Connections {
         target: kernel.modManager
         function onSearchCompleted(results) {
-            if (root.pendingOffset > 0)
+            // Appending must not yank the view back to the top: remember the
+            // offset and restore it after the model swap (same item heights,
+            // so contentY stays valid).
+            var keepY = resultList.contentY
+            var appending = root.pendingOffset > 0
+            if (appending)
                 root.results = root.results.concat(results)
-            else
+            else {
                 root.results = results
+                keepY = 0
+            }
             root.hasMore = results.length >= root.pageSize
+            if (appending) {
+                Qt.callLater(function() {
+                    resultList.contentY = keepY
+                    // Drop stale JS wrappers / trimmed caches after a page load
+                    kernel.qmlCollectGarbage()
+                })
+            }
         }
     }
 

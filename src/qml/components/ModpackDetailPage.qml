@@ -164,7 +164,8 @@ function onVersionsLoaded(versions) {
                             source: root.project.logoUrl ? "image://modicon/" + Qt.btoa(root.project.logoUrl) : ""
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
-                            visible: root.project.logoUrl !== ""
+                            sourceSize.width: 96
+                            sourceSize.height: 96
                         }
                         Text {
                             anchors.centerIn: parent

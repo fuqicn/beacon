@@ -36,6 +36,39 @@ property var stackView: null
         if (n >= 1000) return (n / 1000).toFixed(1) + "k"
         return "" + n
     }
+    function flatDesc(s) {
+        return String(s || "").replace(/\s*\n+\s*/g, " ").replace(/\s+/g, " ").trim()
+    }
+    function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
+    function cmpVerDesc(a, b) {
+        var pa = (a||"").split(".").map(Number), pb = (b||"").split(".").map(Number)
+        for (var i=0; i<Math.max(pa.length,pb.length); i++) {
+            var x = pa[i]||0, y = pb[i]||0
+            if (x < y) return 1; if (x > y) return -1
+        }
+        return 0
+    }
+    function supportLine(loadersCsv, versionsCsv) {
+        var lds = (loadersCsv||"").split(",").map(function(s){return s.trim()}).filter(Boolean)
+        var loaderPart = ""
+        if (lds.length === 1) loaderPart = cap(lds[0])
+        else if (lds.length > 1) loaderPart = lds.map(cap).join(" / ")
+        var raw = (versionsCsv||"").split(",").map(function(s){return s.trim()}).filter(Boolean)
+        var releases = raw.filter(function(v){return /^\d+\.\d+(\.\d+)?$/.test(v)})
+        releases.sort(cmpVerDesc)
+        var hasSnap = raw.length !== releases.length
+        var verPart = ""
+        if (releases.length === 0) verPart = hasSnap ? "仅快照版本" : ""
+        else if (releases.length === 1) verPart = releases[0]
+        else {
+            var first = releases[0], last = releases[releases.length-1]
+            if (releases.length >= 4 && !first.match(/\d+\.\d+\.\d+$/))
+                verPart = first + "~" + last
+            else
+                verPart = releases.slice(0, 4).join(", ") + (releases.length > 4 ? " ..." : "")
+        }
+        return (loaderPart + (verPart ? " " + verPart : "")).trim()
+    }
 
     function doSearch() {
         root.query = queryField.text.trim()
@@ -162,7 +195,8 @@ property var stackView: null
             delegate: Rectangle {
                 id: packDelegate
                 width: resultList.width
-                height: 60
+                height: implicitHeight
+                implicitHeight: 58
                 radius: Theme.shapeSmall
                 color: ma.containsMouse
                        ? Qt.alpha(Theme.primary, 0.08)
@@ -183,6 +217,8 @@ property var stackView: null
                             source: modelData.logoUrl ? "image://modicon/" + Qt.btoa(modelData.logoUrl) : ""
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
+                            sourceSize.width: 76
+                            sourceSize.height: 76
                             visible: modelData.logoUrl !== ""
                         }
                         Text {
@@ -208,18 +244,18 @@ property var stackView: null
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.description || ""
+                            text: root.flatDesc(modelData.description) || ""
                             font.pixelSize: 11
                             color: palette.placeholderText
                             elide: Text.ElideRight
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.gameVersions || ""
+                            text: root.supportLine(modelData.loaders, modelData.gameVersions)
                             font.pixelSize: 10
-                            color: Theme.primary
+                            color: palette.placeholderText
                             elide: Text.ElideRight
-                            visible: (modelData.gameVersions || "") !== ""
+                            visible: root.supportLine(modelData.loaders, modelData.gameVersions) !== ""
                         }
                     }
 

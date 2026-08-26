@@ -226,7 +226,7 @@ ApplicationWindow {
                 // Unload pages left for a while to reclaim QML object/binding memory
                 Timer {
                     id: unloadTimer
-                    interval: 60000
+                    interval: 20000
                     repeat: true
                     onTriggered: {
                         var unloaded = false

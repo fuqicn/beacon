@@ -775,7 +775,7 @@ def build_arch_pkg(staging, version, dist):
         if not has_id or has_id.strip() == "":
             run(["useradd", "-m", "-s", "/bin/bash", user])
         run(["chown", "-R", "%s:%s" % (user, user), str(work)])
-        run("su - %s -c \"cd %s && makepkg -f -d\"" % (user, work), shell=True)
+        run("su - %s -c \"cd %s && makepkg -f -d\"" % (user, str(work.resolve())), shell=True)
         produced = sorted(work.glob("*.pkg.tar.*"))
     else:
         run(cmd, cwd=work)

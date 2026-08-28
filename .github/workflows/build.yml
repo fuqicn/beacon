@@ -15,37 +15,6 @@ env:
   CACHE_PREFIX: "qt682-msvc-ninja"
 
 jobs:
-  # ---------------------------------------------------------------- Windows (MSVC + Qt 6.8)
-  # windows-latest has VS Build Tools (cl.exe / rc.exe / link.exe).
-  # pack.py always uses MSVC for the C self-extractor on Windows (mingw from
-  # Qt's dir is incompatible with MSVC-compiled Qt libraries).
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Qt 6.8 (MSVC)
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.8.*'
-          arch: 'win64_msvc2022_64'
-          cache: 'true'
-          cache-key-prefix: ${{ env.CACHE_PREFIX }}
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build
-          key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build (Windows, MSVC)
-        run: python pack.py
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BeaconLauncher-windows-amd64
-          path: dist/BeaconLauncher-windows-amd64.exe
-
   # ---------------------------------------------------------------- Debian
   debian:
     runs-on: ubuntu-24.04

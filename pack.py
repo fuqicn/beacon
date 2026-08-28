@@ -58,13 +58,15 @@ def run(cmd, cwd=None, env=None, shell=False, capture=False, check=True):
     full_env = os.environ.copy()
     if env:
         full_env.update(env)
-    result = subprocess.run(cmd, cwd=cwd, env=full_env, shell=shell, check=check,
+    result = subprocess.run(cmd, cwd=cwd, env=full_env, shell=shell, check=False,
                             stdout=subprocess.PIPE if capture else None,
                             stderr=subprocess.STDOUT if capture else None)
     if result.returncode != 0:
         if capture:
             print(result.stdout.decode('utf-8', errors='replace'), end='')
-        raise PackError("command failed with exit code %d" % result.returncode)
+        if check:
+            raise PackError("command failed with exit code %d" % result.returncode)
+        return None
     return result.stdout.decode('utf-8', errors='replace') if capture else None
 
 
@@ -304,6 +306,12 @@ def configure_and_build(args, build_dir, qt_dir):
     if detect_platform() == "linux":
         cfg.append("-DCMAKE_INSTALL_PREFIX=/usr")
         cfg.append("-DLINUX_NO_CACHEGEN=ON")
+    elif detect_platform() == "windows":
+        # Force MSVC compiler on Windows to avoid picking up mingw from Qt's dir.
+        msvc = find_msvc_toolchain()
+        if msvc:
+            cfg.append("-DCMAKE_C_COMPILER=%s" % msvc["cl"].parent / "cl.exe")
+            cfg.append("-DCMAKE_CXX_COMPILER=%s" % msvc["cl"])
     if not build_dir.exists():
         cfg.append("-G")
         cfg.append("Ninja")

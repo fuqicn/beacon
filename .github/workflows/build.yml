@@ -117,43 +117,14 @@ jobs:
           name: BeaconLauncher-arch-x86_64
           path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
 
-  # ---------------------------------------------------------------- macOS x86_64 (Intel)
-  macos-intel:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Qt 6.8 (macOS x86_64)
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.8.*'
-          host: 'mac'
-          target: 'desktop'
-          arch: 'clang_64'
-          cache: 'true'
-          cache-key-prefix: ${{ env.CACHE_PREFIX }}
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build-mac-intel
-          key: ${{ runner.os }}-mac-intel-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build .app bundle (macOS x86_64)
-        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-intel
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Beacon-mac-intel
-          path: dist/Beacon.app
-
-  # ---------------------------------------------------------------- macOS ARM64 (Apple Silicon)
-  macos-arm:
+  # ---------------------------------------------------------------- macOS (ARM64 native + x86_64 cross-compile)
+  # Uses a single macos-14 (Apple Silicon) runner to build both architectures.
+  macos:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8 (macOS arm64)
+      - name: Install Qt 6.8 (macOS)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.*'
@@ -162,16 +133,32 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}
 
-      - name: Cache CMake build
+      # Build ARM64 (native on this runner).
+      - name: Cache CMake build (arm64)
         uses: actions/cache@v4
         with:
-          path: launcher/build-mac-arm
+          path: launcher/build-mac-arm64
           key: ${{ runner.os }}-mac-arm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
-      - name: Build .app bundle (macOS ARM64)
-        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-arm
+      - name: Build .app (macOS ARM64)
+        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-arm64 --osx-arch arm64
 
       - uses: actions/upload-artifact@v4
         with:
           name: Beacon-mac-arm64
-          path: dist/Beacon.app
+          path: dist/Beacon-arm64.app
+
+      # Build x86_64 (cross-compile via CMAKE_OSX_ARCHITECTURES).
+      - name: Cache CMake build (x86_64)
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-mac-x86_64
+          key: ${{ runner.os }}-mac-intel-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build .app (macOS x86_64)
+        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-x86_64 --osx-arch x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Beacon-mac-intel
+          path: dist/Beacon-intel.app

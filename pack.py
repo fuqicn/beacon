@@ -314,6 +314,9 @@ def configure_and_build(args, build_dir, qt_dir):
         if msvc:
             cfg.append("-DCMAKE_C_COMPILER=%s" % msvc["cl"].parent / "cl.exe")
             cfg.append("-DCMAKE_CXX_COMPILER=%s" % msvc["cl"])
+    elif detect_platform() == "darwin" and getattr(args, 'osx_arch', None):
+        # Cross-compile for specific macOS architecture.
+        cfg.append("-DCMAKE_OSX_ARCHITECTURES=%s" % args.osx_arch)
     if not build_dir.exists():
         cfg.append("-G")
         cfg.append("Ninja")
@@ -834,13 +837,12 @@ def _find_qt_on_macos():
     return None
 
 
-def build_macos(args, version, qt_dir=None):
-    """Build and package a macOS .app bundle (Apple Silicon / Intel)."""
-    log("=== Building Beacon for macOS ===")
+def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
+    """Build and package a macOS .app bundle."""
+    log("=== Building Beacon for macOS (%s) ===" % arch_suffix)
+    build_dir = Path(args.build_dir) if args.build_dir else (ROOT / "build-mac-%s" % arch_suffix)
     if not args.skip_build:
-        configure_and_build(args, args.build_dir or "build-mac", qt_dir)
-
-    build_dir = Path(args.build_dir) if args.build_dir else Path("build-mac")
+        configure_and_build(args, build_dir, qt_dir)
     binary = build_dir / "Beacon.app"
     if not binary.is_dir():
         raise PackError("Beacon.app not found in %s" % build_dir)
@@ -887,14 +889,14 @@ def build_macos(args, version, qt_dir=None):
     write_version_file(resources / "version.txt", version)
 
     # Final .app lives in dist/.
-    final_app = dist / "Beacon.app"
+    final_app = dist / ("Beacon-%s.app" % arch_suffix)
     if final_app.exists():
         shutil.rmtree(final_app)
     shutil.move(str(staging / "Beacon.app"), str(final_app))
     shutil.rmtree(staging, ignore_errors=True)
 
     log("=== macOS package done ===")
-    log("  dist/Beacon.app (%d bytes)" % (
+    log("  dist/Beacon-%s.app (%d bytes)" % (arch_suffix,
         sum(f.stat().st_size for f in final_app.rglob("*") if f.is_file())))
 
 
@@ -915,6 +917,8 @@ def parse_args():
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--skip-build", action="store_true",
                    help="skip configure/build (requires existing build artifacts)")
+    p.add_argument("--osx-arch", choices=["arm64", "x86_64"], default="arm64",
+                   help="macOS target architecture (default: arm64)")
     p.add_argument("--proxy", default=os.environ.get("GH_PROXY") or DEFAULT_PROXY,
                    help="GitHub download proxy prefix (default: %s)" % DEFAULT_PROXY)
     p.add_argument("--no-proxy", action="store_true",
@@ -938,9 +942,9 @@ def main():
         qt_dir = resolve_qt_dir(args, build_dir)
         build_linux(args, version, build_dir, qt_dir)
     else:
-        build_dir = Path(args.build_dir) if args.build_dir else ROOT / "build-mac"
+        build_dir = Path(args.build_dir) if args.build_dir else ROOT / "build-mac-arm64"
         qt_dir = args.qt_dir or os.environ.get("QT_DIR")
-        build_macos(args, version, qt_dir)
+        build_macos(args, version, qt_dir, arch_suffix=args.osx_arch)
 
 
 if __name__ == "__main__":

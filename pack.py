@@ -511,16 +511,19 @@ def detect_linux_family():
     return None
 
 
-def stage_install_tree(args, version, build_dir):
+def stage_install_tree(args, version, build_dir, install_prefix=None):
     """Install the build tree into a staging prefix and add desktop metadata."""
     cmake = resolve_cmake(build_dir)
-    staging = Path(args.work_dir) / "linux-staging"
+    if install_prefix is not None:
+        staging = Path(install_prefix)
+    else:
+        staging = Path(args.work_dir) / "linux-staging"
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
 
     run([str(cmake), "--install", str(build_dir), "--prefix",
-         str((staging / "usr").resolve())])
+         str(staging.resolve())])
 
     # Strip the staged binary when a toolchain strip is available (OBS builds
     # get distro-managed stripping; this covers the plain tarball fallback).
@@ -686,8 +689,95 @@ def build_linux(args, version, build_dir, qt_dir):
         log("  %s (%d bytes)" % (p, p.stat().st_size))
 
 
-def build_macos(args, version):
-    raise PackError("macOS packaging is not implemented yet")
+def _find_qt_on_macos():
+    """Locate the Homebrew-installed Qt 6 root directory on macOS."""
+    for prefix in ("/opt/homebrew", "/usr/local"):
+        cand = Path(prefix) / "opt" / "qt@6"
+        if cand.is_dir():
+            return cand
+    env = os.environ.get("QT_DIR")
+    if env and Path(env).is_dir():
+        return Path(env)
+    return None
+
+
+def build_macos(args, version, qt_dir=None):
+    """Build and package a macOS .app bundle (Apple Silicon / Intel)."""
+    log("=== Building Beacon for macOS ===")
+    if not args.skip_build:
+        configure_and_build(args, args.build_dir or "build-mac", qt_dir)
+
+    build_dir = Path(args.build_dir) if args.build_dir else Path("build-mac")
+    binary = build_dir / "Beacon.app"
+    if not binary.is_dir():
+        raise PackError("Beacon.app not found in %s" % build_dir)
+
+    dist = Path(args.dist_dir)
+    dist.mkdir(parents=True, exist_ok=True)
+
+    # Stage: install into a clean staging tree that mirrors .app contents.
+    staging = build_dir / "mac-staging"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+
+    cmake = resolve_cmake(build_dir)
+    # Install to staging/Contents — CMake's MACOSX_BUNDLE rule puts the app
+    # bundle structure there (MacOS/, Frameworks/, Resources/, etc.).
+    run([str(cmake), "--install", str(build_dir), "--prefix",
+         str(staging / "Contents")])
+
+    # Strip the binary.
+    strip = shutil.which("strip")
+    staged_bin = staging / "Contents" / "MacOS" / BIN_NAME
+    if strip and staged_bin.is_file():
+        before = staged_bin.stat().st_size
+        run([str(strip), "--strip-all", str(staged_bin)])
+        log("stripped %s: %d -> %d bytes"
+            % (staged_bin, before, staged_bin.stat().st_size))
+
+    # Deploy Qt frameworks and plugins via macdeployqt if available.
+    qt_root = qt_dir or _find_qt_on_macos()
+    if qt_root:
+        macdeployqt = qt_root / "bin" / "macdeployqt"
+        if macdeployqt.is_file():
+            log("--- Deploying Qt runtime (macdeployqt) ---")
+            # Install to staging so macdeployqt can sign and fix up references.
+            run([str(macdeployqt), str(staging / "Contents"),
+                 "-always-overwrite", "-dryrun"])
+            # Remove dry-run and do real deploy.
+            run([str(macdeployqt), str(staging / "Contents"),
+                 "-always-overwrite"])
+        else:
+            log("WARNING: macdeployqt not found at %s" % macdeployqt)
+    else:
+        log("WARNING: Qt root not found on macOS; frameworks may be incomplete")
+
+    # Copy runtime assets.
+    resources = staging / "Contents" / "Resources"
+    resources.mkdir(parents=True, exist_ok=True)
+    copy_mirrors_json(resources / "mirrors.json")
+    write_version_file(resources / "version.txt", version)
+
+    # Final .app lives in dist/.
+    app_dst = dist / "Beacon.app"
+    if app_dst.exists():
+        shutil.rmtree(app_dst)
+    shutil.move(str(staging / "Contents"), str(app_dst / "Contents"))
+    # Create the top-level .app wrapper (symlink or restructure if needed).
+    # On macOS the .app is just Contents/ + Info.plist + executable symlink.
+    # Since we installed directly into staging/Contents/, restructure:
+    final_app = dist / "Beacon.app"
+    if final_app.exists():
+        shutil.rmtree(final_app)
+    staging_contents = staging / "Contents"
+    final_app.mkdir(parents=True)
+    shutil.move(str(staging_contents), str(final_app / "Contents"))
+    shutil.rmtree(staging, ignore_errors=True)
+
+    log("=== macOS package done ===")
+    log("  dist/Beacon.app (%d bytes)" % (
+        sum(f.stat().st_size for f in final_app.rglob("*") if f.is_file())))
 
 
 # ----------------------------------------------------------------- main ----
@@ -730,7 +820,9 @@ def main():
         qt_dir = resolve_qt_dir(args, build_dir)
         build_linux(args, version, build_dir, qt_dir)
     else:
-        build_macos(args, version)
+        build_dir = Path(args.build_dir) if args.build_dir else ROOT / "build-mac"
+        qt_dir = args.qt_dir or os.environ.get("QT_DIR")
+        build_macos(args, version, qt_dir)
 
 
 if __name__ == "__main__":

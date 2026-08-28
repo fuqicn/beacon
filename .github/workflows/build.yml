@@ -29,7 +29,6 @@ jobs:
         with:
           version: '6.8.*'
           arch: 'win64_msvc2022_64'
-          modules: 'qtquickcontrols2 qtsvg'
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}
 
@@ -81,6 +80,12 @@ jobs:
           name: BeaconLauncher-deb-amd64
           path: dist/BeaconLauncher-deb-amd64.deb
 
+      # Also produce a generic Linux tarball (works on any distro).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-linux-x86_64
+          path: dist/beacon-*.linux-x86_64.tar.gz
+
   # ---------------------------------------------------------------- Fedora / RHEL
   fedora:
     runs-on: ubuntu-24.04
@@ -115,30 +120,6 @@ jobs:
         with:
           name: BeaconLauncher-redhat-x86_64
           path: dist/BeaconLauncher-redhat-x86_64.rpm
-
-  # ---------------------------------------------------------------- Arch
-  arch:
-    runs-on: ubuntu-24.04
-    container: archlinux:latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base qt6-declarative qt6-svg zlib
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build-arch
-          key: ${{ runner.os }}-arch-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build .pkg.tar.zst
-        run: python3 pack.py --build-dir build-arch
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BeaconLauncher-arch-x86_64
-          path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
 
   # ---------------------------------------------------------------- macOS (Apple Silicon via macos-14)
   macos:

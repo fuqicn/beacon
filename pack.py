@@ -627,7 +627,7 @@ def stage_install_tree(args, version, build_dir, install_prefix=None):
     staging.mkdir(parents=True)
 
     run([str(cmake), "--install", str(build_dir), "--prefix",
-         str(staging.resolve())])
+         str((staging / "usr").resolve())])
 
     # Strip the staged binary when a toolchain strip is available (OBS builds
     # get distro-managed stripping; this covers the plain tarball fallback).
@@ -839,7 +839,7 @@ def build_macos(args, version, qt_dir=None):
             % (staged_bin, before, staged_bin.stat().st_size))
 
     # Deploy Qt frameworks and plugins via macdeployqt if available.
-    qt_root = qt_dir or _find_qt_on_macos()
+    qt_root = Path(qt_dir) if qt_dir else _find_qt_on_macos()
     if qt_root:
         macdeployqt = qt_root / "bin" / "macdeployqt"
         if macdeployqt.is_file():

@@ -51,14 +51,14 @@ def log(msg):
     print(msg, flush=True)
 
 
-def run(cmd, cwd=None, env=None, shell=False, capture=False):
+def run(cmd, cwd=None, env=None, shell=False, capture=False, check=True):
     if shell and isinstance(cmd, list):
         cmd = subprocess.list2cmdline(cmd)
     log("+ " + (cmd if shell else subprocess.list2cmdline(cmd)))
     full_env = os.environ.copy()
     if env:
         full_env.update(env)
-    result = subprocess.run(cmd, cwd=cwd, env=full_env, shell=shell, check=False,
+    result = subprocess.run(cmd, cwd=cwd, env=full_env, shell=shell, check=check,
                             stdout=subprocess.PIPE if capture else None,
                             stderr=subprocess.STDOUT if capture else None)
     if result.returncode != 0:
@@ -148,6 +148,21 @@ def resolve_mingw_bin(args, build_dir):
     cc = _clean_cache_value(cache.get("CMAKE_CXX_COMPILER") or cache.get("CMAKE_C_COMPILER"))
     if cc:
         return Path(cc).parent
+    return None
+
+
+def find_mingw_in_path():
+    """Check if mingw (g++) is available in PATH. Returns the mingw bin dir or None."""
+    gpp = shutil.which("g++")
+    if not gpp:
+        return None
+    # Verify it's actually a working compiler by running --version
+    try:
+        out = run(["g++", "--version"], capture=True, check=False)
+        if out and "gcc" in out.lower():
+            return Path(gpp).parent
+    except Exception:
+        pass
     return None
 
 
@@ -437,11 +452,11 @@ def build_windows(args, version, build_dir, qt_dir):
     log("copied Beacon.exe -> %s" % (beacon_dir / "Beacon.exe"))
 
     # Determine which toolchain to use for the C self-extractor and strip.
-    # MSVC (cl.exe / rc.exe / link.exe) is pre-installed on GitHub Actions
-    # windows-latest via VS Build Tools — no extra downloads needed.
-    # Fall back to mingw only when MSVC tools are unavailable (local dev).
-    msvc = find_msvc_toolchain()
-    mingw_bin = resolve_mingw_bin(args, build_dir) if not msvc else None
+    # Prefer mingw (g++) if available in PATH — this matches local dev setups.
+    # Fall back to MSVC (cl.exe / rc.exe / link.exe) when mingw is absent,
+    # which is the case on GitHub Actions windows-latest.
+    mingw_bin = find_mingw_in_path() or resolve_mingw_bin(args, build_dir)
+    msvc = find_msvc_toolchain() if not mingw_bin else None
 
     # Strip the deployed binary to cut package size. The unstripped original
     # stays in build/ so crash.log symbolization keeps working in dev builds.
@@ -843,19 +858,17 @@ def build_macos(args, version, qt_dir=None):
     staging.mkdir(parents=True)
 
     cmake = resolve_cmake(build_dir)
-    # Install to staging/Contents — CMake's MACOSX_BUNDLE rule puts the app
-    # bundle structure there (MacOS/, Frameworks/, Resources/, etc.).
-    run([str(cmake), "--install", str(build_dir), "--prefix",
-         str(staging / "Contents")])
+    # Install to staging — CMake's MACOSX_BUNDLE creates Beacon.app at the prefix root.
+    run([str(cmake), "--install", str(build_dir), "--prefix", str(staging)])
 
     # Strip the binary.
+    staged_app = staging / "Beacon.app" / "MacOS" / BIN_NAME
     strip = shutil.which("strip")
-    staged_bin = staging / "Contents" / "MacOS" / BIN_NAME
-    if strip and staged_bin.is_file():
-        before = staged_bin.stat().st_size
-        run([str(strip), "--strip-all", str(staged_bin)])
+    if strip and staged_app.is_file():
+        before = staged_app.stat().st_size
+        run([str(strip), "--strip-all", str(staged_app)])
         log("stripped %s: %d -> %d bytes"
-            % (staged_bin, before, staged_bin.stat().st_size))
+            % (staged_app, before, staged_app.stat().st_size))
 
     # Deploy Qt frameworks and plugins via macdeployqt if available.
     qt_root = Path(qt_dir) if qt_dir else _find_qt_on_macos()
@@ -863,7 +876,7 @@ def build_macos(args, version, qt_dir=None):
         macdeployqt = qt_root / "bin" / "macdeployqt"
         if macdeployqt.is_file():
             log("--- Deploying Qt runtime (macdeployqt) ---")
-            run([str(macdeployqt), str(staging / "Contents"),
+            run([str(macdeployqt), str(staging / "Beacon.app"),
                  "-always-overwrite"])
         else:
             log("WARNING: macdeployqt not found at %s" % macdeployqt)
@@ -871,25 +884,16 @@ def build_macos(args, version, qt_dir=None):
         log("WARNING: Qt root not found on macOS; frameworks may be incomplete")
 
     # Copy runtime assets.
-    resources = staging / "Contents" / "Resources"
+    resources = staging / "Beacon.app" / "Resources"
     resources.mkdir(parents=True, exist_ok=True)
     copy_mirrors_json(resources / "mirrors.json")
     write_version_file(resources / "version.txt", version)
 
     # Final .app lives in dist/.
-    app_dst = dist / "Beacon.app"
-    if app_dst.exists():
-        shutil.rmtree(app_dst)
-    shutil.move(str(staging / "Contents"), str(app_dst / "Contents"))
-    # Create the top-level .app wrapper (symlink or restructure if needed).
-    # On macOS the .app is just Contents/ + Info.plist + executable symlink.
-    # Since we installed directly into staging/Contents/, restructure:
     final_app = dist / "Beacon.app"
     if final_app.exists():
         shutil.rmtree(final_app)
-    staging_contents = staging / "Contents"
-    final_app.mkdir(parents=True)
-    shutil.move(str(staging_contents), str(final_app / "Contents"))
+    shutil.move(str(staging / "Beacon.app"), str(final_app))
     shutil.rmtree(staging, ignore_errors=True)
 
     log("=== macOS package done ===")

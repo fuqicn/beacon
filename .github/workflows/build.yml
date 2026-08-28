@@ -66,6 +66,11 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}
 
+      - name: Install dev packages for CMake find_package(Qt6 6.8)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build dpkg-dev debhelper zlib1g-dev python3
+
       - name: Cache CMake build
         uses: actions/cache@v4
         with:

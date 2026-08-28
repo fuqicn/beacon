@@ -151,21 +151,6 @@ def resolve_mingw_bin(args, build_dir):
     return None
 
 
-def find_mingw_in_path():
-    """Check if mingw (g++) is available in PATH. Returns the mingw bin dir or None."""
-    gpp = shutil.which("g++")
-    if not gpp:
-        return None
-    # Verify it's actually a working compiler by running --version
-    try:
-        out = run(["g++", "--version"], capture=True, check=False)
-        if out and "gcc" in out.lower():
-            return Path(gpp).parent
-    except Exception:
-        pass
-    return None
-
-
 def find_msvc_toolchain():
     """Locate MSVC build tools (cl.exe, rc.exe, link.exe, optional strip).
 
@@ -452,11 +437,11 @@ def build_windows(args, version, build_dir, qt_dir):
     log("copied Beacon.exe -> %s" % (beacon_dir / "Beacon.exe"))
 
     # Determine which toolchain to use for the C self-extractor and strip.
-    # Prefer mingw (g++) if available in PATH — this matches local dev setups.
-    # Fall back to MSVC (cl.exe / rc.exe / link.exe) when mingw is absent,
-    # which is the case on GitHub Actions windows-latest.
-    mingw_bin = find_mingw_in_path() or resolve_mingw_bin(args, build_dir)
-    msvc = find_msvc_toolchain() if not mingw_bin else None
+    # On Windows CI (github actions), mingw from Qt's install dir is in PATH but
+    # cannot link MSVC Qt libraries — always use MSVC there.
+    # Locally, use mingw only when explicitly specified via --mingw-bin.
+    msvc = find_msvc_toolchain()
+    mingw_bin = resolve_mingw_bin(args, build_dir)
 
     # Strip the deployed binary to cut package size. The unstripped original
     # stays in build/ so crash.log symbolization keeps working in dev builds.
@@ -775,6 +760,7 @@ def build_arch_pkg(staging, version, dist):
     cmd = ["makepkg", "-f", "-d"]   # -f force overwrite, -d skip dep check
     if os.geteuid() == 0:
         user = "archbuilder"
+        # Create user first if it doesn't exist (id will fail otherwise).
         if not shutil.which("id") or run(["id", "-u", user], capture=True, check=False).strip() == "":
             run(["useradd", "-m", "-s", "/bin/bash", user])
         run(["chown", "-R", "%s:%s" % (user, user), str(work)])

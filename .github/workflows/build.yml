@@ -17,8 +17,8 @@ env:
 jobs:
   # ---------------------------------------------------------------- Windows (MSVC + Qt 6.8)
   # windows-latest has VS Build Tools (cl.exe / rc.exe / link.exe).
-  # install-qt-action downloads prebuilt Qt 6.8 MSVC binaries from Qt CDN
-  # and sets QT_ROOT_DIR so pack.py finds qmake/cmake without manual path config.
+  # pack.py always uses MSVC for the C self-extractor on Windows (mingw from
+  # Qt's dir is incompatible with MSVC-compiled Qt libraries).
   windows:
     runs-on: windows-latest
     steps:
@@ -47,9 +47,6 @@ jobs:
           path: dist/BeaconLauncher-windows-amd64.exe
 
   # ---------------------------------------------------------------- Debian
-  # install-qt-action with install-deps=true installs Qt runtime deps via apt.
-  # We also need the -dev packages for CMake's find_package(Qt6 6.8); these
-  # are pulled in automatically by the action's install-deps step.
   debian:
     runs-on: ubuntu-24.04
     steps:
@@ -127,7 +124,7 @@ jobs:
           path: dist/BeaconLauncher-redhat-x86_64.rpm
 
   # ---------------------------------------------------------------- Arch
-  # Docker container runs as root; build_arch_pkg creates a temp user via su.
+  # Docker container runs as root; build_arch_pkg creates archbuilder via su.
   arch:
     runs-on: ubuntu-24.04
     container: archlinux:latest
@@ -150,12 +147,44 @@ jobs:
         with:
           name: BeaconLauncher-arch-x86_64
           path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
-  macos:
+
+  # ---------------------------------------------------------------- macOS x86_64 (Intel)
+  macos-intel:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6.8 (macOS x86_64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+          cache: 'true'
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-mac-intel
+          key: ${{ runner.os }}-mac-intel-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build .app bundle (macOS x86_64)
+        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-intel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Beacon-mac-intel
+          path: dist/Beacon.app
+
+  # ---------------------------------------------------------------- macOS ARM64 (Apple Silicon)
+  macos-arm:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8 (macOS)
+      - name: Install Qt 6.8 (macOS arm64)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.*'
@@ -167,11 +196,11 @@ jobs:
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
-          path: launcher/build-mac
-          key: ${{ runner.os }}-mac-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+          path: launcher/build-mac-arm
+          key: ${{ runner.os }}-mac-arm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
-      - name: Build .app bundle (macOS)
-        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac
+      - name: Build .app bundle (macOS ARM64)
+        run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-arm
 
       - uses: actions/upload-artifact@v4
         with:

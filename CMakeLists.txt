@@ -8,7 +8,7 @@ set(CMAKE_AUTORCC ON)
 
 include(GNUInstallDirs)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg Widgets)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg Widgets)
 find_package(ZLIB QUIET)
 
 # Qt 6.5+ qml import-scanner embeds the standard Qt modules' qmldir/type-info

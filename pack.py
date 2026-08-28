@@ -142,6 +142,124 @@ def resolve_mingw_bin(args, build_dir):
     return None
 
 
+def find_msvc_toolchain():
+    """Locate MSVC build tools (cl.exe, rc.exe, link.exe, optional strip).
+
+    Returns a dict with keys 'cl', 'rc', 'link', 'strip' (Paths) or None if
+    not available.  This covers GitHub Actions windows-latest which ships
+    VS Build Tools with MSVC but no separate mingw installation.
+    """
+    result = {"cl": None, "rc": None, "link": None, "strip": None}
+
+    # Try to find vswhere.exe (ships with VS Build Tools / VS Installer)
+    vswhere = None
+    candidate_paths = [
+        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+        r"C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe",
+    ]
+    for cp in candidate_paths:
+        if Path(cp).is_file():
+            vswhere = cp
+            break
+
+    msvc_root = None
+    if vswhere:
+        try:
+            out = run([vswhere, "-latest", "-products", "*",
+                        "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                        "-property", "installationPath"],
+                       capture=True, check=False)
+            msvc_root = out.strip()
+        except Exception:
+            pass
+
+    # Fallback: scan common VS install paths
+    if not msvc_root:
+        import glob
+        patterns = [
+            r"C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
+            r"C:\Program Files (x86)\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
+        ]
+        for pat in patterns:
+            dirs = glob.glob(pat)
+            if dirs:
+                dirs.sort(reverse=True)
+                msvc_root = Path(dirs[0]).parents[1]
+                break
+
+    if not msvc_root:
+        # Last resort: look for cl.exe directly in PATH or known locations
+        cl = shutil.which("cl.exe")
+        if cl:
+            p = Path(cl).parent.parent.parent.parent  # go up to VC\Tools\MSVC\<ver>
+            msvc_root = p.parent.parent
+        else:
+            return None
+
+    bin_dir = msvc_root / "bin" / "Hostx64" / "x64"
+    for key in ("cl", "rc", "link"):
+        cand = bin_dir / (key + ".exe")
+        if cand.is_file():
+            result[key] = cand
+
+    # Optional: dumpbin for stripping (less aggressive than proper strip)
+    dumpbin = bin_dir / "dumpbin.exe"
+    if dumpbin.is_file():
+        result["strip"] = dumpbin
+
+    has_tools = result["cl"] and result["rc"] and result["link"]
+    if not has_tools:
+        return None
+    return result
+
+
+def _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin):
+    """Build the C self-extractor launcher using the best available toolchain."""
+    arch_tag = "amd64" if platform.machine().lower() in ("x86_64", "amd64") else platform.machine().lower()
+    launcher = dist / ("BeaconLauncher-windows-%s.exe" % arch_tag)
+
+    if msvc:
+        # MSVC path: rc.exe compiles .rc → .res, cl.exe compiles .c, link.exe links.
+        res = pack_tmp / "beacon.res"
+        # Generate a minimal manifest resource (no icon in resource file; icon
+        # is embedded via RC directives in beacon.rc).
+        # rc.exe handles the .rc file directly.
+        run([str(msvc["rc"]), "/fo", str(res), str(packaging / "beacon.rc")])
+        run([str(msvc["cl"]), "/Fe:" + str(launcher),
+             "/W3", "/O2", "/utf-8",
+             "/DWIN32", "/D_WINDOWS", "/D_NDEBUG",
+             "/I" + str(msvc["cl"].parent.parent.parent.parent / "include"),
+             str(packaging / "main.c"), str(res),
+             "/link", "/SUBSYSTEM:WINDOWS",
+             "shell32.lib", "user32.lib", "gdi32.lib", "comctl32.lib",
+             "/OUT:" + str(launcher)])
+        log("compiled launcher with MSVC: %s" % launcher)
+    else:
+        # mingw fallback (local dev without VS)
+        if not mingw_bin:
+            raise PackError("no toolchain found: pass --mingw-bin or install VS Build Tools")
+        windres = gcc = None
+        for name in ("windres.exe", "windres"):
+            cand = mingw_bin / name
+            if cand.is_file():
+                windres = cand
+                break
+        for name in ("gcc.exe", "gcc"):
+            cand = mingw_bin / name
+            if cand.is_file():
+                gcc = cand
+                break
+        if not windres or not gcc:
+            raise PackError("windres/gcc not found in %s" % mingw_bin)
+        res = pack_tmp / "beacon.res"
+        run([str(windres), "-O", "coff", str(packaging / "beacon.rc"), "-o", str(res)])
+        run([str(gcc), str(packaging / "main.c"), str(res), "-o", str(launcher),
+             "-lshell32", "-luser32", "-lgdi32", "-lcomctl32", "-O2", "-s", "-mwindows"])
+        log("compiled launcher with mingw: %s" % launcher)
+
+    return launcher
+
+
 def build_type(args):
     return "Debug" if args.debug else "Release"
 
@@ -309,27 +427,33 @@ def build_windows(args, version, build_dir, qt_dir):
     shutil.copy2(exe, beacon_dir / "Beacon.exe")
     log("copied Beacon.exe -> %s" % (beacon_dir / "Beacon.exe"))
 
-    # Toolchain dir shared by strip/windres/gcc below.
-    mingw_bin = resolve_mingw_bin(args, build_dir)
+    # Determine which toolchain to use for the C self-extractor and strip.
+    # MSVC (cl.exe / rc.exe / link.exe) is pre-installed on GitHub Actions
+    # windows-latest via VS Build Tools — no extra downloads needed.
+    # Fall back to mingw only when MSVC tools are unavailable (local dev).
+    msvc = find_msvc_toolchain()
+    mingw_bin = resolve_mingw_bin(args, build_dir) if not msvc else None
 
     # Strip the deployed binary to cut package size. The unstripped original
     # stays in build/ so crash.log symbolization keeps working in dev builds.
-    if mingw_bin:
-        strip = None
+    strip = None
+    if msvc:
+        strip = msvc.get("strip")
+    elif mingw_bin:
         for name in ("strip.exe", "strip"):
             cand = mingw_bin / name
             if cand.is_file():
                 strip = cand
                 break
-        if strip:
-            deployed = beacon_dir / "Beacon.exe"
-            before = deployed.stat().st_size
-            run([str(strip), "--strip-all", str(deployed)])
-            after = deployed.stat().st_size
-            log("stripped Beacon.exe: %d -> %d bytes (-%.0f%%)"
-                % (before, after, 100.0 * (before - after) / max(before, 1)))
-        else:
-            log("WARNING: strip not found in %s; Beacon.exe not stripped" % mingw_bin)
+    if strip:
+        deployed = beacon_dir / "Beacon.exe"
+        before = deployed.stat().st_size
+        run([str(strip), "--strip-all", str(deployed)])
+        after = deployed.stat().st_size
+        log("stripped Beacon.exe: %d -> %d bytes (-%.0f%%)"
+            % (before, after, 100.0 * (before - after) / max(before, 1)))
+    else:
+        log("WARNING: strip tool not found; Beacon.exe not stripped")
 
     qt_root = qt_dir or resolve_qt_dir(args, build_dir)
     windeployqt = None
@@ -359,27 +483,7 @@ def build_windows(args, version, build_dir, qt_dir):
 
     log("--- Building C launcher ---")
     sync_c_version(version)
-    windres = None
-    gcc = None
-    if mingw_bin:
-        for name in ("windres.exe", "windres"):
-            cand = mingw_bin / name
-            if cand.is_file():
-                windres = cand
-                break
-        for name in ("gcc.exe", "gcc"):
-            cand = mingw_bin / name
-            if cand.is_file():
-                gcc = cand
-                break
-    if not windres or not gcc:
-        raise PackError("windres/gcc not found (pass --mingw-bin or configure a mingw toolchain)")
-    res = pack_tmp / "beacon.res"
-    run([str(windres), "-O", "coff", str(packaging / "beacon.rc"), "-o", str(res)])
-    arch_tag = "amd64" if platform.machine().lower() in ("x86_64", "amd64") else platform.machine().lower()
-    launcher = dist / ("BeaconLauncher-windows-%s.exe" % arch_tag)
-    run([str(gcc), str(packaging / "main.c"), str(res), "-o", str(launcher),
-         "-lshell32", "-luser32", "-lgdi32", "-lcomctl32", "-O2", "-s", "-mwindows"])
+    launcher = _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin)
 
     shutil.copy2(zip_path, dist / "beacon.zip")
     shutil.rmtree(pack_tmp, ignore_errors=True)

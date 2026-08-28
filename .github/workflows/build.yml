@@ -12,37 +12,23 @@ on:
 env:
   PYTHON: python
   CMAKE_BUILD_TYPE: Release
-  QT_VERSION: "6.8.2"
+  # Cache key prefix; increment when toolchain or Qt version changes.
   CACHE_PREFIX: "qt682-msvc-ninja"
 
 jobs:
   # ---------------------------------------------------------------- Windows (MSVC + Qt 6.8)
-  # Qt 6.8+ prebuilt MSVC binaries require a Qt Account login via the Online
-  # Installer — not practical for unauthenticated CI. The source archive is
-  # free to download and the built tree is cached between runs (7-day TTL),
-  # so subsequent CI runs are fast after the first build.
+  # windows-latest ships VS 2022 Enterprise with MSVC 14.44 + CMake 3.31.
+  # pack.py uses cl.exe/rc.exe/link.exe for the C self-extractor — no mingw.
+  # Qt 6.8+ prebuilt MSVC binaries require Qt Account login (not available
+  # in unauthenticated CI), so we download the source archive (~1.5 GB) on
+  # first run and build Qt ourselves. The result is cached for 7 days.
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      # windows-latest ships VS 2022 Enterprise with MSVC 14.44 + CMake 3.31.
-      # pack.py only needs mingw-w64's windres.exe / gcc.exe for the C
-      # self-extractor (main.c + beacon.rc); everything else is pure MSVC.
-      - name: Cache mingw-w64 (windres/gcc for C launcher)
-        uses: actions/cache@v4
-        id: mingw-cache
-        with:
-          path: C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64
-          key: ${{ runner.os }}-mingw64
-          restore-keys: ${{ runner.os }}-mingw64
-
-      - name: Install mingw-w64
-        if: steps.mingw-cache.outputs.cache-hit != 'true'
-        run: choco install mingw -y --no-progress
-
-      # Qt 6.8.2 source archive (~1.5 GB). First CI run builds Qt from source
-      # (~30 min); all subsequent runs hit the 7-day cache and skip the build.
+      # Qt 6.8.2 source archive; first CI run downloads + builds (~30 min),
+      # subsequent runs hit the 7-day cache and skip the build entirely.
       - name: Cache Qt 6.8 MSVC build tree
         uses: actions/cache@v4
         id: qt-cache
@@ -54,9 +40,9 @@ jobs:
         if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          $qtv = "${{ env.QT_VERSION }}"
+          $qtv = "6.8.2"
           $url = "https://download.qt.io/official_releases/qt/6.8/$qtv/single/qt-everywhere-src-$qtv.zip"
-          Write-Host "Downloading Qt $qtv source archive ($url) ..."
+          Write-Host "Downloading Qt $qtv source archive ..."
           Invoke-WebRequest -Uri $url -OutFile qt.zip -UseBasicParsing
           Write-Host "Extracting to C:/Qt/$qtv ..."
           Expand-Archive qt.zip -DestinationPath C:/Qt -Force
@@ -77,23 +63,15 @@ jobs:
           path: dist/BeaconLauncher-windows-amd64.exe
 
   # ---------------------------------------------------------------- Debian
+  # Ubuntu 24.04 ships Qt 6.4.2. CMakeLists.txt requires >= 6.4 so this
+  # works out of the box — no external apt repository needed.
   debian:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies (Qt 6.8 from apt repository)
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl gpg ca-certificates
-          # Add Qt upstream apt repository for Qt 6.8 packages.
-          # Retry with explicit DNS in case of transient resolution failure.
-          for i in 1 2 3; do
-            if curl -fsSL https://apt.qt.io/setup.sh | sudo bash -s qt6; then
-              break
-            fi
-            sleep 5
-          done
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build \
@@ -116,8 +94,7 @@ jobs:
           path: dist/BeaconLauncher-deb-amd64.deb
 
   # ---------------------------------------------------------------- Fedora / RHEL
-  # Use ubuntu-latest + podman to get a fresh Fedora container; avoids the
-  # minimal-fedora:40 image that lacks base repo metadata in this runner.
+  # Fedora 40 has Qt 6.8.2 in its repos — perfect match.
   fedora:
     runs-on: ubuntu-24.04
     steps:
@@ -160,7 +137,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        # Single-line command — no backslash continuations (sh shell, not bash).
+        # Single-line command — no backslash continuations (sh shell).
         run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base qt6-declarative qt6-svg zlib
 
       - name: Cache CMake build
@@ -184,7 +161,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Homebrew is pre-installed on GitHub-hosted macOS runners.
-      # qt@6 formula bundles Qt 6.x with an LLVM compiler — perfect for macOS.
+      # qt@6 formula gives us Qt 6.11.1 which satisfies >= 6.4.
       - name: Cache Qt (Homebrew prefix)
         uses: actions/cache@v4
         id: qt-cache

@@ -56,12 +56,9 @@ Thumbs.db
 .DS_Store
 qtdebug.log
 
-# Scratch planning documents (transient, not source)
-CROSS_PLATFORM_AUDIT.md
-修复计划.txt
+action-wrong/
 
-# Stray temp file
-Untitled.ico
+
 
 __pycache__/
 *.pyc

@@ -215,13 +215,13 @@ def write_version_file(path, version):
 
 def sync_c_version(version):
     for name in ("main.c", "beacon_gtk.c"):
-        src = ROOT / "packager" / name
+        src = ROOT / "packaging" / name
         content = src.read_text(encoding="utf-8")
         updated = re.sub(r'#define BEACON_VERSION "[^"]*"',
                          '#define BEACON_VERSION "%s"' % version, content)
         if updated != content:
             src.write_text(updated, encoding="utf-8")
-            log("packager/%s BEACON_VERSION -> %s" % (name, version))
+            log("packaging/%s BEACON_VERSION -> %s" % (name, version))
 
 
 def copy_mirrors_json(dst):
@@ -299,8 +299,8 @@ def build_windows(args, version, build_dir, qt_dir):
 
     dist = Path(args.dist_dir)
     beacon_dir = dist / "beacon"
-    packager = ROOT / "packager"
-    pack_tmp = packager / "pack-tmp"
+    packaging = ROOT / "packaging"
+    pack_tmp = packaging / "pack-tmp"
     beacon_dir.mkdir(parents=True, exist_ok=True)
 
     exe = Path(build_dir) / "Beacon.exe"
@@ -355,7 +355,7 @@ def build_windows(args, version, build_dir, qt_dir):
     log("--- Building beacon.zip ---")
     zip_path = pack_tmp / "beacon.zip"
     zip_dir(beacon_dir, zip_path)
-    shutil.copy2(zip_path, packager / "beacon.zip")
+    shutil.copy2(zip_path, packaging / "beacon.zip")
 
     log("--- Building C launcher ---")
     sync_c_version(version)
@@ -375,10 +375,10 @@ def build_windows(args, version, build_dir, qt_dir):
     if not windres or not gcc:
         raise PackError("windres/gcc not found (pass --mingw-bin or configure a mingw toolchain)")
     res = pack_tmp / "beacon.res"
-    run([str(windres), "-O", "coff", str(packager / "beacon.rc"), "-o", str(res)])
+    run([str(windres), "-O", "coff", str(packaging / "beacon.rc"), "-o", str(res)])
     arch_tag = "amd64" if platform.machine().lower() in ("x86_64", "amd64") else platform.machine().lower()
     launcher = dist / ("BeaconLauncher-windows-%s.exe" % arch_tag)
-    run([str(gcc), str(packager / "main.c"), str(res), "-o", str(launcher),
+    run([str(gcc), str(packaging / "main.c"), str(res), "-o", str(launcher),
          "-lshell32", "-luser32", "-lgdi32", "-lcomctl32", "-O2", "-s", "-mwindows"])
 
     shutil.copy2(zip_path, dist / "beacon.zip")

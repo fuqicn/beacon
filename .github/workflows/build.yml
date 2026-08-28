@@ -1,0 +1,146 @@
+# Beacon launcher — cross-platform CI builds.
+# Triggers on push/PR to master, and is always callable manually from the
+# Actions tab (workflow_dispatch) so you can cut a release on demand.
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:   # manual trigger
+
+env:
+  PYTHON: python
+  CMAKE_BUILD_TYPE: Release
+  # Cache key components; increment whenever toolchain/qt changes.
+  QT_VERSION: "6.7.3"
+  TOOLCHAIN_KEY: "qt673-mingw"
+
+jobs:
+  # ---------------------------------------------------------------- Windows
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false   # kernel is tracked as plain files, not a submodule
+
+      # Cache the Qt install directory; saves ~4-5 min on every subsequent run.
+      - name: Cache Qt
+        uses: actions/cache@v4
+        id: qt-cache
+        with:
+          path: C:/Qt/${{ env.QT_VERSION }}
+          key: ${{ runner.os }}-qt-${{ env.QT_VERSION }}-${{ env.TOOLCHAIN_KEY }}
+
+      - name: Install Qt 6
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          choco install mingw -y
+          Invoke-WebRequest -Uri "https://download.qt.io/official_releases/qt/6.7/${QT_VERSION}/single/qt-everywhere-src-${QT_VERSION}.zip" `
+            -OutFile qt.zip
+          Expand-Archive qt.zip -DestinationPath C:/ -Force
+          Remove-Item qt.zip -Force
+          # Qt's mingw bin is where windres/gcc live
+          echo "C:/Qt/${QT_VERSION}/mingw_64/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build
+          key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build (Windows)
+        run: python pack.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-windows-amd64
+          path: dist/BeaconLauncher-windows-amd64.exe
+
+  # ---------------------------------------------------------------- Debian
+  debian:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build \
+            dpkg-dev debhelper \
+            qt6-base-dev qt6-declarative-dev qt6-svg-dev \
+            zlib1g-dev \
+            python3
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-deb
+          key: ${{ runner.os }}-deb-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build .deb
+        run: python3 pack.py --build-dir build-deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-deb-amd64
+          path: dist/BeaconLauncher-deb-amd64.deb
+
+  # ---------------------------------------------------------------- Fedora / RHEL
+  fedora:
+    runs-on: ubuntu-24.04
+    container: fedora:40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: dnf install -y \
+               cmake ninja-build \
+               rpm-build \
+               qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg-devel \
+               zlib-devel \
+               python3
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-rpm
+          key: ${{ runner.os }}-rpm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build .rpm
+        run: python3 pack.py --build-dir build-rpm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-redhat-x86_64
+          path: dist/BeaconLauncher-redhat-x86_64.rpm
+
+  # ---------------------------------------------------------------- Arch
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pacman -Syu --noconfirm \
+               base-devel cmake ninja \
+               qt6-base qt6-declarative qt6-svg \
+               zlib
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-arch
+          key: ${{ runner.os }}-arch-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build .pkg.tar.zst
+        run: python3 pack.py --build-dir build-arch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-arch-x86_64
+          path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst

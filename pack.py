@@ -206,6 +206,8 @@ def find_msvc_toolchain():
             msvc_root = p.parent.parent
         else:
             return None
+    else:
+        msvc_root = Path(msvc_root)
 
     bin_dir = msvc_root / "bin" / "Hostx64" / "x64"
     for key in ("cl", "rc", "link"):
@@ -769,7 +771,8 @@ def build_arch_pkg(staging, version, dist):
     if os.geteuid() == 0:
         user = "archbuilder"
         # Create user first if it doesn't exist (id will fail otherwise).
-        if not shutil.which("id") or run(["id", "-u", user], capture=True, check=False).strip() == "":
+        has_id = shutil.which("id") and run(["id", "-u", user], capture=True, check=False)
+        if not has_id or has_id.strip() == "":
             run(["useradd", "-m", "-s", "/bin/bash", user])
         run(["chown", "-R", "%s:%s" % (user, user), str(work)])
         run("su - %s -c \"cd %s && makepkg -f -d\"" % (user, work), shell=True)

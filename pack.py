@@ -51,12 +51,21 @@ def log(msg):
     print(msg, flush=True)
 
 
-def run(cmd, cwd=None, env=None, shell=False):
+def run(cmd, cwd=None, env=None, shell=False, capture=False):
+    if shell and isinstance(cmd, list):
+        cmd = subprocess.list2cmdline(cmd)
     log("+ " + (cmd if shell else subprocess.list2cmdline(cmd)))
     full_env = os.environ.copy()
     if env:
         full_env.update(env)
-    subprocess.run(cmd, cwd=cwd, env=full_env, shell=shell, check=True)
+    result = subprocess.run(cmd, cwd=cwd, env=full_env, shell=shell, check=False,
+                            stdout=subprocess.PIPE if capture else None,
+                            stderr=subprocess.STDOUT if capture else None)
+    if result.returncode != 0:
+        if capture:
+            print(result.stdout.decode('utf-8', errors='replace'), end='')
+        raise PackError("command failed with exit code %d" % result.returncode)
+    return result.stdout.decode('utf-8', errors='replace') if capture else None
 
 
 def detect_platform():
@@ -736,7 +745,6 @@ def build_arch_pkg(staging, version, dist):
         shutil.rmtree(work)
     work.mkdir(parents=True)
 
-    cmd = ["makepkg", "-f", "-d"]     # -f force overwrite, -d skip dep check
     (work / "PKGBUILD").write_text(
         PKGBUILD_TEMPLATE
         .replace("@VERSION@", version)
@@ -746,9 +754,20 @@ def build_arch_pkg(staging, version, dist):
         .replace("@BIN@", BIN_NAME)
         .replace("@APPID@", APP_ID),
         encoding="utf-8")
-    run(cmd, cwd=work)
 
-    produced = sorted(work.glob("*.pkg.tar.*"))
+    # makepkg refuses to run as root. If we're root (e.g. inside a Docker
+    # container), create a temporary non-root user and run makepkg via su.
+    cmd = ["makepkg", "-f", "-d"]   # -f force overwrite, -d skip dep check
+    if os.geteuid() == 0:
+        user = "archbuilder"
+        if not shutil.which("id") or run(["id", "-u", user], capture=True, check=False).strip() == "":
+            run(["useradd", "-m", "-s", "/bin/bash", user])
+        run(["chown", "-R", "%s:%s" % (user, user), str(work)])
+        run("su - %s -c \"cd %s && makepkg -f -d\"" % (user, work), shell=True)
+        produced = sorted(work.glob("*.pkg.tar.*"))
+    else:
+        run(cmd, cwd=work)
+        produced = sorted(work.glob("*.pkg.tar.*"))
     if not produced:
         raise PackError("makepkg produced no package")
     out = Path(dist) / ("BeaconLauncher-arch-%s.pkg.tar.zst" % arch)
@@ -844,10 +863,6 @@ def build_macos(args, version, qt_dir=None):
         macdeployqt = qt_root / "bin" / "macdeployqt"
         if macdeployqt.is_file():
             log("--- Deploying Qt runtime (macdeployqt) ---")
-            # Install to staging so macdeployqt can sign and fix up references.
-            run([str(macdeployqt), str(staging / "Contents"),
-                 "-always-overwrite", "-dryrun"])
-            # Remove dry-run and do real deploy.
             run([str(macdeployqt), str(staging / "Contents"),
                  "-always-overwrite"])
         else:

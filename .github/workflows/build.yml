@@ -126,7 +126,30 @@ jobs:
           name: BeaconLauncher-redhat-x86_64
           path: dist/BeaconLauncher-redhat-x86_64.rpm
 
-  # ---------------------------------------------------------------- macOS (Apple Silicon via macos-14)
+  # ---------------------------------------------------------------- Arch
+  # Docker container runs as root; build_arch_pkg creates a temp user via su.
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base qt6-declarative qt6-svg zlib
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-arch
+          key: ${{ runner.os }}-arch-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build .pkg.tar.zst
+        run: python3 pack.py --build-dir build-arch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-arch-x86_64
+          path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
   macos:
     runs-on: macos-14
     steps:

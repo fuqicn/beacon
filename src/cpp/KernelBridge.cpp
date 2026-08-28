@@ -219,13 +219,13 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     // game data (mods/overrides) inside versions/<id> is treated as its dir,
     // then rescan so the new instance shows up immediately.
     QObject::connect(s_instance->m_modpackManager, &ModpackManager::installCompleted,
-                     s_instance, [s_instance](const QString &instanceId) {
+                     s_instance, [bridge = s_instance](const QString &instanceId) {
                          if (!instanceId.isEmpty()) {
-                             s_instance->m_settingsManager->setInstance(instanceId);
-                             s_instance->m_settingsManager->setValue("launch/isolationOverride", true);
-                             s_instance->m_settingsManager->setValue("launch/isolation", true);
-                             s_instance->m_settingsManager->endInstance();
-                             s_instance->m_instanceManager->scanInstances();
+                             bridge->m_settingsManager->setInstance(instanceId);
+                             bridge->m_settingsManager->setValue("launch/isolationOverride", true);
+                             bridge->m_settingsManager->setValue("launch/isolation", true);
+                             bridge->m_settingsManager->endInstance();
+                             bridge->m_instanceManager->scanInstances();
                          }
                      });
 }

@@ -633,8 +633,6 @@ def build_arch_pkg(staging, version, dist):
     work.mkdir(parents=True)
 
     cmd = ["makepkg", "-f", "-d"]     # -f force overwrite, -d skip dep check
-    if hasattr(os, "geteuid") and os.geteuid() == 0:
-        cmd.append("--asroot")         # CI containers often run as root
     (work / "PKGBUILD").write_text(
         PKGBUILD_TEMPLATE
         .replace("@VERSION@", version)

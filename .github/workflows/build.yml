@@ -45,19 +45,39 @@ jobs:
           path: C:/Qt/${{ env.QT_VERSION }}/msvc2022_64
           key: ${{ runner.os }}-qt-${{ env.CACHE_PREFIX }}
 
-      - name: Download & install Qt 6.8.2 (MSVC)
+      - name: Cache Qt MSVC (prebuilt binaries from Qt CDN)
+        uses: actions/cache@v4
+        id: qt-cache
+        with:
+          path: C:/Qt/${{ env.QT_VERSION }}/msvc2022_64
+          key: ${{ runner.os }}-qt-${{ env.CACHE_PREFIX }}
+
+      - name: Install Qt 6.8.2 (MSVC) via online installer
         if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $qtv = "${{ env.QT_VERSION }}"
-          # Official Qt download mirror. Prebuilt MSVC builds are unavailable
-          # for 6.8+, so we build from source and cache the result.
-          $url = "https://download.qt.io/official_releases/qt/6.8/$qtv/single/qt-everywhere-src-$qtv.zip"
-          Write-Host "Downloading $url ..."
-          Invoke-WebRequest -Uri $url -OutFile qt.zip -UseBasicParsing
-          Write-Host "Extracting to C:/Qt/$qtv ..."
-          Expand-Archive qt.zip -DestinationPath C:/Qt -Force
-          Remove-Item qt.zip -Force
+          # Qt Online Installer (~3 MB), runs fully offline once downloaded.
+          # Installs Qt base + required modules for MSVC 2022 64-bit.
+          $exe = "qt-unified-windows-x64-online.exe"
+          $script = "qt-install.qs"
+          Write-Host "Downloading Qt Online Installer ..."
+          Invoke-WebRequest -Uri "https://download.qt.io/official_releases/online_installers/qt-unified-windows-x64-online.exe" `
+            -OutFile $exe -UseBasicParsing
+          # Generate the installation script for headless mode.
+          @'
+            function Controller() {
+                controller_GUI();
+                controller.waitForSignal(arguments[0], "installationFinished()");
+                controller.acceptDialog();
+                controller.selectComponent("qt.qt6.682.win64_msvc2022_64");
+                controller.setDefaultValue("InstallationDirectory", "C:/Qt/" + qtv);
+                controller.execute(QMessageBox.Yes, QMessageBox.Ok);
+                controller.acceptDialog();
+            }
+          '@ | Out-File -Encoding utf8 $script
+          .\$exe --script $script --verbose --accept-licenses --accept-os-eula
+          Remove-Item $exe, $script -Force
 
       - name: Cache CMake build
         uses: actions/cache@v4

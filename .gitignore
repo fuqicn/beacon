@@ -67,3 +67,8 @@ __pycache__/
 *.pyc
 game/
 build-linux/
+packaging/pack-tmp/
+packaging/beacon.zip
+*.ini
+version.txt
+mirrors.json

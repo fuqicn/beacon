@@ -127,8 +127,6 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void installPendingUpdate();   // Linux: pkexec install; macOS: spawn sidecar
     Q_INVOKABLE void cancelUpdate();          // dismiss the prompt
     Q_INVOKABLE void cancelUpdateDownload();  // abort transfer + delete temp file
-    Q_INVOKABLE void installPendingUpdate();  // Linux: pkexec install; macOS: sidecar swap
-    Q_INVOKABLE void installPendingUpdate();  // Linux: pkexec install; macOS: sidecar swap
     // Window-close hook: cancel every in-flight task and sweep temp files.
     Q_INVOKABLE void prepareShutdown();
 

@@ -513,7 +513,7 @@ void KernelBridge::downloadUpdate()
 #elif defined(Q_OS_MAC)
     // macOS bundles are named Beacon.app regardless of architecture.
     const QString cpu = QSysInfo::currentCpuArchitecture();
-    asset = "Beacon-" + (cpu == QLatin1String("ARM64") ? "arm64" : "intel") + ".app";
+    asset = "Beacon-" + (cpu == QLatin1String("ARM64") ? QStringLiteral("arm64") : QStringLiteral("intel")) + ".app";
 #else
     return;
 #endif

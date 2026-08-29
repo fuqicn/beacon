@@ -450,3 +450,15 @@ int mc_mod_translate_download_url(const char *url, char *out, size_t out_size) {
     out[ba.size()] = '\0';
     return 1;
 }
+
+void mc_mod_warmup_mirror(void)
+{
+    McMirrorProbe probes[MC_MAX_MIRROR_TYPES];
+    int count = mc_mirror_probe_all(probes, MC_MAX_MIRROR_TYPES);
+    const char *best = mc_mirror_select_best(probes, count);
+    if (!best) best = "mojang";
+    std::lock_guard<std::mutex> lk(g_mod_auto_mutex);
+    strncpy(g_mod_auto_mirror, best, sizeof(g_mod_auto_mirror) - 1);
+    g_mod_auto_mirror[sizeof(g_mod_auto_mirror) - 1] = '\0';
+    g_mod_auto_ready.store(1);
+}

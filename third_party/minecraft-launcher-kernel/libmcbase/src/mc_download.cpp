@@ -98,13 +98,57 @@ static const McMirrorEntry *find_mirror_entry(const char *mirror_type) {
     return NULL;
 }
 
+// Apply full-URL domain substitution: replace src_domain with dest_domain in url.
+static int substitute_domain(const char *url, const char *src_domain, const char *dest_domain,
+                             char *out, size_t out_size) {
+    const char *found = strstr(url, src_domain);
+    if (!found) return 0;
+    // Make sure it's a hostname boundary (preceded by :// or start of string)
+    const char *before = found - 1;
+    if (before >= url && before[0] != ':' && *(before - 1) != '/' && found != url) {
+        // Not a hostname boundary, skip
+        // Search for next occurrence
+        const char *next = strstr(found + 1, src_domain);
+        if (!next) return 0;
+        found = next;
+        before = found - 1;
+        if (!(before >= url && (before[0] == ':' && *(before-1) == '/'))) {
+            return 0;
+        }
+    }
+    // Build the new URL: everything before src_domain + dest_domain + everything after
+    size_t prefix_len = (size_t)(found - url);
+    size_t src_len = strlen(src_domain);
+    size_t suffix_len = strlen(found + src_len);
+    size_t dest_len = strlen(dest_domain);
+    if (prefix_len + dest_len + suffix_len + 1 > out_size) return 0;
+    memcpy(out, url, prefix_len);
+    memcpy(out + prefix_len, dest_domain, dest_len);
+    memcpy(out + prefix_len + dest_len, found + src_len, suffix_len + 1);
+    return 1;
+}
+
+// Full-URL rewrite: if url contains cdn_domain, replace that domain with base_url.
+static int apply_cdn_rewrite(const McMirrorEntry *entry, const char *url, char *out, size_t out_size) {
+    if (!entry->cdn_domain[0]) return 0;
+    return substitute_domain(url, entry->cdn_domain, entry->base_url, out, out_size);
+}
+
 static int apply_mirror_entry(const McMirrorEntry *entry, const char *url, char *mirror, size_t mirror_size) {
-    // Try rules in order
+    // 1. Try CDN domain substitution first (full URL rewrite)
+    if (apply_cdn_rewrite(entry, url, mirror, mirror_size)) return 1;
+
+    // 2. Try rules in order
     for (int i = 0; i < entry->rule_count; i++) {
         const char *match = entry->rules[i].match;
         const char *found = strstr(url, match);
         if (!found) continue;
-        // found the match string in url, extract what comes after it
+        // Verify it's in the hostname part (before the first '/')
+        const char *path_start = strchr(found, '/');
+        if (path_start && path_start - found < (int)strlen(match)) {
+            // Match extends into the path; skip
+            continue;
+        }
         const char *after_match = found + strlen(match);
         if (entry->rules[i].prefix[0]) {
             snprintf(mirror, mirror_size, "%s%s%s", entry->base_url, entry->rules[i].prefix, after_match);
@@ -113,7 +157,8 @@ static int apply_mirror_entry(const McMirrorEntry *entry, const char *url, char 
         }
         return 1;
     }
-    // No rule matched: replace hostname with base_url
+
+    // 3. No rule matched: replace hostname with base_url
     const char *scheme_end = strstr(url, "://");
     if (!scheme_end) return 0;
     const char *path_start = strchr(scheme_end + 3, '/');
@@ -142,6 +187,12 @@ int mc_mirror_load_config_json(const char *json_data) {
         if (name.isEmpty() || base.isEmpty()) continue;
         strncpy(entry->name, name.toUtf8().constData(), sizeof(entry->name) - 1);
         strncpy(entry->base_url, base.toUtf8().constData(), sizeof(entry->base_url) - 1);
+        QString cdn = obj.value("cdn_domain").toString();
+        if (!cdn.isEmpty())
+            strncpy(entry->cdn_domain, cdn.toUtf8().constData(), sizeof(entry->cdn_domain) - 1);
+        QString java_alt = obj.value("java_alternative").toString();
+        if (!java_alt.isEmpty())
+            strncpy(entry->java_alternative, java_alt.toUtf8().constData(), sizeof(entry->java_alternative) - 1);
         QJsonArray rules = obj.value("rules").toArray();
         for (int ri = 0; ri < rules.size() && entry->rule_count < MC_MIRROR_MAX_RULES; ri++) {
             QJsonObject r = rules[ri].toObject();
@@ -189,128 +240,20 @@ const McMirrorEntry *mc_mirror_config_get(int index) {
     return &g_mirror_configs[index];
 }
 
-void mc_downloader_init(McDownloader *dl) {
-    memset(dl, 0, sizeof(McDownloader));
-    dl->max_retries = 3;
-    dl->timeout_ms = 60000;
-    dl->verify_hash = 1;
-}
-
-void mc_downloader_add_mirror(McDownloader *dl, const char *url) {
-    if (!dl || !url || dl->mirror_count >= MC_DL_MAX_MIRRORS) return;
-    strncpy(dl->mirrors[dl->mirror_count], url, sizeof(dl->mirrors[0]) - 1);
-    dl->mirror_count++;
-}
-
-static int try_download_url(McDownloader *dl, const char *url, const char *output_path,
-                            const char *expected_sha1, long expected_size,
-                            long *downloaded)
-{
-    McHttpClient client;
-    mc_http_init(&client);
-    mc_http_set_timeout(&client, dl->timeout_ms);
-    mc_info("  Downloading: %s", url);
-    McHttpResponse *resp = mc_http_get(&client, url);
-    if (!resp) {
-        return 0;
+// Translate any URL using the named mirror (not just Mojang URLs).
+// Returns 1 on success, 0 if no translation applied (URL passed through unchanged).
+int mc_download_translate_url(const char *url, char *out, size_t out_size, const char *mirror_type) {
+    if (!url || !out || out_size == 0) return 0;
+    if (!mirror_type || strcmp(mirror_type, "mojang") == 0 || strcmp(mirror_type, "auto") == 0) {
+        strncpy(out, url, out_size - 1);
+        out[out_size - 1] = '\0';
+        return 1;
     }
-    if (!resp->success || !resp->data) {
-        mc_http_response_free(resp);
-        return 0;
-    }
-    if (resp->status_code >= 400) {
-        mc_warn("  HTTP %ld for %s", resp->status_code, url);
-        mc_http_response_free(resp);
-        return 0;
-    }
-    // Check size
-    if (expected_size > 0 && (long)resp->data_len != expected_size) {
-        mc_warn("  Size mismatch: expected %ld, got %zu", expected_size, resp->data_len);
-        mc_http_response_free(resp);
-        return 0;
-    }
-    // Write to file
-    char dir[MC_PATH_MAX];
-    mc_path_dirname(output_path, dir, sizeof(dir));
-    mc_path_mkdir_p(dir);
-    FILE *f = fopen(output_path, "wb");
-    if (!f) {
-        mc_warn("  Cannot write to %s", output_path);
-        mc_http_response_free(resp);
-        return 0;
-    }
-    fwrite(resp->data, 1, resp->data_len, f);
-    fclose(f);
-    if (downloaded) *downloaded = (long)resp->data_len;
-    // Verify SHA1
-    if (dl->verify_hash && expected_sha1 && *expected_sha1) {
-        char actual_sha1[64];
-        if (mc_hash_file_sha1(output_path, actual_sha1, sizeof(actual_sha1))) {
-            if (mc_stricmp(actual_sha1, expected_sha1) != 0) {
-                mc_warn("  SHA1 mismatch: expected %s, got %s", expected_sha1, actual_sha1);
-                QFile::remove(QString::fromUtf8(output_path));
-                mc_http_response_free(resp);
-                return 0;
-            }
-        }
-    }
-    mc_info("  OK (%ld bytes)", (long)resp->data_len);
-    mc_http_response_free(resp);
-    return 1;
-}
-
-int mc_download_file(McDownloader *dl, McDownloadTask *task, McDownloadResult *result) {
-    if (!dl || !task || !result) return 0;
-    memset(result, 0, sizeof(McDownloadResult));
-
-    const char *urls_to_try[1 + MC_DL_MAX_MIRRORS];
-    int url_count = 0;
-    if (task->url[0])
-        urls_to_try[url_count++] = task->url;
-    for (int i = 0; i < dl->mirror_count && url_count < 1 + MC_DL_MAX_MIRRORS; i++)
-        if (dl->mirrors[i][0])
-            urls_to_try[url_count++] = dl->mirrors[i];
-
-    for (int ui = 0; ui < url_count; ui++) {
-        for (int attempt = 0; attempt <= dl->max_retries; attempt++) {
-            if (attempt > 0) {
-                int backoff_ms = 500 * (1 << (attempt - 1));
-                if (backoff_ms > 5000) backoff_ms = 5000;
-                mc_http_sleep(backoff_ms);
-            }
-            const char *cur = urls_to_try[ui];
-            if (ui > 0 || attempt > 0)
-                mc_info("  Trying %s (attempt %d/%d)", cur, attempt + 1, dl->max_retries + 1);
-            if (try_download_url(dl, cur, task->output_path,
-                                task->expected_sha1, task->expected_size,
-                                &result->downloaded_bytes))
-            {
-                result->success = 1;
-                return 1;
-            }
-        }
-    }
-
-    {
-        std::ostringstream oss;
-        oss << "Failed to download " << task->url << " after all attempts";
-        strncpy(result->error, oss.str().c_str(), sizeof(result->error) - 1);
-        result->error[sizeof(result->error) - 1] = '\0';
-    }
-    mc_error("Download failed: %s", task->url);
-    return 0;
-}
-
-int mc_download_url(const char *url, const char *output_path, McDownloadResult *result) {
-    McDownloader dl;
-    mc_downloader_init(&dl);
-    dl.verify_hash = 0;
-    McDownloadTask task;
-    memset(&task, 0, sizeof(task));
-    strncpy(task.url, url, sizeof(task.url) - 1);
-    if (output_path)
-        strncpy(task.output_path, output_path, sizeof(task.output_path) - 1);
-    return mc_download_file(&dl, &task, result);
+    const McMirrorEntry *entry = find_mirror_entry(mirror_type);
+    if (entry)
+        return apply_mirror_entry(entry, url, out, out_size);
+    // Fallback to mojang-specific translation
+    return mc_download_translate_mojang_url(url, out, out_size, mirror_type);
 }
 
 int mc_download_translate_mojang_url(const char *url, char *mirror, size_t mirror_size, const char *mirror_type) {

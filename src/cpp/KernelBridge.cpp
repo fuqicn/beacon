@@ -510,6 +510,10 @@ void KernelBridge::downloadUpdate()
         archToken = cpu;
     asset = "BeaconLauncher-" + pkgType + "-" + archToken + "."
             + (pkgType == "deb" ? "deb" : pkgType == "rpm" ? "rpm" : "pkg.tar.zst");
+#elif defined(Q_OS_MAC)
+    // macOS bundles are named Beacon.app regardless of architecture.
+    const QString cpu = QSysInfo::currentCpuArchitecture();
+    asset = "Beacon-" + (cpu == QLatin1String("ARM64") ? "arm64" : "intel") + ".app";
 #else
     return;
 #endif
@@ -532,7 +536,11 @@ void KernelBridge::downloadUpdate()
         dest = QDir(exeDir).filePath("..");
     dest += "/BeaconLauncher.exe";
 #else
+#ifdef Q_OS_MAC
+    const QString dest = s_launcherDir + "/.update_app";
+#else
     const QString dest = s_launcherDir + "/.update_pkg";
+#endif
 #endif
 
     startUpdateTransfer(QString(primary) + tag + "/" + asset,
@@ -657,6 +665,50 @@ void KernelBridge::finishUpdateDownload(bool ok, const QString &error, bool sile
     } else if (!silent) {
         mc_error("[Update] download failed: %s", qPrintable(error));
     }
+}
+
+void KernelBridge::installPendingUpdate()
+{
+#ifdef Q_OS_LINUX
+    const QString pkgPath = s_launcherDir + "/.update_pkg";
+    if (!QFile::exists(pkgPath)) return;
+    QString cmd;
+    QStringList args;
+    if (pkgPath.endsWith(".deb")) {
+        cmd = "pkexec"; args << "dpkg" << "-i" << pkgPath;
+    } else if (pkgPath.endsWith(".rpm")) {
+        if (QFile::exists("/usr/bin/dnf"))
+            { cmd = "pkexec"; args << "dnf" << "install" << "-y" << pkgPath; }
+        else if (QFile::exists("/usr/bin/zypper"))
+            { cmd = "pkexec"; args << "zypper" << "install" << "-y" << "--force" << pkgPath; }
+        else
+            { cmd = "pkexec"; args << "rpm" << "-Uvh" << pkgPath; }
+    } else if (pkgPath.endsWith(".pkg.tar.zst")) {
+        cmd = "pkexec"; args << "pacman" << "-U" << "--noconfirm" << pkgPath;
+    }
+    if (!cmd.isEmpty()) {
+        mc_info("[Update] installing %s via %s", qPrintable(pkgPath), qPrintable(cmd));
+        QProcess::startDetached(cmd, args);
+    }
+    QFile::remove(pkgPath);
+#elif defined(Q_OS_MAC)
+    const QString appPath = s_launcherDir + "/.update_app";
+    if (!QFile::exists(appPath)) return;
+    mc_info("[Update] macOS: spawning sidecar to replace app");
+    // Write a shell script to /tmp to avoid shell-escaping nightmares.
+    const QString scriptPath = QDir::tempPath() + "/beacon-update-sidecar.sh";
+    QFile script(scriptPath);
+    if (script.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&script);
+        out << "#!/bin/sh\n";
+        out << "while kill -0 " << QCoreApplication::applicationPid() << " 2>/dev/null; do sleep 0.2; done\n";
+        out << "rm -rf '" << QCoreApplication::applicationDirPath() << "/Beacon.app' && ";
+        out << "mv '" << appPath << "' '" << QCoreApplication::applicationDirPath() << "/Beacon.app' && ";
+        out << "open '" << QCoreApplication::applicationDirPath() << "/Beacon.app'\n";
+        script.close();
+    }
+    QProcess::startDetached("/bin/sh", QStringList() << scriptPath);
+#endif
 }
 
 

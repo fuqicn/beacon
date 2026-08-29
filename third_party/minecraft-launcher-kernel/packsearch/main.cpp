@@ -8,6 +8,7 @@
 #include <mc_mod.h>
 #include <mc_i18n.h>
 #include <mc_log.h>
+#include <mc_download.h>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -33,6 +34,9 @@ static void print_help(void) {
 int main(int argc, char **argv) {
     mc_console_init();
     mc_log_set_level(MC_LOG_ERROR);
+
+    if (mc_mirror_load_config("mirrors.json"))
+        mc_info("Loaded mirror config from mirrors.json");
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--json") == 0) { mc_output_set_mode(MC_OUTPUT_JSON); }

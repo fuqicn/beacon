@@ -131,8 +131,11 @@
     "output_dir": "출력 디렉터리",
     "show_help": "도움말 표시",
     "threads": "스레드 수",
-    "mod_page": "페이지 번호 (0부터 시작)",
-    "packsearch_desc": "Modrinth의 모드팩 검색",
-    "pack_none": "모드팩을 찾을 수 없습니다",
-    "pack_none_query": "일치하는 모드팩을 찾을 수 없습니다"
+    "mod_page": "Page number (0-based)",
+    "packsearch_desc": "Search and browse modpacks from Modrinth",
+    "pack_none": "No modpacks found",
+    "pack_none_query": "No modpacks found for",
+    "java_alternative": "Falling back to OpenJDK",
+    "mirror_load_ok": "Loaded mirror config",
+    "mirror_load_fail": "Failed to load mirror config"
 }

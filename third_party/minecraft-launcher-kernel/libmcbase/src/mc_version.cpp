@@ -438,3 +438,38 @@ void mc_platform_arch_set(const char *arch) {
     if (arch)
         strncpy(g_arch, arch, sizeof(g_arch) - 1);
 }
+
+// Map our platform+arch to an Eclipse Adoptium release name:
+//   linux-x64     -> linux_x64
+//   linux-arm64   -> linux_aarch64
+//   osx-x64       -> mac_x64
+//   osx-arm64     -> mac_aarch64
+//   windows-x64   -> windows_x64
+//   windows-arm64 -> windows_aarch64
+void mc_platform_adoptium_name(char *out, size_t out_size) {
+    const char *plat = mc_platform_get();
+    const char *arch = mc_platform_arch_get();
+    if (strcmp(arch, "arm64") == 0) {
+        if (strcmp(plat, "linux") == 0)
+            snprintf(out, out_size, "linux_aarch64");
+        else if (strcmp(plat, "osx") == 0)
+            snprintf(out, out_size, "mac_aarch64");
+        else if (strcmp(plat, "windows") == 0)
+            snprintf(out, out_size, "windows_aarch64");
+        else
+            snprintf(out, out_size, "%s_aarch64", plat);
+    } else {
+        if (strcmp(plat, "osx") == 0)
+            snprintf(out, out_size, "mac_x64");
+        else
+            snprintf(out, out_size, "%s_x64", plat);
+    }
+}
+
+// Return Adoptium-style arch string for the current architecture.
+const char *mc_arch_adoptium(const char *arch) {
+    if (!arch || !*arch) arch = mc_platform_arch_get();
+    if (strcmp(arch, "arm64") == 0) return "aarch64";
+    if (strcmp(arch, "x86") == 0)   return "x86_32";
+    return "x64";
+}

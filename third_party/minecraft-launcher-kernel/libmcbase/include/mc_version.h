@@ -80,4 +80,19 @@ void mc_platform_set(const char *platform);
 const char *mc_platform_arch_get(void);
 void mc_platform_arch_set(const char *arch);
 
+// Convert current platform+arch to Eclipse Adoptium release name:
+//   linux-x64     -> linux_x64
+//   linux-arm64   -> linux_aarch64
+//   osx-x64       -> mac_x64
+//   osx-arm64     -> mac_aarch64
+//   windows-x64   -> windows_x64
+//   windows-arm64 -> windows_aarch64
+void mc_platform_adoptium_name(char *out, size_t out_size);
+
+// Convert our arch string to Adoptium/ASDF arch string
+//   x64  -> x64
+//   arm64 -> aarch64
+//   x86  -> x86_32
+const char *mc_arch_adoptium(const char *arch);
+
 #endif

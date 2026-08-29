@@ -608,6 +608,12 @@ static QString resolveLauncherDir()
     QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");
     QDir().mkpath(xdg);
     return xdg;
+#elif defined(Q_OS_MAC)
+    // macOS: use XDG-compatible Application Support dir per Apple HIG.
+    QString xdg = QDir::homePath() + QLatin1String(
+        "/Library/Application Support/beacon-launcher");
+    QDir().mkpath(xdg);
+    return xdg;
 #else
     return QCoreApplication::applicationDirPath();
 #endif
@@ -1361,7 +1367,8 @@ return 0;
     KernelBridge::setLauncherDir(resolveLauncherDir());
     KernelBridge::initialize("zh", resolveLauncherDir() + "/.minecraft");
 
-    // Pre-launch update check (Linux: open pending package; Windows: schedule check)
+    // Pre-launch update check (Linux: install pending package; macOS: swap .app;
+    // Windows/macOS GUI: triggered from QML once the UI is ready).
 #ifdef Q_OS_LINUX
     {
         QString pkgPath = resolveLauncherDir() + "/.update_pkg";
@@ -1399,9 +1406,34 @@ return 0;
                 }
             }
             if (!pkgVer.isEmpty() && pkgVer != curVer) {
-                mc_info("[Update] new package %s found, opening for install", pkgVer.toUtf8().constData());
-                QDesktopServices::openUrl(QUrl::fromLocalFile(pkgPath));
-                std::_Exit(0);
+                mc_info("[Update] new package %s found, installing via pkexec", pkgVer.toUtf8().constData());
+                // Detect distro family and use the appropriate package manager.
+                // pkexec provides a password prompt via polkit on all modern desktops.
+                QString cmd;
+                QStringList args;
+                if (pkgPath.endsWith(".deb")) {
+                    cmd = "pkexec";
+                    args << "dpkg" << "-i" << pkgPath;
+                } else if (pkgPath.endsWith(".rpm")) {
+                    // Try dnf first (Fedora/RHEL), fall back to zypper (openSUSE).
+                    if (QFile::exists("/usr/bin/dnf")) {
+                        cmd = "pkexec"; args << "dnf" << "install" << "-y" << pkgPath;
+                    } else if (QFile::exists("/usr/bin/zypper")) {
+                        cmd = "pkexec"; args << "zypper" << "install" << "-y" << "--force" << pkgPath;
+                    } else {
+                        cmd = "pkexec"; args << "rpm" << "-Uvh" << pkgPath;
+                    }
+                } else if (pkgPath.endsWith(".pkg.tar.zst")) {
+                    cmd = "pkexec";
+                    args << "pacman" << "-U" << "--noconfirm" << pkgPath;
+                }
+                if (!cmd.isEmpty()) {
+                    QProcess::startDetached(cmd, args);
+                    mc_info("[Update] scheduled %s install, exiting current process", qPrintable(cmd));
+                    // Delay briefly so the user sees the confirmation dialog before exit.
+                    QThread::msleep(500);
+                    std::_Exit(0);
+                }
             }
             if (QFile::exists(pkgPath)) {
                 QFile::remove(pkgPath);
@@ -1409,9 +1441,48 @@ return 0;
             }
         }
     }
+#elif defined(Q_OS_MAC)
+    {
+        QString appPath = resolveLauncherDir() + "/.update_app";
+        if (QFile::exists(appPath)) {
+            QString curVer = KernelBridge::instance()->readVersion();
+            // Extract bundle version from Info.plist.
+            QString plistPath = appPath + "/Contents/Info.plist";
+            QString newVer;
+            if (QFile::exists(plistPath)) {
+                QProcess plutil;
+                plutil.start("plutil", QStringList() << "-extract"
+                             << "CFBundleShortVersionString" << "-o" << "-" << plistPath);
+                plutil.waitForFinished(2000);
+                newVer = QString::fromUtf8(plutil.readAllStandardOutput()).trimmed();
+            }
+            if (!newVer.isEmpty() && newVer != curVer) {
+                mc_info("[Update] new app found (%s), spawning sidecar to replace", qPrintable(newVer));
+                // Spawn a detached process that waits for the current app to exit,
+                // then swaps the bundle and relaunches. This avoids file-lock issues
+                // since the running app holds the old .app directory open.
+                const QString self = QCoreApplication::applicationFilePath();
+                const QString script = QStringLiteral(
+                    "while kill -0 %1 2>/dev/null; do sleep 0.2; done; "
+                    "rm -rf '%2' && mv '%3' '%2' && open '%2'"
+                ).arg(QCoreApplication::applicationPid())
+                 .arg(QCoreApplication::applicationDirPath() + "/Beacon.app")
+                 .arg(appPath);
+                QProcess::startDetached("/bin/sh", QStringList() << "-c" << script);
+                mc_info("[Update] sidecar spawned, exiting current process");
+                QThread::msleep(500);
+                std::_Exit(0);
+            }
+            // Stale app bundle — clean it up.
+            if (QFile::exists(appPath)) {
+                QDir(appPath).removeRecursively();
+                mc_info("[Update] removed stale .update_app");
+            }
+        }
+    }
 #else
-    // Windows/macOS: the update check is triggered from QML once the UI is
-    // ready, gated by the user's auto-update setting.
+    // Windows: the update check is triggered from QML once the UI is ready,
+    // gated by the user's auto-update setting.
 #endif
 
     // A crash during installPack can leave the mrpack download / extraction

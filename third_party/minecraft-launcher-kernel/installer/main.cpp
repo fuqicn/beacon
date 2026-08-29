@@ -134,6 +134,16 @@ static int download_file(const char *url, const char *output_path) {
     return mc_qt_download_file(url, output_path, nullptr, 0, g_timeout_ms);
 }
 
+// Resolve a URL through the selected mirror (or passthrough for "mojang"/"auto").
+static int resolve_mirror_url(const char *url, char *out, size_t out_size) {
+    if (!g_mirror || strcmp(g_mirror, "mojang") == 0 || strcmp(g_mirror, "auto") == 0) {
+        strncpy(out, url, out_size - 1);
+        out[out_size - 1] = '\0';
+        return 1;
+    }
+    return mc_download_translate_url(url, out, out_size, g_mirror);
+}
+
 // ---- Fabric ----
 static int install_fabric(const char *mc_ver, const char *loader_ver, const char *mc_dir, const char *java_path) {
     mc_info("Installing Fabric loader for MC %s...", mc_ver);
@@ -142,10 +152,12 @@ static int install_fabric(const char *mc_ver, const char *loader_ver, const char
         strncpy(loader_ver_buf, loader_ver, sizeof(loader_ver_buf) - 1);
         loader_ver = loader_ver_buf;
     } else {
-        char list_url[512];
-        snprintf(list_url, sizeof(list_url), "https://meta.fabricmc.net/v2/versions/loader/%s", mc_ver);
-        McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
-        McHttpResponse *resp = mc_http_get(&client, list_url);
+    char list_url[512];
+    snprintf(list_url, sizeof(list_url), "https://meta.fabricmc.net/v2/versions/loader/%s", mc_ver);
+    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    char resolved[2048];
+    resolve_mirror_url(list_url, resolved, sizeof(resolved));
+    McHttpResponse *resp = mc_http_get(&client, resolved);
         if (resp && resp->success && resp->data) {
             QJsonParseError err;
             QJsonDocument doc = QJsonDocument::fromJson(QByteArray(resp->data), &err);
@@ -173,7 +185,9 @@ static int install_fabric(const char *mc_ver, const char *loader_ver, const char
         snprintf(url, sizeof(url), "https://meta.fabricmc.net/v2/versions/loader/%s/profile/json", mc_ver);
 
     McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
-    McHttpResponse *resp = mc_http_get(&client, url);
+    char resolved[2048];
+    resolve_mirror_url(url, resolved, sizeof(resolved));
+    McHttpResponse *resp = mc_http_get(&client, resolved);
     if (!resp || !resp->success || !resp->data) {
         mc_error("Failed to fetch Fabric profile");
         if (resp) { mc_http_response_free(resp); } return 1;
@@ -222,7 +236,6 @@ static int forge_fetch_profile_json(const char *mc_ver, const char *file_ver,
                                      McVersion *v, char *out_url, size_t out_url_size) {
     // Mirror list: primary + fallbacks
     const char *mirror_bases[] = {
-        "https://bmclapi2.bangbang93.com/maven",
         "https://maven.minecraftforge.net",
         "https://files.minecraftforge.net/maven",
         nullptr
@@ -232,8 +245,10 @@ static int forge_fetch_profile_json(const char *mc_ver, const char *file_ver,
         snprintf(profile_url, sizeof(profile_url),
                  "%s/net/minecraftforge/forge/%s-%s/forge-%s-%s-client.json",
                  mirror_bases[m], mc_ver, file_ver, mc_ver, file_ver);
-        if (mc_version_fetch(v, profile_url)) {
-            if (out_url) strncpy(out_url, profile_url, out_url_size);
+        char translated[2048];
+        resolve_mirror_url(profile_url, translated, sizeof(translated));
+        if (mc_version_fetch(v, translated)) {
+            if (out_url) strncpy(out_url, translated, out_url_size);
             return 1;
         }
     }
@@ -245,7 +260,9 @@ static int install_forge(const char *mc_ver, const char *forge_ver, const char *
     char url[512];
     snprintf(url, sizeof(url), "https://bmclapi2.bangbang93.com/forge/minecraft/%s", mc_ver);
     McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
-    McHttpResponse *resp = mc_http_get(&client, url);
+    char resolved[2048];
+    resolve_mirror_url(url, resolved, sizeof(resolved));
+    McHttpResponse *resp = mc_http_get(&client, resolved);
     if (!resp || !resp->success || !resp->data) {
         mc_error("Failed to fetch Forge version list for MC %s", mc_ver);
         if (resp) { mc_http_response_free(resp); } return 1;
@@ -299,11 +316,14 @@ static int install_forge(const char *mc_ver, const char *forge_ver, const char *
     strncpy(mc_safe, mc_ver, sizeof(mc_safe) - 1);
     for (char *p = mc_safe; *p; p++) if (*p == '.') *p = '_';
 
-    snprintf(dl_url, sizeof(dl_url), "https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%s-%s/forge-%s-%s-installer.jar", mc_ver, file_ver, mc_ver, file_ver);
+    snprintf(dl_url, sizeof(dl_url), "https://maven.minecraftforge.net/maven/net/minecraftforge/forge/%s-%s/forge-%s-%s-installer.jar", mc_ver, file_ver, mc_ver, file_ver);
     snprintf(output_path, sizeof(output_path), "%s/forge-%s-%s-installer.jar", mc_dir, mc_safe, file_ver);
-    if (!download_file(dl_url, output_path)) {
+    char resolved_dl[2048];
+    resolve_mirror_url(dl_url, resolved_dl, sizeof(resolved_dl));
+    if (!download_file(resolved_dl, output_path)) {
         snprintf(dl_url, sizeof(dl_url), "https://files.minecraftforge.net/maven/net/minecraftforge/forge/%s-%s/forge-%s-%s-installer.jar", mc_ver, file_ver, mc_ver, file_ver);
-        if (!download_file(dl_url, output_path)) {
+        resolve_mirror_url(dl_url, resolved_dl, sizeof(resolved_dl));
+        if (!download_file(resolved_dl, output_path)) {
             mc_error("Failed to download Forge JAR");
             mc_warn("Try installing Forge manually. See: https://files.minecraftforge.net");
             return 1;
@@ -390,7 +410,9 @@ static int install_neoforge(const char *mc_ver, const char *nforge_ver, const ch
     char list_url[512];
     snprintf(list_url, sizeof(list_url), "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/%s", pkg);
     McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
-    McHttpResponse *resp = mc_http_get(&client, list_url);
+    char resolved[2048];
+    resolve_mirror_url(list_url, resolved, sizeof(resolved));
+    McHttpResponse *resp = mc_http_get(&client, resolved);
     if (!resp || !resp->success || !resp->data) {
         mc_error("Failed to fetch NeoForge version list");
         if (resp) { mc_http_response_free(resp); } return 1;
@@ -427,8 +449,10 @@ static int install_neoforge(const char *mc_ver, const char *nforge_ver, const ch
     snprintf(dl_url, sizeof(dl_url),
              "https://maven.neoforged.net/releases/net/neoforged/%s/%s/%s-%s-installer.jar",
              pkg, version_buf, pkg, version_buf);
+    char resolved_dl[2048];
+    resolve_mirror_url(dl_url, resolved_dl, sizeof(resolved_dl));
     snprintf(output_path, sizeof(output_path), "%s/neoforge-%s-installer.jar", mc_dir, version_buf);
-    if (!download_file(dl_url, output_path)) {
+    if (!download_file(resolved_dl, output_path)) {
         // If bare version fails, try with MC prefix (e.g. "47.1.82" -> "1.20.1-47.1.82")
         if (!nforge_ver || strncmp(version_buf, mc_ver, strlen(mc_ver)) != 0) {
             char alt_ver[128];
@@ -439,7 +463,9 @@ static int install_neoforge(const char *mc_ver, const char *nforge_ver, const ch
                      pkg, alt_ver, pkg, alt_ver);
             char alt_output[MC_PATH_MAX];
             snprintf(alt_output, sizeof(alt_output), "%s/neoforge-%s-installer.jar", mc_dir, alt_ver);
-            if (download_file(alt_url, alt_output)) {
+            char alt_resolved[2048];
+            resolve_mirror_url(alt_url, alt_resolved, sizeof(alt_resolved));
+            if (download_file(alt_resolved, alt_output)) {
                 mc_info("NeoForge installer saved: %s", alt_output);
                 strncpy(output_path, alt_output, sizeof(output_path) - 1);
                 strncpy(version_buf, alt_ver, sizeof(version_buf) - 1);
@@ -468,7 +494,9 @@ static int install_optifine(const char *mc_ver, const char *mc_dir, const char *
     char url[512];
     snprintf(url, sizeof(url), "https://bmclapi2.bangbang93.com/optifine/versionList");
     McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
-    McHttpResponse *resp = mc_http_get(&client, url);
+    char resolved[2048];
+    resolve_mirror_url(url, resolved, sizeof(resolved));
+    McHttpResponse *resp = mc_http_get(&client, resolved);
     if (!resp || !resp->success || !resp->data) {
         mc_error("Failed to fetch OptiFine version list");
         if (resp) { mc_http_response_free(resp); } return 1;
@@ -498,8 +526,10 @@ static int install_optifine(const char *mc_ver, const char *mc_dir, const char *
     char dl_url[512], dl_url2[512], output_path[MC_PATH_MAX];
     snprintf(dl_url, sizeof(dl_url), "https://bmclapi2.bangbang93.com/optifine/download?f=%s", filename);
     snprintf(dl_url2, sizeof(dl_url2), "https://optifine.net/download?f=%s", filename);
+    char resolved_dl[2048];
+    resolve_mirror_url(dl_url, resolved_dl, sizeof(resolved_dl));
     snprintf(output_path, sizeof(output_path), "%s/%s", mc_dir, filename);
-    if (!download_file(dl_url, output_path))
+    if (!download_file(resolved_dl, output_path))
         if (!download_file(dl_url2, output_path))
             { mc_error("Failed to download OptiFine"); return 1; }
     mc_info("OptiFine saved: %s", output_path);
@@ -524,14 +554,18 @@ static int install_optifine(const char *mc_ver, const char *mc_dir, const char *
 // ---- LiteLoader ----
 static int install_liteloader(const char *mc_ver, const char *mc_dir, const char *java_path) {
     mc_info("Installing LiteLoader for MC %s...", mc_ver);
-    char url[512];
+        char url[512];
     snprintf(url, sizeof(url), "https://dl.liteloader.com/versions/versions.json");
     McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
-    McHttpResponse *resp = mc_http_get(&client, url);
+    char resolved[2048];
+    resolve_mirror_url(url, resolved, sizeof(resolved));
+    McHttpResponse *resp = mc_http_get(&client, resolved);
     if (!resp || !resp->success || !resp->data) {
         snprintf(url, sizeof(url), "https://bmclapi2.bangbang93.com/maven/com/mumfrey/liteloader/versions.json");
+        char resolved2[2048];
+        resolve_mirror_url(url, resolved2, sizeof(resolved2));
         mc_http_response_free(resp);
-        resp = mc_http_get(&client, url);
+        resp = mc_http_get(&client, resolved2);
         if (!resp || !resp->success || !resp->data) {
             mc_error("Failed to fetch LiteLoader versions");
             if (resp) { mc_http_response_free(resp); } return 1;

@@ -146,9 +146,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Beacon-mac-arm64
-          path: dist/Beacon-arm64.app
+          path: dist/Beacon.app
 
       # Build x86_64 (cross-compile via CMAKE_OSX_ARCHITECTURES).
+      # Must use a different artifact name since both builds write to dist/Beacon.app.
       - name: Cache CMake build (x86_64)
         uses: actions/cache@v4
         with:
@@ -161,4 +162,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Beacon-mac-intel
-          path: dist/Beacon-intel.app
+          path: dist/Beacon.app

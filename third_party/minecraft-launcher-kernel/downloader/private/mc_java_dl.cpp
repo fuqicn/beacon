@@ -8,6 +8,8 @@
 #include "mc_java_dl.h"
 #include <mc_http.h>
 #include <mc_log.h>
+#include <mc_version.h>
+#include <mc_download.h>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -25,15 +27,29 @@
 #include <QtCore/QProcessEnvironment>
 #include <QtCore/QStringList>
 
-static const char *java_manifest_url(const char *mirror) {
+// Mojang Java runtime manifest URL for the legacy-2ec0cc96 reference build.
+static const char *mojang_java_manifest_url(const char *mirror) {
     if (mirror && strcmp(mirror, "bmclapi") == 0)
         return "https://bmclapi2.bangbang93.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
     return "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 }
 
+// Eclipse Adoptium API URL for the latest GA release of a given platform+arch.
+// Returns the caller-allocated string (stack buffer in this function, safe
+// because it is only used synchronously before the function returns).
+static void build_adoptium_url(int major_ver, char *out, size_t out_size) {
+    char plat[64];
+    mc_platform_adoptium_name(plat, sizeof(plat));
+    snprintf(out, out_size,
+             "https://api.adoptium.net/v3/binary/latest/%d/ga/%s/linux_x64?project=jdk",
+             major_ver, plat);
+    // The Adoptium API redirects to the actual download URL; we follow with mc_http_get.
+    (void)mc_download_translate_url(out, out, out_size, "mojang");
+}
+
 int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileList *list) {
     memset(list, 0, sizeof(*list));
-    const char *url = java_manifest_url(mirror);
+    const char *url = mojang_java_manifest_url(mirror);
 
     McHttpClient client;
     mc_http_init(&client);
@@ -69,8 +85,56 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
         snprintf(plat_key, sizeof(plat_key), "%s-x64", plat);
         platVal = root.value(plat_key);
     }
+
+    // --- Fallback: Adoptium (OpenJDK) ---
+    // Mojang does not always provide builds for every platform+arch combo
+    // (e.g. Windows ARM, some Linux ARM variants).  Try the Adoptium API as
+    // a last resort: it returns a single-binary release that we unpack.
     if (platVal.isUndefined()) {
-        mc_error("No '%s' entry in Java manifest (tried: %s-x64, %s-%s)", plat, plat, plat, arch);
+        char adoptium_url[1024];
+        mc_platform_adoptium_name(adoptium_url, sizeof(adoptium_url));
+        snprintf(adoptium_url, sizeof(adoptium_url),
+                 "https://api.adoptium.net/v3/binary/latest/%d/ga/%s?architecture=%s&os=%s&project=jdk",
+                 major_version, plat_key, mc_arch_adoptium(arch), plat);
+
+        mc_info("Mojang Java not available for %s-%s, trying Adoptium: %s", plat, arch, adoptium_url);
+
+        McHttpClient ac;
+        mc_http_init(&ac);
+        mc_http_set_timeout(&ac, 15000);
+        McHttpResponse *arep = mc_http_get(&ac, adoptium_url);
+        if (arep && arep->success && arep->data) {
+            // Adoptium returns a single-json release descriptor.  Build a
+            // McJavaFileList with one entry pointing at the bundle URL.
+            QJsonParseError aerr;
+            QJsonDocument adoc = QJsonDocument::fromJson(QByteArray(arep->data), &aerr);
+            mc_http_response_free(arep);
+            if (aerr.error == QJsonParseError::NoError && adoc.isObject()) {
+                QJsonObject aobj = adoc.object();
+                QJsonValue releases = aobj.value("releases");
+                if (releases.isArray() && !releases.toArray().isEmpty()) {
+                    QJsonObject release = releases.toArray().first().toObject();
+                    QJsonValue download = release.value("download_link");
+                    if (!download.toString().isEmpty()) {
+                        const char *bundle_url = download.toString().toUtf8().constData();
+                        mc_info("Adoptium bundle URL: %s", bundle_url);
+
+                        list->count = 1;
+                        list->capacity = 1;
+                        list->files = (McJavaFile *)malloc(sizeof(McJavaFile));
+                        if (list->files) {
+                            memset(list->files, 0, sizeof(McJavaFile));
+                            strncpy(list->files[0].url, bundle_url, sizeof(list->files[0].url) - 1);
+                            strncpy(list->files[0].path, "adoptium-bundle", sizeof(list->files[0].path) - 1);
+                            list->files[0].size = 0;  // unknown until downloaded
+                        }
+                        mc_info("Java manifest (Adoptium): 1 bundle for %s-%s", plat, arch);
+                        return 1;
+                    }
+                }
+            }
+        }
+        mc_warn("Adoptium fallback also failed for %s-%s", plat, arch);
         return 0;
     }
 
@@ -153,7 +217,7 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
         if (!entryVal.isObject()) continue;
 
         QJsonObject entryObj = entryVal.toObject();
-        QJsonValue downloadsVal = entryObj.value("downloads");
+        QJsonValue downloadsVal = entryVal.toObject().value("downloads");
         if (downloadsVal.isUndefined()) continue;
         QJsonValue rawVal = downloadsVal.toObject().value("raw");
         if (rawVal.isUndefined()) continue;

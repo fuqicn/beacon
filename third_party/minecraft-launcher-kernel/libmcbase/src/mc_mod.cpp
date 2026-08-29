@@ -47,57 +47,13 @@ static const char *mod_effective_mirror(void) {
     return g_mod_auto_mirror;
 }
 
-// Probe the direct Modrinth CDN against the mcimirror proxy and pick whichever
-// is reachable and fastest. Any HTTP response counts as reachable.
-static void warmup_modrinth_probe(void) {
-    const char *direct_url = "https://cdn.modrinth.com/";
-    const char *mirror_url = "https://mod.mcimirror.top/";
-
-    McHttpClient c;
-    mc_http_init(&c);
-    mc_http_set_timeout(&c, 3000);
-
-    auto t1 = std::chrono::steady_clock::now();
-    McHttpResponse *rd = mc_http_head(&c, direct_url);
-    auto t2 = std::chrono::steady_clock::now();
-    bool direct_ok = rd && rd->success;
-    double direct_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-    if (rd) mc_http_response_free(rd);
-
-    auto t3 = std::chrono::steady_clock::now();
-    McHttpResponse *rm = mc_http_head(&c, mirror_url);
-    auto t4 = std::chrono::steady_clock::now();
-    bool mirror_ok = rm && rm->success;
-    double mirror_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
-    if (rm) mc_http_response_free(rm);
-
-    const char *pick = (mirror_ok && (!direct_ok || mirror_ms < direct_ms)) ? "mcimirror" : "";
-    {
-        std::lock_guard<std::mutex> lk(g_mod_auto_mutex);
-        strncpy(g_mod_auto_mirror, pick, sizeof(g_mod_auto_mirror) - 1);
-        g_mod_auto_mirror[sizeof(g_mod_auto_mirror) - 1] = '\0';
-        g_mod_auto_ready.store(1);
-    }
-    mc_info("Modrinth mirror probe: direct=%s(%.0fms) mirror=%s(%.0fms) -> %s",
-            direct_ok ? "ok" : "fail", direct_ms,
-            mirror_ok ? "ok" : "fail", mirror_ms,
-            g_mod_auto_mirror[0] ? "mcimirror" : "direct");
-}
-
-// Warm the Modrinth mirror decision in the background. Safe to call from any
-// thread; it only touches its own state plus the shared 10-minute mirror cache.
-void mc_mod_warmup_mirror(void) {
-    (void)mc_download_effective_mirror();
-    warmup_modrinth_probe();
-}
-
-// mirror mapping
+// mirror mapping — delegates to the generic mirror translator
 static void apply_mirror(QString &url) {
     const char *eff = mod_effective_mirror();
-    if (strcmp(eff, "bmclapi") == 0 || strcmp(eff, "mcimirror") == 0) {
-        url.replace("api.modrinth.com", "mod.mcimirror.top/modrinth");
-        url.replace("cdn.modrinth.com", "mod.mcimirror.top");
-    }
+    if (!eff || eff[0] == '\0') return;
+    char translated[2048];
+    if (mc_download_translate_url(url.toUtf8().constData(), translated, sizeof(translated), eff))
+        url = QString::fromUtf8(translated);
 }
 
 static char *strdup_qstring(const QString &s) {

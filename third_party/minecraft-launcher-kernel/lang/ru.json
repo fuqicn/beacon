@@ -131,8 +131,11 @@
     "output_dir": "Выходная директория",
     "show_help": "Показать эту справку",
     "threads": "Потоков",
-    "mod_page": "Номер страницы (с 0)",
-    "packsearch_desc": "Поиск модпаков на Modrinth",
-    "pack_none": "Модпаки не найдены",
-    "pack_none_query": "Модпаки не найдены для"
+    "mod_page": "Page number (0-based)",
+    "packsearch_desc": "Search and browse modpacks from Modrinth",
+    "pack_none": "No modpacks found",
+    "pack_none_query": "No modpacks found for",
+    "java_alternative": "Falling back to OpenJDK",
+    "mirror_load_ok": "Loaded mirror config",
+    "mirror_load_fail": "Failed to load mirror config"
 }

@@ -162,5 +162,8 @@
     "mod_page": "页码（从0开始）",
     "packsearch_desc": "搜索和浏览 Modrinth 的整合包",
     "pack_none": "未找到整合包",
-    "pack_none_query": "未找到匹配的整合包"
+    "pack_none_query": "未找到匹配的整合包",
+    "java_alternative": "回退至 OpenJDK 下载",
+    "mirror_load_ok": "已加载镜像配置",
+    "mirror_load_fail": "加载镜像配置失败"
 }

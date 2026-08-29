@@ -889,14 +889,14 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     write_version_file(resources / "version.txt", version)
 
     # Final .app lives in dist/.
-    final_app = dist / ("Beacon-%s.app" % arch_suffix)
+    final_app = dist / "Beacon.app"
     if final_app.exists():
         shutil.rmtree(final_app)
     shutil.move(str(staging / "Beacon.app"), str(final_app))
     shutil.rmtree(staging, ignore_errors=True)
 
     log("=== macOS package done ===")
-    log("  dist/Beacon-%s.app (%d bytes)" % (arch_suffix,
+    log("  dist/Beacon.app (%d bytes)" % (
         sum(f.stat().st_size for f in final_app.rglob("*") if f.is_file())))
 
 

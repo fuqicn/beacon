@@ -9,20 +9,44 @@
       { "match": "maven.minecraftforge.net", "prefix": "/maven" },
       { "match": "maven.neoforged.net", "prefix": "/maven" },
       { "match": "meta.fabricmc.net", "prefix": "/fabric-meta" },
-      { "match": "meta.quiltmc.org", "prefix": "/quilt-meta" }
-    ]
+      { "match": "meta.quiltmc.org", "prefix": "/quilt-meta" },
+      { "match": "api.modrinth.com", "prefix": "/modrinth/api" },
+      { "match": "dl.liteloader.com", "prefix": "/liteloader" },
+      { "match": "optifine.net", "prefix": "/optifine" }
+    ],
+    "cdn_domain": "",
+    "java_alternative": ""
   },
   {
     "name": "mcbbs",
     "base_url": "https://download.mcbbs.net",
     "rules": [
       { "match": "libraries.minecraft.net", "prefix": "/maven" },
+      { "match": "resources.download.minecraft.net", "prefix": "/assets" },
       { "match": "maven.fabricmc.net", "prefix": "/maven" },
       { "match": "maven.minecraftforge.net", "prefix": "/maven" },
       { "match": "maven.neoforged.net", "prefix": "/maven" },
-      { "match": "resources.download.minecraft.net", "prefix": "/assets" },
       { "match": "meta.fabricmc.net", "prefix": "/fabric-meta" },
-      { "match": "meta.quiltmc.org", "prefix": "/quilt-meta" }
-    ]
+      { "match": "meta.quiltmc.org", "prefix": "/quilt-meta" },
+      { "match": "api.modrinth.com", "prefix": "/modrinth/api" },
+      { "match": "cdn.modrinth.com", "prefix": "/modrinth" },
+      { "match": "dl.liteloader.com", "prefix": "/liteloader" }
+    ],
+    "cdn_domain": "",
+    "java_alternative": ""
+  },
+  {
+    "name": "mcimirror",
+    "base_url": "https://mod.mcimirror.top",
+    "rules": [],
+    "cdn_domain": "cdn.modrinth.com",
+    "java_alternative": ""
+  },
+  {
+    "name": "adoptium",
+    "base_url": "https://api.adoptium.net/v3/binary/latest",
+    "rules": [],
+    "cdn_domain": "",
+    "java_alternative": "https://api.adoptium.net"
   }
 ]

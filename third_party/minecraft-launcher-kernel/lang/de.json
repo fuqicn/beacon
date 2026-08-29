@@ -131,8 +131,11 @@
     "output_dir": "Ausgabeverzeichnis",
     "show_help": "Diese Hilfe anzeigen",
     "threads": "Threads",
-    "mod_page": "Seitennummer (0-basiert)",
-    "packsearch_desc": "Modpacks auf Modrinth durchsuchen",
-    "pack_none": "Keine Modpacks gefunden",
-    "pack_none_query": "Keine Modpacks gefunden für"
+    "mod_page": "Page number (0-based)",
+    "packsearch_desc": "Search and browse modpacks from Modrinth",
+    "pack_none": "No modpacks found",
+    "pack_none_query": "No modpacks found for",
+    "java_alternative": "Falling back to OpenJDK",
+    "mirror_load_ok": "Loaded mirror config",
+    "mirror_load_fail": "Failed to load mirror config"
 }

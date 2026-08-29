@@ -124,8 +124,11 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     // Race GitHub vs Gitee release APIs, pick the lower-latency source.
     Q_INVOKABLE void checkForUpdate();
     Q_INVOKABLE void downloadUpdate();
+    Q_INVOKABLE void installPendingUpdate();   // Linux: pkexec install; macOS: spawn sidecar
     Q_INVOKABLE void cancelUpdate();          // dismiss the prompt
     Q_INVOKABLE void cancelUpdateDownload();  // abort transfer + delete temp file
+    Q_INVOKABLE void installPendingUpdate();  // Linux: pkexec install; macOS: sidecar swap
+    Q_INVOKABLE void installPendingUpdate();  // Linux: pkexec install; macOS: sidecar swap
     // Window-close hook: cancel every in-flight task and sweep temp files.
     Q_INVOKABLE void prepareShutdown();
 

@@ -42,6 +42,7 @@ int mc_download_url(const char *url, const char *output_path, McDownloadResult *
 
 // URL mirror translation helpers
 int mc_download_translate_mojang_url(const char *url, char *mirror, size_t mirror_size, const char *mirror_type);
+int mc_download_translate_url(const char *url, char *out, size_t out_size, const char *mirror_type);
 
 // Global download source selection ("mojang", "auto", "bmclapi", "mcimirror", "mcbbs", ...).
 // Passing "" or NULL restores "auto".
@@ -59,7 +60,7 @@ const char *mc_download_effective_mirror(void);
 int mc_download_translate_mojang_url_auto(const char *url, char *mirror, size_t mirror_size);
 
 // Mirror config (loaded from JSON, replaces hardcoded rules)
-#define MC_MIRROR_MAX_RULES 16
+#define MC_MIRROR_MAX_RULES 32
 #define MC_MIRROR_MAX_ENTRIES 8
 
 typedef struct {
@@ -72,12 +73,14 @@ typedef struct {
     char base_url[512];
     int rule_count;
     McMirrorRule rules[MC_MIRROR_MAX_RULES];
+    char cdn_domain[256];    // if non-empty, full-url domain-substitution mode for this domain
+    char java_alternative[512];  // OpenJDK / alternative Java download source URL
 } McMirrorEntry;
 
 // Load mirror config from a JSON file (merges into loaded configs).
 int mc_mirror_load_config(const char *path);
 
-// Load mirror config from a JSON string (merges into loaded configs). 
+// Load mirror config from a JSON string (merges into loaded configs).
 int mc_mirror_load_config_json(const char *json_data);
 
 // Clear all loaded configs (reverts to hardcoded fallback).

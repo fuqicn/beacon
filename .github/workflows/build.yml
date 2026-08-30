@@ -175,13 +175,7 @@ jobs:
         run: Remove-Item -Recurse -Force launcher/build -ErrorAction SilentlyContinue
 
       - name: Install zlib via vcpkg
-        run: |
-          if (-not (Test-Path C:\vcpkg\vcpkg.exe)) {
-            git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-            C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-          }
-          C:\vcpkg\vcpkg.exe install zlib:x64-windows --triplet x64-windows
-          echo "VCPKG_ROOT=C:\vcpkg" | Out-File -Encoding utf8 -Append $env:GITHUB_ENV
+        run: vcpkg install zlib:x64-windows --triplet x64-windows
 
       - name: Cache CMake build
         uses: actions/cache@v4
@@ -224,14 +218,8 @@ jobs:
       - name: Clean stale CMake cache (generator mismatch)
         run: Remove-Item -Recurse -Force launcher/build-arm -ErrorAction SilentlyContinue
 
-      - name: Install zlib via vcpkg (ARM64 cross-compile)
-        run: |
-          if (-not (Test-Path C:\vcpkg\vcpkg.exe)) {
-            git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-            C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-          }
-          C:\vcpkg\vcpkg.exe install zlib:arm64-windows --triplet arm64-windows
-          echo "VCPKG_ROOT=C:\vcpkg" | Out-File -Encoding utf8 -Append $env:GITHUB_ENV
+      - name: Install zlib via vcpkg (ARM64)
+        run: vcpkg install zlib:arm64-windows --triplet arm64-windows
 
       - name: Cache CMake build
         uses: actions/cache@v4

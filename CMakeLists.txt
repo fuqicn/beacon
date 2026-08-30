@@ -130,7 +130,8 @@ target_link_libraries(Beacon PRIVATE
 if(ZLIB_FOUND)
     target_link_libraries(Beacon PRIVATE ZLIB::ZLIB)
 else()
-    # MinGW/macOS ship zlib, MSVC via vcpkg provides ZLIB_FOUND.
+    # MinGW/macOS ship zlib, Windows (MSVC) links against the system zlib via
+    # the 'z' library (zlib1.dll) provided by the Windows SDK.
     target_link_libraries(Beacon PRIVATE z)
 endif()
 

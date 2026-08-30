@@ -309,29 +309,16 @@ def configure_and_build(args, build_dir, qt_dir):
         cfg.append("-DCMAKE_INSTALL_PREFIX=/usr")
         cfg.append("-DLINUX_NO_CACHEGEN=ON")
     elif detect_platform() == "windows":
-        # Force MSVC compiler on Windows to avoid picking up mingw from Qt's dir.
-        msvc = find_msvc_toolchain()
-        if msvc:
-            cfg.append("-DCMAKE_C_COMPILER=%s" % msvc["cl"].parent / "cl.exe")
-            cfg.append("-DCMAKE_CXX_COMPILER=%s" % msvc["cl"])
+        # Use Visual Studio generator so CMake picks up MSVC automatically.
+        # No need to force compiler paths — the VS generator handles everything.
+        cfg.append("-G")
+        cfg.append("Visual Studio 17 2022")
+        cfg.append("-A")
+        cfg.append("x64")
     elif detect_platform() == "darwin" and getattr(args, 'osx_arch', None):
         # Cross-compile for specific macOS architecture.
         cfg.append("-DCMAKE_OSX_ARCHITECTURES=%s" % args.osx_arch)
     if not build_dir.exists():
-        cfg.append("-G")
-        cfg.append("Ninja")
-        # Resolve Ninja path
-        ninja_bin = shutil.which("ninja")
-        if not ninja_bin:
-            for candidate in [
-                Path(qt_dir).parent / "Tools" / "Ninja" / "ninja.exe" if qt_dir else None,
-                Path("E:/Qt/Tools/Ninja/ninja.exe"),
-            ]:
-                if candidate and candidate.is_file():
-                    ninja_bin = str(candidate)
-                    break
-        if ninja_bin:
-            cfg.append("-DCMAKE_MAKE_PROGRAM=%s" % ninja_bin)
         run(cfg)
     else:
         run(cfg)

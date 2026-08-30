@@ -354,6 +354,11 @@ def configure_and_build(args, build_dir, qt_dir):
             cfg.append("Visual Studio 17 2022")
             cfg.append("-A")
             cfg.append("ARM64" if getattr(args, 'arch', None) == "arm64" else "x64")
+            # Use vcpkg for dependencies that MSVC can't find natively (e.g. zlib).
+            vcpkg_root = _resolve_vcpkg_root(args)
+            if vcpkg_root:
+                cfg.append("-DCMAKE_TOOLCHAIN_FILE=%s" % (vcpkg_root / "scripts" / "buildsystems" / "vcpkg.cmake"))
+                log("using vcpkg toolchain: %s" % vcpkg_root)
         else:
             cfg.append("-G")
             cfg.append("Ninja")
@@ -968,6 +973,8 @@ def parse_args():
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--msvc", action="store_true",
                    help="use Visual Studio generator instead of Ninja (CI)")
+    p.add_argument("--vcpkg", default=None,
+                   help="path to vcpkg root (auto-detected from VCPKG_ROOT env or common paths)")
     p.add_argument("--skip-build", action="store_true",
                    help="skip configure/build (requires existing build artifacts)")
     p.add_argument("--osx-arch", choices=["arm64", "x86_64"], default="arm64",

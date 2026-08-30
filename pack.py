@@ -534,7 +534,7 @@ def build_windows(args, version, build_dir, qt_dir):
     # On Windows CI (github actions), mingw from Qt's install dir is in PATH but
     # cannot link MSVC Qt libraries — always use MSVC there.
     # Locally, use mingw only when explicitly specified via --mingw-bin.
-    msvc = find_msvc_toolchain()
+    msvc = find_msvc_toolchain(getattr(args, "arch", None))
     mingw_bin = resolve_mingw_bin(args, build_dir)
 
     # Strip the deployed binary to cut package size. The unstripped original

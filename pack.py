@@ -515,12 +515,14 @@ def build_windows(args, version, build_dir, qt_dir):
     pack_tmp = packaging / "pack-tmp"
     beacon_dir.mkdir(parents=True, exist_ok=True)
 
-    # VS generator puts output in build/<arch>/<config>/ (e.g. build/x64/Release/).
+    # VS generator puts output in build/<arch>/<config>/ or build/<config>/ (depending on cmake version).
     arch_tag = "arm64" if getattr(args, "arch", None) == "arm64" else "x64"
     candidates = [
-        Path(build_dir) / "Beacon.exe",
         Path(build_dir) / arch_tag / "Release" / "Beacon.exe",
+        Path(build_dir) / "Release" / "Beacon.exe",
         Path(build_dir) / arch_tag / "Debug" / "Beacon.exe",
+        Path(build_dir) / "Debug" / "Beacon.exe",
+        Path(build_dir) / "Beacon.exe",
     ]
     exe = next((p for p in candidates if p.is_file()), None)
     if exe is None:

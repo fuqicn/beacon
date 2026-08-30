@@ -153,6 +153,32 @@ def resolve_mingw_bin(args, build_dir):
     return None
 
 
+def _resolve_vcpkg_root(args):
+    """Locate vcpkg installation for use as CMake toolchain.
+
+    Checks: --vcpkg arg, VCPKG_ROOT env var, then common CI paths.
+    Returns None if not found.
+    """
+    if args.vcpkg:
+        p = Path(args.vcpkg)
+        if (p / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+            return p
+        raise PackError("vcpkg not found at %s (no vcpkg.cmake)" % p)
+    env = os.environ.get("VCPKG_ROOT")
+    if env:
+        p = Path(env)
+        if (p / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+            return p
+    # Common GitHub Actions vcpkg locations
+    for candidate in [
+        Path(r"C:\vcpkg"),
+        Path(r"C:\Program Files\vcpkg"),
+    ]:
+        if (candidate / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+            return candidate
+    return None
+
+
 def find_msvc_toolchain(arch=None):
     """Locate MSVC build tools (cl.exe, rc.exe, link.exe, optional strip).
 

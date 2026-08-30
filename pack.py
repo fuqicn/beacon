@@ -224,6 +224,7 @@ def find_msvc_toolchain(arch=None):
     # Hardcoded fallback for common CI / enterprise install paths.
     if not msvc_root:
         for candidate in [
+            r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools",
             r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
             r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools",
             r"C:\Program Files\Microsoft Visual Studio\2022\Community",
@@ -232,28 +233,27 @@ def find_msvc_toolchain(arch=None):
             if vc.is_dir():
                 msdirs = sorted(vc.iterdir(), reverse=True)
                 if msdirs:
-                    msvc_root = vc.parent.parent
+                    msvc_root = Path(candidate)
                     break
 
     # Fallback: scan common VS install paths
     if not msvc_root:
         import glob
         patterns = [
-            r"C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
             r"C:\Program Files (x86)\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
+            r"C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
         ]
         for pat in patterns:
             dirs = glob.glob(pat)
             if dirs:
                 dirs.sort(reverse=True)
-                msvc_root = Path(dirs[0]).parents[1]
+                msvc_root = Path(dirs[0]).parents[3]
                 break
 
     if not msvc_root:
         cl = shutil.which("cl.exe")
         if cl:
-            p = Path(cl).parent.parent.parent.parent
-            msvc_root = p.parent.parent
+            msvc_root = Path(cl).parent.parent.parent.parent
         else:
             return None
     else:

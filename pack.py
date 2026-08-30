@@ -516,7 +516,6 @@ def build_windows(args, version, build_dir, qt_dir):
     beacon_dir.mkdir(parents=True, exist_ok=True)
 
     # VS generator puts output in build/<arch>/<config>/ (e.g. build/x64/Release/).
-    msvc_gen = getattr(args, "msvc", False)
     arch_tag = "arm64" if getattr(args, "arch", None) == "arm64" else "x64"
     candidates = [
         Path(build_dir) / "Beacon.exe",

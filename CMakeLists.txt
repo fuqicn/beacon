@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+# Disable Windows min/max macros so std::min/std::max work correctly
+if(WIN32)
+    add_compile_definitions(NOMINMAX)
+endif()
+
 include(GNUInstallDirs)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Network Quick Qml QuickControls2 QuickDialogs2 Svg Widgets)

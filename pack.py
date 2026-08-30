@@ -841,6 +841,9 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     """Build and package a macOS .app bundle."""
     log("=== Building Beacon for macOS (%s) ===" % arch_suffix)
     build_dir = Path(args.build_dir) if args.build_dir else (ROOT / "build-mac-%s" % arch_suffix)
+    # macOS may run two architectures sequentially in CI; use a separate dist dir
+    # so they don't overwrite each other.
+    dist = Path(args.mac_dist_dir) if args.mac_dist_dir else Path(args.dist_dir)
     if not args.skip_build:
         configure_and_build(args, build_dir, qt_dir)
     binary = build_dir / "Beacon.app"
@@ -919,6 +922,9 @@ def parse_args():
                    help="skip configure/build (requires existing build artifacts)")
     p.add_argument("--osx-arch", choices=["arm64", "x86_64"], default="arm64",
                    help="macOS target architecture (default: arm64)")
+    p.add_argument("--mac-dist-dir", default=None,
+                   help="macOS dist output directory (overrides --dist-dir for macOS builds only; "
+                        "use to avoid overwriting between arm64 and x86_64 builds)")
     p.add_argument("--proxy", default=os.environ.get("GH_PROXY") or DEFAULT_PROXY,
                    help="GitHub download proxy prefix (default: %s)" % DEFAULT_PROXY)
     p.add_argument("--no-proxy", action="store_true",

@@ -191,21 +191,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Qt 6.8 MSVC (ARM64)
+      - name: Cache Qt 6.8 MSVC (ARM64 cross-compiled)
         uses: actions/cache@v4
         id: qt-cache
         with:
           path: C:/Qt/6.8.3/msvc2022_arm64
           key: ${{ runner.os }}-qt-arm-${{ env.CACHE_PREFIX }}
 
-      - name: Install Qt 6.8 (MSVC ARM64)
+      - name: Install Qt 6.8 (MSVC ARM64 cross-compiled)
         if: steps.qt-cache.outputs.cache-hit != 'true'
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_msvc2022_arm64'
+          arch: 'win64_msvc2022_arm64_cross_compiled'
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
 

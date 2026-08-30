@@ -144,12 +144,24 @@ def find_qt_on_linux():
 
 
 def resolve_mingw_bin(args, build_dir):
+    """Resolve the mingw bin directory from args or CMake cache.
+
+    On Windows, the CMake cache may contain a mingw path (e.g. from Qt's install
+    dir).  We explicitly reject those so pack.py always falls back to MSVC on
+    Windows — mingw cannot link MSVC-compiled Qt libraries.
+    """
     if args.mingw_bin:
         return Path(args.mingw_bin)
     cache = read_cmake_cache(build_dir)
     cc = _clean_cache_value(cache.get("CMAKE_CXX_COMPILER") or cache.get("CMAKE_C_COMPILER"))
     if cc:
-        return Path(cc).parent
+        p = Path(cc)
+        name = p.name.lower()
+        # Reject mingw / gcc compilers — they cannot link MSVC Qt libraries.
+        if any(kw in str(p).lower() for kw in ("mingw", "gcc.exe", "g++.exe")) \
+                or name in ("g++.exe", "gcc.exe"):
+            return None
+        return p.parent
     return None
 
 

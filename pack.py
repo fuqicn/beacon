@@ -407,7 +407,8 @@ def configure_and_build(args, build_dir, qt_dir):
     else:
         run(cfg)
     run([str(cmake), "--build", str(build_dir), "--target", "Beacon",
-         "--parallel", str(args.jobs)])
+         "--parallel", str(args.jobs)] +
+        (["--config", "Release"] if getattr(args, "msvc", False) else []))
 
 
 def ensure_executable(path):
@@ -514,9 +515,17 @@ def build_windows(args, version, build_dir, qt_dir):
     pack_tmp = packaging / "pack-tmp"
     beacon_dir.mkdir(parents=True, exist_ok=True)
 
-    exe = Path(build_dir) / "Beacon.exe"
-    if not exe.is_file():
-        raise PackError("Beacon.exe not found in %s" % exe)
+    # VS generator puts output in build/<arch>/<config>/ (e.g. build/x64/Release/).
+    msvc_gen = getattr(args, "msvc", False)
+    arch_tag = "arm64" if getattr(args, "arch", None) == "arm64" else "x64"
+    candidates = [
+        Path(build_dir) / "Beacon.exe",
+        Path(build_dir) / arch_tag / "Release" / "Beacon.exe",
+        Path(build_dir) / arch_tag / "Debug" / "Beacon.exe",
+    ]
+    exe = next((p for p in candidates if p.is_file()), None)
+    if exe is None:
+        raise PackError("Beacon.exe not found in %s" % build_dir)
     shutil.copy2(exe, beacon_dir / "Beacon.exe")
     log("copied Beacon.exe -> %s" % (beacon_dir / "Beacon.exe"))
 

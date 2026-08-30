@@ -17,7 +17,7 @@ env:
 jobs:
   # ---------------------------------------------------------------- Debian
   debian:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
 
@@ -59,7 +59,7 @@ jobs:
 
   # ---------------------------------------------------------------- Fedora / RHEL
   fedora:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
 
@@ -95,7 +95,7 @@ jobs:
   # ---------------------------------------------------------------- Arch
   # Docker container runs as root; build_arch_pkg creates archbuilder via su.
   arch:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v4
@@ -146,10 +146,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Beacon-mac-arm64
-          path: dist/Beacon.app
+          path: dist/Beacon-arm64.app
 
       # Build x86_64 (cross-compile via CMAKE_OSX_ARCHITECTURES).
-      # Must use a different artifact name since both builds write to dist/Beacon.app.
       - name: Cache CMake build (x86_64)
         uses: actions/cache@v4
         with:
@@ -162,4 +161,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Beacon-mac-intel
-          path: dist/Beacon.app
+          path: dist/Beacon-intel.app

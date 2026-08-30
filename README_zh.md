@@ -1,6 +1,6 @@
 # Beacon
 
-[简体中文](README_zh.md)
+[English](README.md)
 
 一个基于 Qt 6 Quick/QML 构建的跨平台 Minecraft 启动器，由 [minecraft-launcher-kernel](third_party/minecraft-launcher-kernel) 引擎驱动。
 

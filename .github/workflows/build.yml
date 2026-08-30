@@ -177,6 +177,9 @@ jobs:
           path: launcher/build
           key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
+      - name: Clean stale build cache (force MSVC detection)
+        run: Remove-Item -Recurse -Force launcher/build -ErrorAction SilentlyContinue
+
       - name: Build (Windows x86_64, MSVC)
         run: python pack.py
 
@@ -214,6 +217,9 @@ jobs:
         with:
           path: launcher/build-arm
           key: ${{ runner.os }}-build-arm-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Clean stale build cache (force MSVC detection)
+        run: Remove-Item -Recurse -Force launcher/build-arm -ErrorAction SilentlyContinue
 
       - name: Build (Windows ARM64, MSVC)
         run: python pack.py

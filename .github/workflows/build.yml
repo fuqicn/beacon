@@ -171,6 +171,9 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-x86
 
+      - name: Clean stale CMake cache (generator mismatch)
+        run: Remove-Item -Recurse -Force launcher/build -ErrorAction SilentlyContinue
+
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
@@ -208,6 +211,9 @@ jobs:
           arch: 'win64_msvc2022_arm64_cross_compiled'
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
+
+      - name: Clean stale CMake cache (generator mismatch)
+        run: Remove-Item -Recurse -Force launcher/build-arm -ErrorAction SilentlyContinue
 
       - name: Cache CMake build
         uses: actions/cache@v4

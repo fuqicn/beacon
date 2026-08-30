@@ -602,8 +602,14 @@ package() {
 """
 
 
-def map_arch():
-    """Map host machine to (deb_arch, rpm_arch, pacman_arch)."""
+def map_arch(override=None):
+    """Map host machine to (deb_arch, rpm_arch, pacman_arch).
+
+    When *override* is given (e.g. "arm64") it is returned directly as all
+    three keys so the caller can control the output suffix explicitly.
+    """
+    if override:
+        return {"deb": override, "rpm": override, "pacman": override}
     m = platform.machine().lower()
     if m in ("x86_64", "amd64"):
         return {"deb": "amd64", "rpm": "x86_64", "pacman": "x86_64"}
@@ -674,12 +680,12 @@ def stage_install_tree(args, version, build_dir, install_prefix=None):
     return staging
 
 
-def build_deb(staging, version, dist):
+def build_deb(staging, version, dist, arch_override=None):
     """Build the Debian package via dpkg-deb."""
     if not shutil.which("dpkg-deb"):
         log("WARNING: dpkg-deb not found; skipping .deb package")
         return None
-    arch = map_arch()["deb"]
+    arch = map_arch(arch_override)["deb"]
     root = staging.parent / "deb-pkg"
     if root.exists():
         shutil.rmtree(root)
@@ -710,13 +716,13 @@ def build_deb(staging, version, dist):
     return out
 
 
-def build_rpm(staging, version, dist):
+def build_rpm(staging, version, dist, arch_override=None):
     """Build the RPM package via rpmbuild."""
     rpmbuild = shutil.which("rpmbuild")
     if not rpmbuild:
         log("WARNING: rpmbuild not found; skipping .rpm package")
         return None
-    arch = map_arch()["rpm"]
+    arch = map_arch(arch_override)["rpm"]
     top = staging.parent / "rpm-top"
     if top.exists():
         shutil.rmtree(top)
@@ -747,12 +753,12 @@ def build_rpm(staging, version, dist):
     return out
 
 
-def build_arch_pkg(staging, version, dist):
+def build_arch_pkg(staging, version, dist, arch_override=None):
     """Build the Arch package via makepkg."""
     if not shutil.which("makepkg"):
         log("WARNING: makepkg not found; skipping Arch package")
         return None
-    arch = map_arch()["pacman"]
+    arch = map_arch(arch_override)["pacman"]
     work = staging.parent / "arch-pkg"
     if work.exists():
         shutil.rmtree(work)
@@ -809,14 +815,14 @@ def build_linux(args, version, build_dir, qt_dir):
 
     staging = stage_install_tree(args, version, build_dir)
 
-    made = [p for p in (build_deb(staging, version, dist),
-                        build_rpm(staging, version, dist),
-                        build_arch_pkg(staging, version, dist)) if p]
+    made = [p for p in (build_deb(staging, version, dist, args.arch),
+                        build_rpm(staging, version, dist, args.arch),
+                        build_arch_pkg(staging, version, dist, args.arch)) if p]
 
     if not made:
         # No packaging tooling available — fall back to an installable tarball.
         tarball = dist / ("beacon-%s-linux-%s.tar.gz"
-                          % (version, map_arch()["pacman"]))
+                          % (version, map_arch(args.arch)["pacman"]))
         run(["tar", "-czf", str(tarball), "-C", str(staging), "usr"])
         made.append(tarball)
 
@@ -916,6 +922,8 @@ def parse_args():
     p.add_argument("--work-dir", default="build-linux",
                    help="Linux build working directory (default: build-linux)")
     p.add_argument("--dist-dir", default="dist", help="output directory (default: dist)")
+    p.add_argument("--arch", default=None,
+                   help="override architecture suffix (e.g. arm64, x86_64); defaults to host machine arch")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 4,
                    help="parallel build jobs (default: cpu count)")
     p.add_argument("--skip-build", action="store_true",

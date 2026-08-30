@@ -15,110 +15,215 @@ env:
   CACHE_PREFIX: "qt682-msvc-ninja"
 
 jobs:
-  # ---------------------------------------------------------------- Debian
-  debian:
+  # ---------------------------------------------------------------- Linux x86_64 (Debian / Fedora / Arch)
+  # Single ubuntu-26.04 runner; each distro runs in its own container.
+  linux:
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, fedora, arch]
+        include:
+          - distro: debian
+            container: null           # native runner (has dpkg)
+            cache-path: launcher/build-deb
+            artifact-name: BeaconLauncher-deb-amd64
+            artifact-path: dist/BeaconLauncher-deb-amd64.deb
+            extra-artifacts:
+              - name: BeaconLauncher-linux-x86_64
+                path: dist/beacon-*.linux-x86_64.tar.gz
+          - distro: fedora
+            container: fedora:40
+            cache-path: launcher/build-rpm
+            artifact-name: BeaconLauncher-redhat-x86_64
+            artifact-path: dist/BeaconLauncher-redhat-x86_64.rpm
+          - distro: arch
+            container: archlinux:latest
+            cache-path: launcher/build-arch
+            artifact-name: BeaconLauncher-arch-x86_64
+            artifact-path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
+    container: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8 + system dependencies
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.8.*'
-          host: 'linux'
-          target: 'desktop'
-          arch: 'linux_gcc_64'
-          install-deps: 'true'
-          cache: 'true'
-          cache-key-prefix: ${{ env.CACHE_PREFIX }}
-
-      - name: Install dev packages for CMake find_package(Qt6 6.8)
+      - name: Install dependencies (Debian — native runner)
+        if: matrix.distro == 'debian'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build dpkg-dev debhelper zlib1g-dev python3
+          sudo apt-get install -y \
+            cmake ninja-build dpkg-dev debhelper \
+            qt6-base-dev qt6-declarative-dev qt6-svg-dev \
+            zlib1g-dev python3
 
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build-deb
-          key: ${{ runner.os }}-deb-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build .deb
-        run: python3 pack.py --build-dir build-deb
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BeaconLauncher-deb-amd64
-          path: dist/BeaconLauncher-deb-amd64.deb
-
-      # Also produce a generic Linux tarball (works on any distro).
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BeaconLauncher-linux-x86_64
-          path: dist/beacon-*.linux-x86_64.tar.gz
-
-  # ---------------------------------------------------------------- Fedora / RHEL
-  fedora:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install podman
+      - name: Install dependencies (Fedora — container)
+        if: matrix.distro == 'fedora'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y podman
+          dnf install -y cmake ninja-build rpm-build \
+            qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg-devel \
+            zlib-devel python3
 
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build-rpm
-          key: ${{ runner.os }}-rpm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build .rpm (Fedora 40 via podman)
-        run: |
-          podman run --rm \
-            -v ${{ github.workspace }}:/workspace:z \
-            -w /workspace \
-            fedora:40 \
-            bash -c '
-              dnf install -y cmake ninja-build rpm-build \
-                qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg-devel \
-                zlib-devel python3
-              python3 pack.py --build-dir build-rpm
-            '
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BeaconLauncher-redhat-x86_64
-          path: dist/BeaconLauncher-redhat-x86_64.rpm
-
-  # ---------------------------------------------------------------- Arch
-  # Docker container runs as root; build_arch_pkg creates archbuilder via su.
-  arch:
-    runs-on: ubuntu-26.04
-    container: archlinux:latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: Install dependencies (Arch — container)
+        if: matrix.distro == 'arch'
         run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base qt6-declarative qt6-svg zlib
 
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
-          path: launcher/build-arch
-          key: ${{ runner.os }}-arch-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+          path: ${{ matrix.cache-path }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
-      - name: Build .pkg.tar.zst
-        run: python3 pack.py --build-dir build-arch
+      - name: Build package (${{ matrix.distro }} x86_64)
+        run: python3 pack.py --build-dir ${{ matrix.cache-path }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BeaconLauncher-arch-x86_64
-          path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.extra-artifacts
+        with:
+          name: ${{ matrix.extra-artifacts[0].name }}
+          path: ${{ matrix.extra-artifacts[0].path }}
+
+  # ---------------------------------------------------------------- Linux ARM64 (Debian / Fedora / Arch)
+  # Uses ubuntu-24.04-arm native runner (aarch64).
+  linux-arm:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, fedora, arch]
+        include:
+          - distro: debian
+            cache-path: launcher/build-deb-arm
+            artifact-name: BeaconLauncher-deb-arm64
+            artifact-path: dist/BeaconLauncher-deb-arm64.deb
+          - distro: fedora
+            container: fedora:40
+            cache-path: launcher/build-rpm-arm
+            artifact-name: BeaconLauncher-redhat-aarch64
+            artifact-path: dist/BeaconLauncher-redhat-aarch64.rpm
+          - distro: arch
+            container: archlinux:latest
+            cache-path: launcher/build-arch-arm
+            artifact-name: BeaconLauncher-arch-aarch64
+            artifact-path: dist/BeaconLauncher-arch-aarch64.pkg.tar.zst
+    container: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Debian ARM64)
+        if: matrix.distro == 'debian'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build dpkg-dev debhelper \
+            qt6-base-dev qt6-declarative-dev qt6-svg-dev \
+            zlib1g-dev python3
+
+      - name: Install dependencies (Fedora ARM64)
+        if: matrix.distro == 'fedora'
+        run: |
+          dnf install -y cmake ninja-build rpm-build \
+            qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg-devel \
+            zlib-devel python3
+
+      - name: Install dependencies (Arch ARM64)
+        if: matrix.distro == 'arch'
+        run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base qt6-declarative qt6-svg zlib
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.cache-path }}
+          key: ${{ runner.os }}-${{ matrix.distro }}-arm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build package (${{ matrix.distro }} ARM64)
+        run: python3 pack.py --build-dir ${{ matrix.cache-path }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+
+  # ---------------------------------------------------------------- Windows x86_64 (MSVC + Qt 6.8)
+  windows-x86:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Qt 6.8 MSVC (x86_64)
+        uses: actions/cache@v4
+        id: qt-cache
+        with:
+          path: C:/Qt/6.8.3/msvc2022_64
+          key: ${{ runner.os }}-qt-x86-${{ env.CACHE_PREFIX }}
+
+      - name: Install Qt 6.8 (MSVC x86_64)
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          cache: 'true'
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}-x86
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build
+          key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build (Windows x86_64, MSVC)
+        run: python pack.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-windows-amd64
+          path: dist/BeaconLauncher-windows-amd64.exe
+
+  # ---------------------------------------------------------------- Windows ARM64 (MSVC + Qt 6.8)
+  windows-arm:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Qt 6.8 MSVC (ARM64)
+        uses: actions/cache@v4
+        id: qt-cache
+        with:
+          path: C:/Qt/6.8.3/msvc2022_arm64
+          key: ${{ runner.os }}-qt-arm-${{ env.CACHE_PREFIX }}
+
+      - name: Install Qt 6.8 (MSVC ARM64)
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_arm64'
+          cache: 'true'
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: launcher/build-arm
+          key: ${{ runner.os }}-build-arm-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Build (Windows ARM64, MSVC)
+        run: python pack.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeaconLauncher-windows-arm64
+          path: dist/BeaconLauncher-windows-arm64.exe
 
   # ---------------------------------------------------------------- macOS (ARM64 native + x86_64 cross-compile)
-  # Uses a single macos-14 (Apple Silicon) runner to build both architectures.
   macos:
     runs-on: macos-14
     steps:
@@ -133,7 +238,6 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}
 
-      # Build ARM64 (native on this runner).
       - name: Cache CMake build (arm64)
         uses: actions/cache@v4
         with:
@@ -148,7 +252,6 @@ jobs:
           name: Beacon-mac-arm64
           path: dist-mac-arm64/Beacon-arm64.app
 
-      # Build x86_64 (cross-compile via CMAKE_OSX_ARCHITECTURES).
       - name: Cache CMake build (x86_64)
         uses: actions/cache@v4
         with:

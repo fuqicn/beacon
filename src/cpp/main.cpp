@@ -374,6 +374,7 @@ private:
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <signal.h>
 #include <dbghelp.h>
 #include <psapi.h>
 

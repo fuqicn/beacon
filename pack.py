@@ -153,14 +153,22 @@ def resolve_mingw_bin(args, build_dir):
     return None
 
 
-def find_msvc_toolchain():
+def find_msvc_toolchain(arch=None):
     """Locate MSVC build tools (cl.exe, rc.exe, link.exe, optional strip).
 
-    Returns a dict with keys 'cl', 'rc', 'link', 'strip' (Paths) or None if
-    not available.  This covers GitHub Actions windows-latest which ships
-    VS Build Tools with MSVC but no separate mingw installation.
+    Args:
+        arch: Target architecture - "x64" (default), "ARM64", or None.
+              Used to select the correct tool subdirectory.
+
+    Returns:
+        A dict with keys 'cl', 'rc', 'link', 'strip' (Paths) or None if
+        not available.
     """
     result = {"cl": None, "rc": None, "link": None, "strip": None}
+    arch = (arch or "x64").lower()
+
+    # Tool subdirectory for the target arch.
+    tool_subdir = "arm64" if "arm" in arch else "x64"
 
     # Try to find vswhere.exe (ships with VS Build Tools / VS Installer)
     vswhere = None
@@ -176,8 +184,11 @@ def find_msvc_toolchain():
     msvc_root = None
     if vswhere:
         try:
+            req = ("Microsoft.VisualStudio.Component.VC.Tools.ARM64"
+                   if tool_subdir == "arm64"
+                   else "Microsoft.VisualStudio.Component.VC.Tools.x86.x64")
             out = run([vswhere, "-latest", "-products", "*",
-                        "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                        "-requires", req,
                         "-property", "installationPath"],
                        capture=True, check=False)
             msvc_root = out.strip()
@@ -199,31 +210,42 @@ def find_msvc_toolchain():
                 break
 
     if not msvc_root:
-        # Last resort: look for cl.exe directly in PATH or known locations
         cl = shutil.which("cl.exe")
         if cl:
-            p = Path(cl).parent.parent.parent.parent  # go up to VC\Tools\MSVC\<ver>
+            p = Path(cl).parent.parent.parent.parent
             msvc_root = p.parent.parent
         else:
             return None
     else:
         msvc_root = Path(msvc_root)
 
-    bin_dir = msvc_root / "bin" / "Hostx64" / "x64"
-    for key in ("cl", "rc", "link"):
-        cand = bin_dir / (key + ".exe")
-        if cand.is_file():
-            result[key] = cand
+    # Try toolchain layouts in order of preference.
+    if tool_subdir == "x64":
+        candidates = [
+            msvc_root / "bin" / "Hostx64" / "x64",
+            msvc_root / "bin" / "Hostx64" / "arm64",
+        ]
+    else:
+        candidates = [
+            msvc_root / "bin" / "Hostx64" / "arm64",
+            msvc_root / "bin" / "Hostx64" / "x64",
+            msvc_root / "bin" / "Hostarm64" / "arm64",
+        ]
 
-    # Optional: dumpbin for stripping (less aggressive than proper strip)
-    dumpbin = bin_dir / "dumpbin.exe"
-    if dumpbin.is_file():
-        result["strip"] = dumpbin
+    for bin_dir in candidates:
+        cl_e = bin_dir / "cl.exe"
+        rc_e = bin_dir / "rc.exe"
+        link_e = bin_dir / "link.exe"
+        if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
+            result["cl"] = cl_e
+            result["rc"] = rc_e
+            result["link"] = link_e
+            dumpbin = bin_dir / "dumpbin.exe"
+            if dumpbin.is_file():
+                result["strip"] = dumpbin
+            return result
 
-    has_tools = result["cl"] and result["rc"] and result["link"]
-    if not has_tools:
-        return None
-    return result
+    return None
 
 
 def _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin):
@@ -309,12 +331,29 @@ def configure_and_build(args, build_dir, qt_dir):
         cfg.append("-DCMAKE_INSTALL_PREFIX=/usr")
         cfg.append("-DLINUX_NO_CACHEGEN=ON")
     elif detect_platform() == "windows":
-        # Use Visual Studio generator so CMake picks up MSVC automatically.
-        # No need to force compiler paths — the VS generator handles everything.
-        cfg.append("-G")
-        cfg.append("Visual Studio 17 2022")
-        cfg.append("-A")
-        cfg.append("x64")
+        # CI: use VS generator for reliable MSVC detection.
+        # Local dev: Ninja is faster for incremental builds; falls back to
+        # whatever CMake finds on PATH (mingw, ninja, etc.).
+        use_msvc = getattr(args, 'msvc', False)
+        if use_msvc:
+            cfg.append("-G")
+            cfg.append("Visual Studio 17 2022")
+            cfg.append("-A")
+            cfg.append("ARM64" if getattr(args, 'arch', None) == "arm64" else "x64")
+        else:
+            cfg.append("-G")
+            cfg.append("Ninja")
+            ninja_bin = shutil.which("ninja")
+            if not ninja_bin:
+                for candidate in [
+                    Path(qt_dir).parent / "Tools" / "Ninja" / "ninja.exe" if qt_dir else None,
+                    Path("E:/Qt/Tools/Ninja/ninja.exe"),
+                ]:
+                    if candidate and candidate.is_file():
+                        ninja_bin = str(candidate)
+                        break
+            if ninja_bin:
+                cfg.append("-DCMAKE_MAKE_PROGRAM=%s" % ninja_bin)
     elif detect_platform() == "darwin" and getattr(args, 'osx_arch', None):
         # Cross-compile for specific macOS architecture.
         cfg.append("-DCMAKE_OSX_ARCHITECTURES=%s" % args.osx_arch)
@@ -913,6 +952,8 @@ def parse_args():
                    help="override architecture suffix (e.g. arm64, x86_64); defaults to host machine arch")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 4,
                    help="parallel build jobs (default: cpu count)")
+    p.add_argument("--msvc", action="store_true",
+                   help="use Visual Studio generator instead of Ninja (CI)")
     p.add_argument("--skip-build", action="store_true",
                    help="skip configure/build (requires existing build artifacts)")
     p.add_argument("--osx-arch", choices=["arm64", "x86_64"], default="arm64",

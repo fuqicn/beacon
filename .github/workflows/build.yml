@@ -178,7 +178,7 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
       - name: Build (Windows x86_64, MSVC)
-        run: python pack.py
+        run: python pack.py --msvc
 
       - uses: actions/upload-artifact@v4
         with:
@@ -216,7 +216,7 @@ jobs:
           key: ${{ runner.os }}-build-arm-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
       - name: Build (Windows ARM64, MSVC)
-        run: python pack.py
+        run: python pack.py --msvc --arch arm64
 
       - uses: actions/upload-artifact@v4
         with:

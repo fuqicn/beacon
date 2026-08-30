@@ -195,6 +195,20 @@ def find_msvc_toolchain(arch=None):
         except Exception:
             pass
 
+    # Hardcoded fallback for common CI / enterprise install paths.
+    if not msvc_root:
+        for candidate in [
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
+            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools",
+            r"C:\Program Files\Microsoft Visual Studio\2022\Community",
+        ]:
+            vc = Path(candidate) / "VC" / "Tools" / "MSVC"
+            if vc.is_dir():
+                msdirs = sorted(vc.iterdir(), reverse=True)
+                if msdirs:
+                    msvc_root = vc.parent.parent
+                    break
+
     # Fallback: scan common VS install paths
     if not msvc_root:
         import glob

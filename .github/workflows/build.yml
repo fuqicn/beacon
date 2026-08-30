@@ -171,6 +171,9 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-x86
 
+      - name: Remove mingw from PATH (force MSVC toolchain)
+        run: Remove-Item -Recurse -Force C:\mingw64 -ErrorAction SilentlyContinue
+
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
@@ -211,6 +214,9 @@ jobs:
           arch: 'win64_msvc2022_arm64_cross_compiled'
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
+
+      - name: Remove mingw from PATH (force MSVC toolchain)
+        run: Remove-Item -Recurse -Force C:\mingw64 -ErrorAction SilentlyContinue
 
       - name: Cache CMake build
         uses: actions/cache@v4

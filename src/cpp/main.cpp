@@ -394,23 +394,26 @@ static LONG WINAPI crashHandler(EXCEPTION_POINTERS *exInfo) {
     DWORD tid = GetCurrentThreadId();
     DWORD pid = GetCurrentProcessId();
 
+#if defined(_M_ARM64)
+    void *ip = (void *)exInfo->ContextRecord->Pc;
+#elif defined(_WIN64)
+    void *ip = (void *)exInfo->ContextRecord->Rip;
+#else
+    void *ip = (void *)exInfo->ContextRecord->Eip;
+#endif
+
     int len = snprintf(buf, sizeof(buf),
         "=== CRASH at %s ===\n"
         "pid=%lu tid=%lu\n"
         "Exception code: 0x%08lX%s\n"
         "Exception address: %p\n"
-        "RIP: %p\n",
+        "IP: %p\n",
         QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss").toUtf8().constData(),
         (unsigned long)pid, (unsigned long)tid,
         (unsigned long)code,
         code == 0xC00000FD ? " (STACK OVERFLOW)" : "",
         addr,
-#ifdef _WIN64
-        (void *)exInfo->ContextRecord->Rip
-#else
-        (void *)exInfo->ContextRecord->Eip
-#endif
-    );
+        ip);
     WriteFile(hFile, buf, len, &written, NULL);
 
     void *frames[64];

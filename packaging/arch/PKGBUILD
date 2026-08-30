@@ -1,7 +1,7 @@
 # Maintainer: fuqicn <fuqi2012cn@outlook.com>
 # Built on OBS or locally via `makepkg -f -d`.
 pkgname=beacon-launcher
-pkgver=1.0.1
+pkgver=1.0.2
 pkgrel=1
 pkgdesc='A cross-platform Minecraft launcher'
 arch=('x86_64' 'aarch64')

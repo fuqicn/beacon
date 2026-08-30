@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Beacon VERSION 1.0.1 LANGUAGES CXX)
+project(Beacon VERSION 1.0.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -104,8 +104,8 @@ elseif(APPLE)
     set_target_properties(Beacon PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.beacon.launcher"
         MACOSX_BUNDLE_BUNDLE_NAME "Beacon"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.1"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.1")
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.2"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.2")
 else()
     qt_add_executable(Beacon ${MANAGER_SRC})
 endif()

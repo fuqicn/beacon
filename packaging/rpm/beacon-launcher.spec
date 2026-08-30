@@ -1,7 +1,7 @@
 # RPM spec for Beacon Launcher (Fedora / RHEL / openSUSE).
 # Consumed by OBS; source is the GitHub tag tarball "v-<version>".
 Name:           beacon-launcher
-Version:        1.0.1
+Version:        1.0.2
 Release:        1%{?dist}
 Summary:        A cross-platform Minecraft launcher
 
@@ -47,5 +47,5 @@ login, version/mod/modpack downloads and per-instance management.
 %{_datadir}/beacon/version.txt
 
 %changelog
-* Mon Aug 24 2026 fuqicn <fuqi2012cn@outlook.com> - 1.0.1-1
-- Upstream release 1.0.1
+* Mon Aug 24 2026 fuqicn <fuqi2012cn@outlook.com> - 1.0.2-1
+- Upstream release 1.0.2

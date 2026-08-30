@@ -639,7 +639,7 @@ int main(int argc, char *argv[])
     if (downloadJavaVersion > 0) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system(); // init system locale before worker threads start
 
         // Log to file for capture
@@ -689,7 +689,7 @@ int main(int argc, char *argv[])
     if (!downloadVersionId.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system(); // init system locale before worker threads start
 
         // Log to file for capture
@@ -741,7 +741,7 @@ int main(int argc, char *argv[])
     if (testMod) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system(); // init system locale before worker threads start
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/mod-test.log").toUtf8().constData());
@@ -883,7 +883,7 @@ KernelBridge::shutdown();
     if (!testDlUrl.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
@@ -958,7 +958,7 @@ KernelBridge::shutdown();
     if (!testInstallUrl.isEmpty()) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/install-test.log").toUtf8().constData());
@@ -1035,7 +1035,7 @@ KernelBridge::shutdown();
     if (!testBatchUrl.isEmpty() && testBatchCount > 0) {
         QCoreApplication app(argc, argv);
         app.setApplicationName("Beacon");
-        app.setApplicationVersion("1.0.1");
+        app.setApplicationVersion("1.0.2");
         (void)QLocale::system();
 
         mc_log_set_file((QCoreApplication::applicationDirPath() + "/dl-test.log").toUtf8().constData());
@@ -1138,7 +1138,7 @@ return 0;
     // compose properly and resizing the window leaves a stale, non-repainted
     // region (a fixed-size gray/white block that no longer matches the window).
     QQuickWindow::setDefaultAlphaBuffer(true);
-    app.setApplicationVersion("1.0.1");
+    app.setApplicationVersion("1.0.2");
     app.setOrganizationName("Beacon");
     (void)QLocale::system(); // init system locale before worker threads start
 

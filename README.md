@@ -96,7 +96,7 @@ Output packages:
 | Debian (.deb) | `BeaconLauncher-deb-amd64.deb` | `sudo dpkg -i BeaconLauncher-deb-amd64.deb` |
 | RPM (.rpm) | `BeaconLauncher-redhat-x86_64.rpm` | `sudo dnf install BeaconLauncher-redhat-x86_64.rpm` |
 | Arch (.pkg.tar.zst) | `BeaconLauncher-arch-x86_64.pkg.tar.zst` | `sudo pacman -U BeaconLauncher-arch-x86_64.pkg.tar.zst` |
-| Generic tarball | `beacon-1.0.1-linux-x86_64.tar.gz` | Extract and run `./Beacon` |
+| Generic tarball | `beacon-1.0.2-linux-x86_64.tar.gz` | Extract and run `./Beacon` |
 
 ## Data directories
 

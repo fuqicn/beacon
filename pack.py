@@ -196,96 +196,42 @@ def find_msvc_toolchain(arch=None):
     # Tool subdirectory for the target arch.
     tool_subdir = "arm64" if "arm" in arch else "x64"
 
-    # Try to find vswhere.exe (ships with VS Build Tools / VS Installer)
-    vswhere = None
-    candidate_paths = [
-        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
-        r"C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe",
-    ]
-    for cp in candidate_paths:
-        if Path(cp).is_file():
-            vswhere = cp
-            break
-
-    msvc_root = None
-    if vswhere:
-        try:
-            req = ("Microsoft.VisualStudio.Component.VC.Tools.ARM64"
-                   if tool_subdir == "arm64"
-                   else "Microsoft.VisualStudio.Component.VC.Tools.x86.x64")
-            out = run([vswhere, "-latest", "-products", "*",
-                        "-requires", req,
-                        "-property", "installationPath"],
-                       capture=True, check=False)
-            msvc_root = out.strip()
-        except Exception:
-            pass
-
-    # Hardcoded fallback for common CI / enterprise install paths.
-    if not msvc_root:
-        for candidate in [
-            r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools",
-            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
-            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools",
-            r"C:\Program Files\Microsoft Visual Studio\2022\Community",
-        ]:
-            vc = Path(candidate) / "VC" / "Tools" / "MSVC"
-            if vc.is_dir():
-                msdirs = sorted(vc.iterdir(), reverse=True)
-                if msdirs:
-                    msvc_root = Path(candidate)
-                    break
-
-    # Fallback: scan common VS install paths
-    if not msvc_root:
-        import glob
-        patterns = [
-            r"C:\Program Files (x86)\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
-            r"C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*",
-        ]
-        for pat in patterns:
-            dirs = glob.glob(pat)
-            if dirs:
-                dirs.sort(reverse=True)
-                msvc_root = Path(dirs[0]).parents[3]
-                break
-
-    if not msvc_root:
-        cl = shutil.which("cl.exe")
-        if cl:
-            msvc_root = Path(cl).parent.parent.parent.parent
-        else:
-            return None
-    else:
-        msvc_root = Path(msvc_root)
-
-    # Try toolchain layouts in order of preference.
+    # Direct known CI paths - check these first since they're most reliable.
+    known_paths = []
     if tool_subdir == "x64":
-        candidates = [
-            msvc_root / "bin" / "Hostx64" / "x64",
-            msvc_root / "bin" / "Hostx64" / "arm64",
+        known_paths = [
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64"),
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64"),
+            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64"),
+            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64"),
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\*\bin\Hostx64\x64"),
         ]
     else:
-        candidates = [
-            msvc_root / "bin" / "Hostx64" / "arm64",
-            msvc_root / "bin" / "Hostx64" / "x64",
-            msvc_root / "bin" / "Hostarm64" / "arm64",
+        known_paths = [
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64"),
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
+            Path(r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\arm64"),
+            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
+            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
         ]
 
-    for bin_dir in candidates:
-        cl_e = bin_dir / "cl.exe"
-        rc_e = bin_dir / "rc.exe"
-        link_e = bin_dir / "link.exe"
-        if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
-            result["cl"] = cl_e
-            result["rc"] = rc_e
-            result["link"] = link_e
-            dumpbin = bin_dir / "dumpbin.exe"
-            if dumpbin.is_file():
-                result["strip"] = dumpbin
-            return result
-
-    return None
+    import glob
+    for pat in known_paths:
+        dirs = sorted(glob.glob(str(pat)))
+        for d in dirs:
+            bd = Path(d)
+            cl_e = bd / "cl.exe"
+            rc_e = bd / "rc.exe"
+            link_e = bd / "link.exe"
+            if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
+                result["cl"] = cl_e
+                result["rc"] = rc_e
+                result["link"] = link_e
+                dumpbin = bd / "dumpbin.exe"
+                if dumpbin.is_file():
+                    result["strip"] = dumpbin
+                return result
 
 
 def _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin):

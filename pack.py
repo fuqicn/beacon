@@ -513,37 +513,10 @@ def build_windows(args, version, build_dir, qt_dir):
     shutil.copy2(exe, beacon_dir / "Beacon.exe")
     log("copied Beacon.exe -> %s" % (beacon_dir / "Beacon.exe"))
 
-    # Extract MSVC toolchain from CMakeCache (already configured by configure_and_build).
-    # This is more reliable than re-scanning disk, since cmake already found the right paths.
-    msvc = None
-    if getattr(args, "msvc", False):
-        cache = read_cmake_cache(build_dir)
-        cxx = _clean_cache_value(cache.get("CMAKE_CXX_COMPILER"))
-        if cxx and Path(cxx).is_file():
-            compiler_dir = Path(cxx).parent
-            msvc = {"cl": Path(cxx), "rc": compiler_dir / "rc.exe", "link": compiler_dir / "link.exe"}
-            dumpbin = compiler_dir / "dumpbin.exe"
-            if dumpbin.is_file():
-                msvc["strip"] = dumpbin
-            log("using MSVC toolchain from cmake cache: %s" % compiler_dir)
-        else:
-            log("WARNING: CMAKE_CXX_COMPILER not found in cmake cache, falling back to disk scan")
-            msvc = find_msvc_toolchain(getattr(args, "arch", None))
-    if not msvc:
-        msvc = find_msvc_toolchain(getattr(args, "arch", None))
-    mingw_bin = resolve_mingw_bin(args, build_dir)
-
     # Strip the deployed binary to cut package size. The unstripped original
     # stays in build/ so crash.log symbolization keeps working in dev builds.
     strip = None
-    if msvc:
-        strip = msvc.get("strip")
-    elif mingw_bin:
-        for name in ("strip.exe", "strip"):
-            cand = mingw_bin / name
-            if cand.is_file():
-                strip = cand
-                break
+    # 使用 cmake 编译的 Qt 工具链自动处理 strip（如果有的话）
     if strip:
         deployed = beacon_dir / "Beacon.exe"
         before = deployed.stat().st_size

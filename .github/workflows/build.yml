@@ -243,22 +243,23 @@ jobs:
           name: BeaconLauncher-windows-arm64
           path: dist/BeaconLauncher-windows-arm64.exe
 
-  # ---------------------------------------------------------------- macOS (ARM64 native + x86_64 cross-compile)
-  macos:
+  # ---------------------------------------------------------------- macOS ARM64 (原生构建)
+  macos-arm64:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8 (macOS)
+      - name: Install Qt 6.8 (macOS ARM64)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.*'
           host: 'mac'
           target: 'desktop'
+          arch: 'clang_64'
           cache: 'true'
-          cache-key-prefix: ${{ env.CACHE_PREFIX }}
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
 
-      - name: Cache CMake build (arm64)
+      - name: Cache CMake build (ARM64)
         uses: actions/cache@v4
         with:
           path: launcher/build-mac-arm64
@@ -271,6 +272,22 @@ jobs:
         with:
           name: Beacon-mac-arm64
           path: dist-mac-arm64/Beacon-arm64.app
+
+  # ---------------------------------------------------------------- macOS x86_64 (交叉编译)
+  macos-intel:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6.8 (macOS x86_64 cross-compile)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+          cache: 'true'
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}-intel
 
       - name: Cache CMake build (x86_64)
         uses: actions/cache@v4

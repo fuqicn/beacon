@@ -499,7 +499,7 @@ def build_windows(args, version, build_dir, qt_dir):
     beacon_dir.mkdir(parents=True, exist_ok=True)
 
     # VS generator puts output in build/<arch>/<config>/ or build/<config>/ (depending on cmake version).
-    arch_tag = "arm64" if getattr(args, "arch", None) == "arm64" else "x64"
+    arch_tag = "arm64" if getattr(args, "arch", None) == "arm64" else "amd64"
     candidates = [
         Path(build_dir) / arch_tag / "Release" / "Beacon.exe",
         Path(build_dir) / "Release" / "Beacon.exe",
@@ -907,8 +907,8 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     """Build and package a macOS .app bundle."""
     log("=== Building Beacon for macOS (%s) ===" % arch_suffix)
     build_dir = Path(args.build_dir) if args.build_dir else (ROOT / "build-mac-%s" % arch_suffix)
-    # macOS may run two architectures sequentially in CI; use a separate dist dir
-    # so they don't overwrite each other.
+    # macOS CI 双架构顺序构建：第一次调用传 --mac-dist-dir 指定独立输出目录，
+    # 第二次调用也传相同参数，避免两个架构的产物互相覆盖。
     dist = Path(args.mac_dist_dir) if args.mac_dist_dir else Path(args.dist_dir)
     if not args.skip_build:
         configure_and_build(args, build_dir, qt_dir)
@@ -916,7 +916,6 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     if not binary.is_dir():
         raise PackError("Beacon.app not found in %s" % build_dir)
 
-    dist = Path(args.dist_dir)
     dist.mkdir(parents=True, exist_ok=True)
 
     # Stage: install into a clean staging tree that mirrors .app contents.

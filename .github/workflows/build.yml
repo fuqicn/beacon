@@ -86,14 +86,15 @@ jobs:
           name: ${{ matrix.extra-artifacts[0].name }}
           path: ${{ matrix.extra-artifacts[0].path }}
 
-  # ---------------------------------------------------------------- Linux ARM64 (Debian / Fedora / Arch)
-  # Uses ubuntu-24.04-arm native runner (aarch64).
+  # ---------------------------------------------------------------- Linux ARM64 (Debian / Fedora)
+  # 使用 ubuntu-26.04-arm 原生 runner (aarch64)。
+  # 注意：Arch Linux 官方不支持 ARM64 容器，已移除。
   linux-arm:
     runs-on: ubuntu-26.04-arm
     strategy:
       fail-fast: false
       matrix:
-        distro: [debian, fedora, arch]
+        distro: [debian, fedora]
         include:
           - distro: debian
             cache-path: launcher/build-deb-arm
@@ -104,11 +105,6 @@ jobs:
             cache-path: launcher/build-rpm-arm
             artifact-name: BeaconLauncher-redhat-aarch64
             artifact-path: dist/BeaconLauncher-redhat-aarch64.rpm
-          - distro: arch
-            container: archlinux:latest
-            cache-path: launcher/build-arch-arm
-            artifact-name: BeaconLauncher-arch-aarch64
-            artifact-path: dist/BeaconLauncher-arch-aarch64.pkg.tar.zst
     container: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v4

@@ -586,9 +586,12 @@ def build_windows(args, version, build_dir, qt_dir):
     cmake = resolve_cmake(build_dir)
     run([str(cmake), "--build", str(build_dir), "--target", "BeaconLauncher",
          "--config", "Release", "--parallel", str(args.jobs)])
-    launcher = packaging / ("BeaconLauncher-windows-%s.exe" % arch_tag)
-    if not launcher.is_file():
-        raise PackError("launcher not found: %s" % launcher)
+    # cmake 默认输出 BeaconLauncher.exe，需要重命名为带架构后缀的格式
+    generated = packaging / "BeaconLauncher.exe"
+    if not generated.is_file():
+        raise PackError("launcher not found: %s" % generated)
+    launcher = dist / ("BeaconLauncher-windows-%s.exe" % arch_tag)
+    shutil.copy2(generated, launcher)
     log("compiled launcher: %s" % launcher)
 
     shutil.copy2(zip_path, dist / "beacon.zip")

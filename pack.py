@@ -964,7 +964,7 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     shutil.rmtree(staging, ignore_errors=True)
 
     log("=== macOS package done ===")
-    log("  dist/Beacon-%s.app (%d bytes)" % (arch_suffix,
+    log("  %s (%d bytes)" % (final_app,
         sum(f.stat().st_size for f in final_app.rglob("*") if f.is_file())))
 
 

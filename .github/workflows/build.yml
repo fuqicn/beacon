@@ -301,4 +301,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Beacon-mac-intel
-          path: dist-mac-intel/Beacon-intel.app
+          path: dist-mac-intel/Beacon-x86_64.app

@@ -194,59 +194,79 @@ def find_msvc_toolchain(arch=None):
     arch = (arch or "x64").lower()
     tool_subdir = "arm64" if "arm" in arch else "x64"
 
-    # Direct known CI paths - check these first since they're most reliable.
-    known_paths = []
-    if tool_subdir == "x64":
-        known_paths = [
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64"),
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64"),
-            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64"),
-            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64"),
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\*\bin\Hostx64\x64"),
-        ]
-    else:
-        known_paths = [
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64"),
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
-            Path(r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\arm64"),
-            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
-            Path(r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostarm64\arm64"),
-        ]
+    # Find VS 2022 installation root and MSVC version directory.
+    msvc_ver = None
+    for base in [
+        r"C:\Program Files\Microsoft Visual Studio\2022",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022",
+    ]:
+        for edition in ("Enterprise", "BuildTools", "Community"):
+            vc_tools = Path(base) / edition / "VC" / "Tools" / "MSVC"
+            if vc_tools.is_dir():
+                versions = sorted(vc_tools.iterdir(), reverse=True)
+                if versions:
+                    msvc_ver = versions[0]
+                    break
+        if msvc_ver:
+            break
 
-    import glob
-    for pat in known_paths:
-        dirs = sorted(glob.glob(str(pat)))
-        for d in dirs:
-            bd = Path(d)
-            cl_e = bd / "cl.exe"
-            rc_e = bd / "rc.exe"
-            link_e = bd / "link.exe"
+    if msvc_ver:
+        # Build toolchain dirs: prefer same-arch host, then cross-compile host.
+        if tool_subdir == "x64":
+            tool_dirs = [
+                msvc_ver.parent / "bin" / "Hostx64" / "x64",
+                msvc_ver.parent / "bin" / "Hostx64" / "arm64",
+            ]
+        else:
+            tool_dirs = [
+                msvc_ver.parent / "bin" / "Hostarm64" / "arm64",
+                msvc_ver.parent / "bin" / "Hostx64" / "arm64",
+                msvc_ver.parent / "bin" / "Hostx64" / "x64",
+            ]
+        for td in tool_dirs:
+            cl_e = td / "cl.exe"
+            rc_e = td / "rc.exe"
+            link_e = td / "link.exe"
             if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
                 result["cl"] = cl_e
                 result["rc"] = rc_e
                 result["link"] = link_e
-                dumpbin = bd / "dumpbin.exe"
-                if dumpbin.is_file():
-                    result["strip"] = dumpbin
+                db = td / "dumpbin.exe"
+                if db.is_file():
+                    result["strip"] = db
+                log("using MSVC toolchain: %s" % td)
                 return result
 
-    # Hardcoded fallback for known CI image paths (exact version).
-    if tool_subdir == "x64":
-        bd = Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64")
-    else:
-        bd = Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\bin\Hostarm64\arm64")
-    cl_e = bd / "cl.exe"
-    rc_e = bd / "rc.exe"
-    link_e = bd / "link.exe"
-    if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
-        result["cl"] = cl_e
-        result["rc"] = rc_e
-        result["link"] = link_e
-        dumpbin = bd / "dumpbin.exe"
-        if dumpbin.is_file():
-            result["strip"] = dumpbin
-        return result
+    # Last resort: hardcoded known CI paths.
+    known = {
+        "x64": [
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64",
+            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64",
+        ],
+        "arm64": [
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64",
+            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
+            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\arm64",
+        ],
+    }
+    import glob
+    for pat in known.get(tool_subdir, []):
+        dirs = sorted(glob.glob(pat))
+        for d in dirs:
+            td = Path(d)
+            cl_e = td / "cl.exe"
+            rc_e = td / "rc.exe"
+            link_e = td / "link.exe"
+            if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
+                result["cl"] = cl_e
+                result["rc"] = rc_e
+                result["link"] = link_e
+                db = td / "dumpbin.exe"
+                if db.is_file():
+                    result["strip"] = db
+                log("using MSVC toolchain (glob): %s" % td)
+                return result
 
     return None
 

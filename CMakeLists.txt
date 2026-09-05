@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
 project(Beacon VERSION 1.0.2 LANGUAGES CXX)
 
+# 启用 C 语言支持（用于编译自解压 launcher）
+enable_language(C)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-# Disable Windows min/max macros so std::min/std::max work correctly
+# Windows 下禁用 min/max 宏定义，避免与 std::min/std::max 冲突
 if(WIN32)
     add_compile_definitions(NOMINMAX)
 endif()
@@ -242,4 +245,32 @@ if(UNIX AND NOT APPLE)
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.txt" "${PROJECT_VERSION}\n")
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/version.txt"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/beacon)
+endif()
+
+# 自解压 launcher：纯 C 实现，嵌入 beacon.zip 作为资源
+# 在 Windows 上构建，输出到 packaging/ 目录供 pack.py 打包
+if(WIN32)
+    set(LAUNCHER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/packaging/main.c")
+    set(LAUNCHER_RC  "${CMAKE_CURRENT_SOURCE_DIR}/packaging/beacon.rc")
+    set(LAUNCHER_ICO "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.ico")
+
+    # 创建 launcher 可执行文件（C 语言）
+    add_executable(BeaconLauncher WIN32 ${LAUNCHER_SRC} ${LAUNCHER_RC})
+    target_link_libraries(BeaconLauncher PRIVATE
+        shell32
+        user32
+        gdi32
+        comctl32
+    )
+    target_compile_definitions(BeaconLauncher PRIVATE
+        WIN32
+        _WINDOWS
+        NDEBUG
+    )
+    # 设置输出到 packaging 目录，避免与主程序混淆
+    set_target_properties(BeaconLauncher PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packaging"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/packaging"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/packaging"
+    )
 endif()

@@ -580,9 +580,16 @@ def build_windows(args, version, build_dir, qt_dir):
     zip_dir(beacon_dir, zip_path)
     shutil.copy2(zip_path, packaging / "beacon.zip")
 
-    log("--- Building C launcher ---")
+    log("--- Building self-extracting launcher via cmake ---")
     sync_c_version(version)
-    launcher = _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin)
+    # 使用 cmake 编译自解压 launcher，避免手动查找 MSVC 工具链
+    cmake = resolve_cmake(build_dir)
+    run([str(cmake), "--build", str(build_dir), "--target", "BeaconLauncher",
+         "--config", "Release", "--parallel", str(args.jobs)])
+    launcher = packaging / ("BeaconLauncher-windows-%s.exe" % arch_tag)
+    if not launcher.is_file():
+        raise PackError("launcher not found: %s" % launcher)
+    log("compiled launcher: %s" % launcher)
 
     shutil.copy2(zip_path, dist / "beacon.zip")
     shutil.rmtree(pack_tmp, ignore_errors=True)

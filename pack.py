@@ -192,8 +192,6 @@ def find_msvc_toolchain(arch=None):
     """
     result = {"cl": None, "rc": None, "link": None, "strip": None}
     arch = (arch or "x64").lower()
-
-    # Tool subdirectory for the target arch.
     tool_subdir = "arm64" if "arm" in arch else "x64"
 
     # Direct known CI paths - check these first since they're most reliable.
@@ -232,6 +230,25 @@ def find_msvc_toolchain(arch=None):
                 if dumpbin.is_file():
                     result["strip"] = dumpbin
                 return result
+
+    # Hardcoded fallback for known CI image paths (exact version).
+    if tool_subdir == "x64":
+        bd = Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64")
+    else:
+        bd = Path(r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\bin\Hostarm64\arm64")
+    cl_e = bd / "cl.exe"
+    rc_e = bd / "rc.exe"
+    link_e = bd / "link.exe"
+    if cl_e.is_file() and rc_e.is_file() and link_e.is_file():
+        result["cl"] = cl_e
+        result["rc"] = rc_e
+        result["link"] = link_e
+        dumpbin = bd / "dumpbin.exe"
+        if dumpbin.is_file():
+            result["strip"] = dumpbin
+        return result
+
+    return None
 
 
 def _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin):

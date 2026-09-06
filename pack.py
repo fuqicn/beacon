@@ -513,9 +513,12 @@ def _copy_z_dll(dest_dir, args):
             candidates.append(installed / "zd.dll")
 
     # 2. Qt 安装目录的 bin 下（某些 Qt 版本自带 zlib）
-    qt_bin = Path(r"C:/Qt/6.8.3/msvc2022_64/bin")
-    if qt_bin.is_dir():
-        candidates.append(qt_bin / "z.dll")
+    # ARM64 和 x64 都需要检查
+    for qt_ver in ("6.8.3", "6.8.*"):
+        for qt_arch in ("msvc2022_64", "msvc2022_arm64"):
+            qt_bin = Path(r"C:/Qt/%s/%s/bin" % (qt_ver, qt_arch))
+            if qt_bin.is_dir():
+                candidates.append(qt_bin / "z.dll")
 
     # 3. Windows System32（不推荐复制系统 DLL，但可以作为最后手段）
     # 这里不添加，因为系统 DLL 应该在目标机器上存在

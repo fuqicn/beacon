@@ -497,6 +497,9 @@ def _remove_mingw_dlls(dest_dir):
         "libgcc_s_dw2-1.dll",
         "libstdc++-6.dll",
         "libwinpthread-1.dll",
+        "libgmp-10.dll",
+        "libmpfr-4.dll",
+        "libmpc-3.dll",
     ]
     removed = 0
     for name in mingw_dlls:

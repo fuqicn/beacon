@@ -1075,7 +1075,8 @@ KernelBridge::shutdown();
                 QVector<const char *> urls, sha1s;
                 for (int i = 0; i < n; i++) { urls.append(srcs[0]); sha1s.append(nullptr); }
                 ok = mc_qt_download_batch(urls.data(), paths.data(), sha1s.data(),
-                                          sizes.constData(), n, 120000, results);
+                                          sizes.constData(), n, 120000, results,
+                                          nullptr, nullptr);
                 mc_info("[TESTB] engine ok=%d/%d", ok, n);
             } else {
                 QVector<const char *> itemUrls;

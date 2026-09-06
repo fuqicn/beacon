@@ -756,7 +756,8 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
 
         mc_info("[Install] Calling mc_qt_download_batch (count=%d)...", count);
         mc_qt_download_batch(cUrls.data(), cPaths.data(), cSha1s.data(),
-                             sizes.data(), count, 20000, results.data());
+                             sizes.data(), count, 20000, results.data(),
+                             nullptr, nullptr);
 
         int ok = 0;
         for (int i = 0; i < count; ++i) ok += results[i];

@@ -730,7 +730,8 @@ void LaunchManager::downloadMissingFiles()
     }
 
     mc_qt_download_batch(cUrls.data(), cPaths.data(), cSha1s.data(),
-                         allSizes.data(), count, 20000, results.data());
+                         allSizes.data(), count, 20000, results.data(),
+                         nullptr, nullptr);
 
     int okCount = 0;
     for (int i = 0; i < count; ++i) okCount += results[i];

@@ -111,8 +111,8 @@ def resolve_qt_dir(args, build_dir):
     env = _clean_cache_value(os.environ.get("QT_DIR"))
     if env:
         return Path(env)
-    # Windows CI ARM64: Qt 安装在固定路径，但 build 目录可能没有缓存
-    if detect_platform() == "windows" and not build_dir:
+    # Windows CI ARM64: Qt 安装在固定路径，CMakeCache 可能没写入或路径不匹配
+    if detect_platform() == "windows":
         for candidate in [
             Path(r"C:/Qt/6.8.3/msvc2022_arm64"),
             Path(r"C:/Qt/6.8.3/msvc2022_64"),

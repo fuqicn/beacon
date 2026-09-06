@@ -450,3 +450,45 @@ int mc_mod_translate_download_url(const char *url, char *out, size_t out_size) {
     out[ba.size()] = '\0';
     return 1;
 }
+
+// Warm the Modrinth mirror decision in the background. Safe to call from any
+// thread; it only touches its own state plus the shared mirror cache.
+void mc_mod_warmup_mirror(void) {
+    // First, resolve the global download mirror (modifies cache if needed).
+    (void)mc_download_effective_mirror();
+
+    // Probe direct Modrinth CDN vs mcimirror proxy and pick the faster one.
+    const char *direct_url = "https://cdn.modrinth.com/";
+    const char *mirror_url = "https://mod.mcimirror.top/";
+
+    McHttpClient c;
+    mc_http_init(&c);
+    mc_http_set_timeout(&c, 3000);
+
+    auto t1 = std::chrono::steady_clock::now();
+    McHttpResponse *rd = mc_http_head(&c, direct_url);
+    auto t2 = std::chrono::steady_clock::now();
+    bool direct_ok = rd && rd->success;
+    double direct_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    if (rd) mc_http_response_free(rd);
+
+    auto t3 = std::chrono::steady_clock::now();
+    McHttpResponse *rm = mc_http_head(&c, mirror_url);
+    auto t4 = std::chrono::steady_clock::now();
+    bool mirror_ok = rm && rm->success;
+    double mirror_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
+    if (rm) mc_http_response_free(rm);
+
+    // Choose the best option: prefer mirror if both work and is faster,
+    // otherwise fall back to whichever one succeeded, or empty (direct).
+    const char *best = "";
+    if (mirror_ok && (!direct_ok || mirror_ms < direct_ms))
+        best = "mcimirror";
+    else if (direct_ok)
+        best = "";
+
+    std::lock_guard<std::mutex> lk(g_mod_auto_mutex);
+    strncpy(g_mod_auto_mirror, best, sizeof(g_mod_auto_mirror) - 1);
+    g_mod_auto_mirror[sizeof(g_mod_auto_mirror) - 1] = '\0';
+    g_mod_auto_ready.store(1);
+}

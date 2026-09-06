@@ -485,6 +485,50 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
+def _copy_z_dll(dest_dir, args):
+    """复制 z.dll (zlib) 到输出目录。
+
+    windeployqt 只部署 Qt 相关的 DLL，不会自动复制第三方依赖如 zlib。
+    需要从 vcpkg 安装目录或 Qt 目录中查找并复制。
+    """
+    dest = Path(dest_dir)
+    z_dll = dest / "z.dll"
+    if z_dll.is_file():
+        log("z.dll already exists in %s" % dest)
+        return
+
+    # 根据架构确定 vcpkg 安装路径
+    arch = getattr(args, "arch", None) or "x64"
+    vcpkg_triplet = "arm64-windows" if "arm" in arch else "x64-windows"
+
+    # 查找 z.dll 的可能位置
+    candidates = []
+
+    # 1. vcpkg 安装目录
+    for vcpkg_base in [Path(r"C:/vcpkg"), Path(r"C:/Program Files/vcpkg")]:
+        installed = vcpkg_base / "installed" / vcpkg_triplet / "bin"
+        if installed.is_dir():
+            candidates.append(installed / "z.dll")
+            # 也检查 debug 版本
+            candidates.append(installed / "zd.dll")
+
+    # 2. Qt 安装目录的 bin 下（某些 Qt 版本自带 zlib）
+    qt_bin = Path(r"C:/Qt/6.8.3/msvc2022_64/bin")
+    if qt_bin.is_dir():
+        candidates.append(qt_bin / "z.dll")
+
+    # 3. Windows System32（不推荐复制系统 DLL，但可以作为最后手段）
+    # 这里不添加，因为系统 DLL 应该在目标机器上存在
+
+    for cand in candidates:
+        if cand.is_file():
+            shutil.copy2(cand, z_dll)
+            log("copied z.dll from %s" % cand)
+            return
+
+    log("WARNING: z.dll not found; Beacon may fail to run without zlib")
+
+
 # ---------------------------------------------------------------- Linux -----
 
 def build_windows(args, version, build_dir, qt_dir):
@@ -544,6 +588,10 @@ def build_windows(args, version, build_dir, qt_dir):
     else:
         log("WARNING: windeployqt not found under %s; Qt runtime not deployed"
             % (qt_root or "unknown Qt dir"))
+
+    # 手动复制 z.dll（zlib），windeployqt 不会自动部署第三方 DLL
+    # ARM64 和 x64 都需要正确处理
+    _copy_z_dll(beacon_dir, args)
 
     copy_mirrors_json(beacon_dir / "mirrors.json")
     write_version_file(beacon_dir / "version.txt", version)

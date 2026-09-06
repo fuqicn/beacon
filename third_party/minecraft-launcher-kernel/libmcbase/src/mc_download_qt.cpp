@@ -172,14 +172,21 @@ static void pool_shutdown() {
         doomed.swap(g_pool_threads);
     }
     g_pool_cv.notify_all();
-    // Do NOT join the workers here. After pool_worker() returns, Qt network /
-    // TLS thread-local teardown can keep a worker thread alive for tens of
-    // seconds, and joining blocks the process shutdown path (the window is
-    // already closed and the user expects an immediate exit). Cancel was set
-    // above, so in-flight jobs abort within ~1s and workers break out of the
-    // loop on their own; detach and let the OS reap them when main() returns.
-    for (auto &t : doomed)
+    // Wait up to 1s total for workers to exit after cancel was set.
+    // Workers should break out quickly once cancel is visible.
+    // If stuck, detach and let the OS reclaim them on process exit.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    for (auto &t : doomed) {
+        if (!t.joinable()) continue;
+        while (t.joinable()) {
+            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            if (remaining <= std::chrono::milliseconds(0)) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (!t.joinable()) break;
+        }
         if (t.joinable()) t.detach();
+    }
     std::lock_guard<std::mutex> lk(g_pool_mtx);
     g_pool_started = false;
     g_pool_stop = false;

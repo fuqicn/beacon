@@ -850,22 +850,15 @@ int main(int argc, char **argv) {
     if (mc_mirror_load_config("mirrors.json"))
         mc_info("Loaded mirror config from mirrors.json");
 
-    mc_qt_download_init();
-    mc_qt_dns_prefetch();
-
-    // Hard 600s timeout to prevent hanging
-    QTimer::singleShot(600000, [&app]() {
-        mc_error("Download timed out after 600s, exiting");
-        app.exit(1);
-    });
+    mc_qt_dns_prefetch();  // non-blocking DNS, safe to call anytime
 
     const char *lang = nullptr;
     for (int i = 1; i < argc - 1; i++)
         if (strcmp(argv[i], "--lang") == 0 && i + 1 < argc) lang = argv[++i];
     if (lang) mc_i18n_set(lang);
 
-    if (argc < 2) { print_help(); return 0; }
-    if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) { print_help(); return 0; }
+    if (argc < 2) { print_help(); mc_qt_download_cleanup(); return 0; }
+    if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) { print_help(); mc_qt_download_cleanup(); return 0; }
 
     const char *output_dir = ".";
     const char *mirror_type = "bmclapi";
@@ -886,6 +879,7 @@ int main(int argc, char **argv) {
         probe_and_select_mirror(&mirror_type);
         g_mirror = mirror_type;
         if (platform_opt) mc_platform_set(platform_opt);
+        mc_qt_download_init();
         return cmd_java_download(java_ver, output_dir, thread_count);
     }
 
@@ -901,6 +895,17 @@ int main(int argc, char **argv) {
     probe_and_select_mirror(&mirror_type);
     g_mirror = mirror_type;
     if (platform_opt) mc_platform_set(platform_opt);
+
+    // Initialize download pool only when we're actually going to download.
+    // This avoids the hanging bug on early-exit paths (help, no-args) where
+    // detached worker threads would prevent the process from exiting.
+    mc_qt_download_init();
+
+    // Hard 600s timeout to prevent hanging during actual downloads
+    QTimer::singleShot(600000, [&app]() {
+        mc_error("Download timed out after 600s, exiting");
+        app.exit(1);
+    });
 
     if (strcmp(cmd, "mc") == 0 && argc >= 3) {
         return cmd_mc(argv[2], output_dir, thread_count);
@@ -977,6 +982,5 @@ int main(int argc, char **argv) {
 
     mc_console_printf("%s: %s\n\n", mc_i18n("unknown_command"), cmd);
     print_help();
-    mc_qt_download_cleanup();
     return 1;
 }

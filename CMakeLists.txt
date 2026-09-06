@@ -9,6 +9,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+# macOS 最低支持版本 12.0 (Monterey)，兼容 12/13/14
+if(APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
+endif()
+
 # Windows 下禁用 min/max 宏定义，避免与 std::min/std::max 冲突
 if(WIN32)
     add_compile_definitions(NOMINMAX)

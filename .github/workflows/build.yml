@@ -236,7 +236,7 @@ jobs:
           key: ${{ runner.os }}-build-arm-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
       - name: Build (Windows ARM64, MSVC)
-        run: python pack.py --msvc --arch arm64
+        run: python pack.py --msvc --arch arm64 --build-dir build-arm
 
       - uses: actions/upload-artifact@v4
         with:

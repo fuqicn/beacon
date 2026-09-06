@@ -111,20 +111,30 @@ def resolve_qt_dir(args, build_dir):
     env = _clean_cache_value(os.environ.get("QT_DIR"))
     if env:
         return Path(env)
-    # Windows CI ARM64: Qt 安装在固定路径，CMakeCache 可能没写入或路径不匹配
-    if detect_platform() == "windows":
-        for candidate in [
-            Path(r"C:/Qt/6.8.3/msvc2022_arm64"),
-            Path(r"C:/Qt/6.8.3/msvc2022_64"),
-        ]:
-            if candidate.is_dir():
-                return candidate
     q = _clean_cache_value(read_cmake_cache(build_dir).get("Qt6_DIR"))
     if q:
         p = Path(q)
         if p.name == "Qt6":
             return p.parent.parent.parent
         return p
+    # Windows CI: CMakeCache 可能没有 Qt6_DIR（首次构建或缓存未写入），
+    # 回退到常见安装路径。优先 ARM64（CI 使用 --arch arm64 时）。
+    if detect_platform() == "windows":
+        arch = getattr(args, "arch", None)
+        candidates = []
+        if arch == "arm64":
+            candidates = [
+                Path(r"C:/Qt/6.8.3/msvc2022_arm64"),
+                Path(r"C:/Qt/6.8.3/msvc2022_64"),
+            ]
+        else:
+            candidates = [
+                Path(r"C:/Qt/6.8.3/msvc2022_64"),
+                Path(r"C:/Qt/6.8.3/msvc2022_arm64"),
+            ]
+        for candidate in candidates:
+            if candidate.is_dir():
+                return candidate
     if detect_platform() == "linux":
         found = find_qt_on_linux()
         if found:

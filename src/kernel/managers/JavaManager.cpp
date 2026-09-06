@@ -20,6 +20,7 @@
 #include "JavaDownloadWorker.h"
 #include <mc_log.h>
 #include <mc_java.h>
+#include <mc_download_qt.h>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>

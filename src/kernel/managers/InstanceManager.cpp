@@ -437,6 +437,8 @@ void InstanceManager::setCurrentRootDir(const QString &dir)
         m_rootDirs << local;
     m_currentRootDir = local;
     saveConfig();
+    // 同步扫描实例，确保切换后立即显示正确内容
+    scanInstances();
     emit currentRootDirChanged();
     emit rootDirsChanged();
     emit instancesChanged();

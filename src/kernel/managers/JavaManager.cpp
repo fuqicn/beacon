@@ -140,6 +140,18 @@ void JavaManager::downloadJava(int majorVersion)
         return;
     }
 
+    // 先停止之前的下载线程，避免多线程竞争导致UI冻结
+    if (m_workerThread) {
+        m_workerThread->quit();
+        if (!m_workerThread->wait(3000)) {
+            m_workerThread->terminate();
+            m_workerThread->wait(1000);
+        }
+        delete m_workerThread;
+        m_workerThread = nullptr;
+    }
+    mc_qt_download_set_cancel(true);
+
     m_searching = true;
     emit searchingChanged();
 

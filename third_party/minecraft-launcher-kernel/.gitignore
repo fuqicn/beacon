@@ -1,0 +1,38 @@
+build/
+dist/
+CMakeFiles/
+cmake-build-*/
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.RandomLabel
+Debug/
+Release/
+x64/
+x86/
+Win32/
+
+# Build artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.exp
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.log
+*.txt
+
+# Runtime outputs
+mclaunch_cmdline.txt
+mclaunch_err.txt
+mclaunch_out.txt
+mcver_help_out.txt
+
+# Generated profiles
+fabric_profile.json

@@ -240,12 +240,14 @@ void InstanceManager::removeInstance(const QString &id)
                                  verDir.toUtf8().constData());
                 }
             }
+            // 先从内存移除，确保 UI 立即响应，不依赖 scanInstances 的重建
             m_instances.removeAt(i);
             if (m_selectedId == id) {
                 m_selectedId.clear();
                 emit selectedChanged();
             }
             saveConfig();
+            // 延迟扫描，避免与弹窗关闭时的 UI 更新竞争
             scanInstances();
             emit instancesChanged();
             return;
@@ -310,7 +312,19 @@ static QString iconKeyForState(const QString &state)
 
 void InstanceManager::scanDirectory(const QString &rootDir)
 {
-    QDir versionsDir(QDir(rootDir).filePath("versions"));
+    // 向上查找包含 versions/ 子目录的 MC 根目录
+    // 用户可能直接添加 versions/ 目录或更深层的路径
+    QString mcRoot = rootDir;
+    QDir testDir(mcRoot);
+    for (int depth = 0; depth < 10; ++depth) {
+        if (testDir.exists("versions")) break;
+        QString parent = testDir.absolutePath();
+        if (parent == testDir.rootPath()) break;  // 已到根目录
+        testDir.cdUp();
+        mcRoot = testDir.absolutePath();
+    }
+
+    QDir versionsDir(QDir(mcRoot).filePath("versions"));
     if (!versionsDir.exists()) return;
 
     QFileInfoList dirs = versionsDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);

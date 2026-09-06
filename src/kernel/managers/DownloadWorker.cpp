@@ -156,8 +156,11 @@ int DownloadWorker::batchDownloadWithRetry(QStringList &urls, QStringList &paths
             }
         }
         updateSpeed();
+        // chunk 间更新进度，让 UI 有实时反馈
         emit completedFilesChanged(m_completedFiles);
         emit totalFilesChanged(m_totalFiles);
+        qreal chunkProgress = (qreal)m_completedFiles / qMax(1, m_totalFiles + failures);
+        emit progressChanged(chunkProgress, m_currentTask);
         chunkStart = chunkEnd;
     }
 

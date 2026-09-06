@@ -111,12 +111,25 @@ def resolve_qt_dir(args, build_dir):
     env = _clean_cache_value(os.environ.get("QT_DIR"))
     if env:
         return Path(env)
-    q = _clean_cache_value(read_cmake_cache(build_dir).get("Qt6_DIR"))
-    if q:
-        p = Path(q)
-        if p.name == "Qt6":
-            return p.parent.parent.parent
-        return p
+    # Try all candidate build dirs for Qt6_DIR (CI may use build/ or build-arm/)
+    build_dirs_to_check = [build_dir]
+    if build_dir:
+        bd = Path(build_dir)
+        candidates = [
+            bd.parent / "build",
+            bd.parent / "build-arm",
+            bd.parent / "build-x86",
+        ]
+        for c in candidates:
+            if c not in build_dirs_to_check:
+                build_dirs_to_check.append(c)
+    for bd in build_dirs_to_check:
+        q = _clean_cache_value(read_cmake_cache(bd).get("Qt6_DIR"))
+        if q:
+            p = Path(q)
+            if p.name == "Qt6":
+                return p.parent.parent.parent
+            return p
     # Windows CI: CMakeCache 可能没有 Qt6_DIR（首次构建或缓存未写入），
     # 回退到常见安装路径。优先 ARM64（CI 使用 --arch arm64 时）。
     if detect_platform() == "windows":

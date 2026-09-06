@@ -485,6 +485,33 @@ def download(url, dest, proxy):
     raise PackError("download failed after %d attempts: %s" % (DOWNLOAD_ATTEMPTS, last_err))
 
 
+def _remove_mingw_dlls(dest_dir):
+    """删除 MinGW 运行时 DLL（MSVC 构建不需要）。
+
+    windeployqt 可能从 Qt 安装目录复制 mingw 版本的 DLL，
+    这些在 MSVC 构建中是多余的且可能导致运行时冲突。
+    """
+    dest = Path(dest_dir)
+    mingw_dlls = [
+        "libgcc_s_seh-1.dll",
+        "libgcc_s_dw2-1.dll",
+        "libstdc++-6.dll",
+        "libwinpthread-1.dll",
+    ]
+    removed = 0
+    for name in mingw_dlls:
+        p = dest / name
+        if p.is_file():
+            try:
+                p.unlink()
+                log("removed mingw dll: %s" % name)
+                removed += 1
+            except OSError as e:
+                log("WARNING: could not remove %s: %s" % (name, e))
+    if removed:
+        log("removed %d mingw runtime dll(s)" % removed)
+
+
 def _copy_z_dll(dest_dir, args):
     """复制 z.dll (zlib) 到输出目录。
 
@@ -591,6 +618,10 @@ def build_windows(args, version, build_dir, qt_dir):
     else:
         log("WARNING: windeployqt not found under %s; Qt runtime not deployed"
             % (qt_root or "unknown Qt dir"))
+
+    # 清理 MinGW 运行时 DLL（MSVC 构建不需要这些）
+    # windeployqt 可能会从 Qt 安装目录复制 mingw 版本的 DLL
+    _remove_mingw_dlls(beacon_dir)
 
     # 手动复制 z.dll（zlib），windeployqt 不会自动部署第三方 DLL
     # ARM64 和 x64 都需要正确处理

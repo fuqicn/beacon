@@ -22,6 +22,8 @@ import QtQuick.Controls
 Item {
     property string iconName: ""
     property int iconSize: 20
+    // Tint override. Empty = follow the current text color (auto light/dark).
+    property string tint: ""
 
     width: iconSize
     height: iconSize
@@ -30,7 +32,7 @@ Item {
         anchors.fill: parent
         source: {
             if (!iconName) return ""
-            var c = palette.text
+            var c = (tint !== "" && tint !== undefined) ? Qt.color(tint) : palette.text
             return "image://tinted/" + iconName + "/"
                 + Math.round(c.r * 255) + "/"
                 + Math.round(c.g * 255) + "/"

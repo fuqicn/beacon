@@ -55,6 +55,18 @@ QtObject {
     readonly property color surfaceContainerHigh: _surface(0.08)
     readonly property color surfaceContainerHighest: _surface(0.12)
 
+    // Interaction overlay (hover/pressed tints). In light mode a near-black
+    // overlay reads as a heavy dark shadow on white controls, so light mode
+    // uses a subtle neutral grey while dark mode keeps the standard dim.
+    readonly property color hoverOverlay: darkMode
+        ? Qt.rgba(1, 1, 1, 0.08)
+        : Qt.rgba(0, 0, 0, 0.05)
+    readonly property color pressedOverlay: darkMode
+        ? Qt.rgba(1, 1, 1, 0.12)
+        : Qt.rgba(0, 0, 0, 0.10)
+    // Destructive hover tint (delete buttons).
+    readonly property color dangerHover: Qt.rgba(0.956, 0.263, 0.216, darkMode ? 0.22 : 0.16)
+
     // Rounded corners follow the active style: FluentWinUI3 / macOS / Imagine
     // are rounded; the traditional Windows and Fusion styles are square.
     readonly property bool _cornersEnabled: uiStyleName === "fluentwinui3"

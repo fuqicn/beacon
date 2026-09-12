@@ -161,7 +161,6 @@ set(QML_SOURCES
     src/qml/pages/ToolsPage.qml
     src/qml/pages/InstanceSettingsPage.qml
     src/qml/pages/LogViewerPage.qml
-    src/qml/pages/FileManagerPage.qml
     src/qml/components/AppIcon.qml
     src/qml/components/DownloadCard.qml
     src/qml/components/DownloadDialog.qml

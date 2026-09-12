@@ -53,7 +53,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: -4
                 radius: root.radius + 4
-                color: Qt.rgba(0,0,0,0.08)
+                color: Theme.pressedOverlay
                 z: -1
             }
         }

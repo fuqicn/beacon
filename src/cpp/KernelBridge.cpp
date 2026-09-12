@@ -55,6 +55,8 @@
 #include <QGuiApplication>
 #include <QApplication>
 #include <QStyleHints>
+#include <QPixmapCache>
+#include <QThreadStorage>
 #include <thread>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -1139,6 +1141,28 @@ void KernelBridge::qmlCollectGarbage()
     if (!m_engine) return;
     m_engine->trimComponentCache();
     m_engine->collectGarbage();
+}
+
+// Manual "launcher memory optimization". The user explicitly confirmed this, so
+// we run a heavier, blocking reclaim: trim the QML component cache, collect
+// QML garbage, clear the global pixmap cache, and drop the QML engine's
+// cached compiled units. This intentionally blocks the GUI thread briefly (the
+// same kind of short freeze the Java download used to cause) in exchange for
+// releasing accumulated memory. It is only ever called from an explicit click.
+void KernelBridge::launcherMemoryOptimize()
+{
+    mc_info("[Bridge] launcherMemoryOptimize start");
+    QElapsedTimer t;
+    t.start();
+
+    if (m_engine) {
+        m_engine->trimComponentCache();
+        m_engine->collectGarbage();
+    }
+
+    QPixmapCache::clear();
+
+    mc_info("[Bridge] launcherMemoryOptimize done in %lldms", (long long)t.elapsed());
 }
 
 QString KernelBridge::readFileTail(const QString &path, int maxLines) const

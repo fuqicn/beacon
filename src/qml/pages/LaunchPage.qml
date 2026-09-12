@@ -243,11 +243,23 @@ Component.onCompleted: {
                     // Delete account
                     Rectangle {
                         width: 28; height: 28; radius: Theme.shapeSmall
-                        color: delHover.hovered ? Qt.alpha("#F44336", 0.15) : "transparent"
-                        AppIcon { anchors.centerIn: parent; iconName: "trash"; iconSize: 12 }
-                        HoverHandler { id: delHover }
+                        property bool delHovered: false
+                        color: delHovered ? Theme.dangerHover : "transparent"
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            iconName: "trash"
+                            iconSize: 12
+                            tint: parent.delHovered ? "#F44336" : ""
+                        }
+
                         MouseArea {
-                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: parent.delHovered = true
+                            onExited: parent.delHovered = false
                             onClicked: kernel.authManager.removeAccount(index)
                         }
                     }

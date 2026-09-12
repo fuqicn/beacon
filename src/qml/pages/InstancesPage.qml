@@ -334,8 +334,9 @@ Item {
 
                     Rectangle {
                         width: 32; height: 32; radius: Theme.shapeSmall
-                        HoverHandler { id: gearHover }
-                        color: gearHover.hovered ? Qt.alpha(Theme.primary, 0.15) : "transparent"
+                        property bool gearHovered: false
+                        color: gearHovered ? Theme.hoverOverlay : "transparent"
+                        Behavior on color { ColorAnimation { duration: 150 } }
 
                         AppIcon {
                             anchors.centerIn: parent
@@ -348,6 +349,8 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            onEntered: parent.gearHovered = true
+                            onExited: parent.gearHovered = false
                             onClicked: {
                                 kernel.selectInstance(modelData.id, modelData.rootDir)
 window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
@@ -357,13 +360,15 @@ window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
 
                     Rectangle {
                         width: 32; height: 32; radius: Theme.shapeSmall
-                        HoverHandler { id: trashHover }
-                        color: trashHover.hovered ? Qt.alpha("#F44336", 0.15) : "transparent"
+                        property bool trashHovered: false
+                        color: trashHovered ? Theme.dangerHover : "transparent"
+                        Behavior on color { ColorAnimation { duration: 150 } }
 
                         AppIcon {
                             anchors.centerIn: parent
                             iconName: "trash"
                             iconSize: 16
+                            tint: parent.trashHovered ? "#F44336" : ""
                         }
 
                         MouseArea {
@@ -371,6 +376,8 @@ window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            onEntered: parent.trashHovered = true
+                            onExited: parent.trashHovered = false
                             onClicked: {
                                 deleteConfirmPopup.instanceId = modelData.id
                                 deleteConfirmPopup.instanceName = modelData.id

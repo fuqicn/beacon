@@ -175,6 +175,8 @@ public:
     // Auto-update helpers
     Q_INVOKABLE QString detectLinuxPackageType() const;
     Q_INVOKABLE void qmlCollectGarbage();
+    // Explicit, user-confirmed blocking memory reclaim (brief UI freeze).
+    Q_INVOKABLE void launcherMemoryOptimize();
 
     // Log viewer helpers
     Q_INVOKABLE QString readFileTail(const QString &path, int maxLines = 400) const;

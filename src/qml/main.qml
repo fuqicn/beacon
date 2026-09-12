@@ -329,18 +329,6 @@ ApplicationWindow {
                     Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
                     sourceComponent: LogViewerPage { anchors.fill: parent }
                 }
-                Loader {
-                    id: page7
-                    property int pageIndex: 7
-                    anchors.fill: parent
-                    active: false
-                    asynchronous: true
-                    opacity: 0
-                    enabled: false
-                    Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
-                    Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200 } }
-                    sourceComponent: FileManagerPage { anchors.fill: parent }
-                }
             }
         }
     }
@@ -397,7 +385,7 @@ ApplicationWindow {
             color: Theme.primary
             Rectangle {
                 anchors.fill: parent; radius: parent.radius
-                color: killBtn.down ? Qt.rgba(0,0,0,0.2) : (killBtn.hovered ? Qt.rgba(0,0,0,0.1) : "transparent")
+                color: killBtn.down ? Theme.pressedOverlay : (killBtn.hovered ? Theme.hoverOverlay : "transparent")
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
         }
@@ -406,6 +394,9 @@ ApplicationWindow {
             anchors.centerIn: parent
             iconName: "power"
             iconSize: 20
+            // Reversed tint vs. other icons: light mode -> black icon,
+            // dark mode -> white icon.
+            tint: Theme.darkMode ? Qt.white : Qt.black
         }
     }
 

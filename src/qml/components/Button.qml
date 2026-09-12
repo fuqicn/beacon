@@ -53,7 +53,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: parent.radius
-        color: ma.pressed ? Qt.rgba(0,0,0,0.12) : (ma.hovered ? Qt.rgba(0,0,0,0.08) : "transparent")
+        color: ma.pressed ? Theme.pressedOverlay : (ma.hovered ? Theme.hoverOverlay : "transparent")
         Behavior on color { ColorAnimation { duration: 150 } }
     }
 

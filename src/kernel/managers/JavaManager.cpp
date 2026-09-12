@@ -146,40 +146,45 @@ void JavaManager::downloadJava(int majorVersion)
         return;
     }
 
+    // Re-entrancy guard: the auto-download path reaches here from the main
+    // thread (Qt::QueuedConnection) and can be re-entered while a previous
+    // download is still finishing. A busy guard keeps the teardown below from
+    // ever running on the main thread.
+    if (m_searching) {
+        mc_info("Java download already in progress, ignoring ver=%d", majorVersion);
+        return;
+    }
+
     // Clear any stale global cancel left by a previous cancelled download so
     // this fresh download does not immediately fail-fast on every piece.
     // (Mirrors DownloadManager which clears m_cancelPending at start.)
-    mc_qt_download_set_cancel(false);
-
-    // Stop any previous download worker to avoid multi-thread race and UI freeze.
-    // If the previous download was cancelled, clean up its partial files.
-    // Never terminate: the kernel manifest fetch spawns std::threads that would
-    // crash if the QThread were force-killed mid-join.
-    //
-    // The global cancel flag is shared across every download module, so a stale
-    // "cancelled" state left by a previous (or concurrently cancelled) task
-    // makes every in-flight piece fail-fast and the download stalls at 0%.
-    // Pair a cancel here so this fresh download starts clean, mirroring
-    // DownloadManager which clears m_cancelPending at start.
     if (mc_qt_download_cancel())
         mc_qt_download_set_cancel(false);
 
+    // Stop any previous download worker to avoid multi-thread race.
+    // If the previous download was cancelled, clean up its partial files.
+    //
+    // This whole function runs on the main thread in the auto-download path,
+    // so a blocking wait() here is what froze the GUI. Tear the stale worker
+    // down non-blockingly: cancel + quit + deleteLater, never wait(). The old
+    // worker's in-flight pieces bail out via the global cancel flag and the
+    // thread + worker are reclaimed by the event loop via deleteLater.
     if (m_workerThread) {
         bool prevCancelled = m_cancelled;
         QString prevDir = m_activeJavaWorker ? m_activeJavaWorker->targetDir() : QString();
         if (m_activeJavaWorker) m_activeJavaWorker->cancel();
         m_activeJavaWorker = nullptr;
-        // Mark a pending release of the global flag; the finishing worker will
-        // clear it once all its in-flight pieces have bailed out.
+        m_cancelled = false;
+        // Ask the old worker to stop; it will quit its thread and self-delete.
         mc_qt_download_set_cancel(true);
         m_workerThread->quit();
-        if (!m_workerThread->wait(5000))
-            m_workerThread->wait(5000);
-        delete m_workerThread;
+        QThread *oldThread = m_workerThread;
+        QObject::connect(oldThread, &QThread::finished, this,
+                         [this, prevCancelled, prevDir]() {
+                             finishStoppedWorker(prevCancelled, prevDir);
+                         });
+        oldThread->deleteLater();
         m_workerThread = nullptr;
-        mc_qt_download_set_cancel(false);
-        if (prevCancelled && !prevDir.isEmpty())
-            QDir(prevDir).removeRecursively();
     }
 
     m_searching = true;
@@ -218,7 +223,7 @@ void JavaManager::downloadJava(int majorVersion)
     });
     connect(worker, &JavaDownloadWorker::finished, m_workerThread, &QThread::quit);
     connect(m_workerThread, &QThread::finished, worker, &QObject::deleteLater);
-
+    connect(m_workerThread, &QThread::finished, m_workerThread, &QObject::deleteLater);
     m_workerThread->start();
 }
 
@@ -231,4 +236,11 @@ void JavaManager::cancelDownloadJava()
         m_activeJavaWorker->cancel();
     m_searching = false;
     emit searchingChanged();
+}
+
+void JavaManager::finishStoppedWorker(bool prevCancelled, const QString &prevDir)
+{
+    mc_qt_download_set_cancel(false);
+    if (prevCancelled && !prevDir.isEmpty())
+        QDir(prevDir).removeRecursively();
 }

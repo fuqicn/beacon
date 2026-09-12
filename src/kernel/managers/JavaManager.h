@@ -61,6 +61,9 @@ signals:
 private:
     void doFindJava();
     void addBundledJava();
+    // Stopping the old worker without blocking: clear the global cancel flag
+    // and, if the previous download was cancelled, remove its partial files.
+    void finishStoppedWorker(bool prevCancelled, const QString &prevDir);
 
     QVariantList m_runtimes;
     bool m_searching = false;

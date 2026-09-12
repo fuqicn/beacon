@@ -67,6 +67,7 @@ private:
     QString m_runtimeDir;
     QThread *m_workerThread = nullptr;
     JavaDownloadWorker *m_activeJavaWorker = nullptr;
+    bool m_cancelled = false;
 };
 
 #endif

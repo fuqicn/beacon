@@ -33,6 +33,7 @@ public:
                                 QObject *parent = nullptr);
 
     void cancel() { m_cancelled = true; }
+    QString targetDir() const { return m_targetDir; }
 
 public slots:
     void run();

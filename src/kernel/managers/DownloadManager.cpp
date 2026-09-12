@@ -70,8 +70,11 @@ void DownloadManager::startDownload(const QString &versionId, const QString &dir
         m_cancelPending = false;
     }
     if (m_workerThread) {
+        if (m_activeWorker) m_activeWorker->cancel();
+        m_activeWorker = nullptr;
         m_workerThread->quit();
-        m_workerThread->wait();
+        if (!m_workerThread->wait(5000))
+            m_workerThread->wait(5000);
         delete m_workerThread;
         m_workerThread = nullptr;
     }
@@ -184,9 +187,19 @@ void DownloadManager::downloadJava(int majorVersion, const QString &dir)
         mc_qt_download_set_cancel(false);
         m_cancelPending = false;
     }
+    // Stop any in-progress worker (Minecraft or Java) before starting a new one.
+    // Cancel it so its pool future returns fast; wait up to 5s (manifest fetch
+    // can take longer, but the worker's cancel check between manifest sources
+    // lets it bail out promptly). Never terminate: the worker may have spawned
+    // std::threads inside the kernel that would crash if force-killed.
     if (m_workerThread) {
+        if (m_activeWorker) m_activeWorker->cancel();
+        if (m_activeJavaWorker) m_activeJavaWorker->cancel();
+        m_activeWorker = nullptr;
+        m_activeJavaWorker = nullptr;
         m_workerThread->quit();
-        m_workerThread->wait();
+        if (!m_workerThread->wait(5000))
+            m_workerThread->wait(5000);
         delete m_workerThread;
         m_workerThread = nullptr;
     }

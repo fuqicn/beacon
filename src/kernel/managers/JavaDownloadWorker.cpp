@@ -28,17 +28,24 @@
 #include <QFileInfo>
 #include <QSet>
 #include <QElapsedTimer>
+#include <QThread>
+#include <QCoreApplication>
 #include <vector>
 #include <cstring>
 
 JavaDownloadWorker::JavaDownloadWorker(int majorVersion, const QString &targetDir,
-                                       QObject *parent)
+                                        QObject *parent)
     : QObject(parent), m_majorVersion(majorVersion), m_targetDir(targetDir)
 {
 }
 
 void JavaDownloadWorker::run()
 {
+    // Run on a plain worker thread: block on the pool future instead of
+    // pumping the Qt event loop, which is not safe from a non-main thread
+    // and would freeze the UI or crash with a nested processEvents.
+    mc_qt_download_thread_no_pump(1);
+
     mc_info("[DL-J] Worker started: ver=%d dir=%s",
             m_majorVersion, m_targetDir.toUtf8().constData());
 
@@ -55,16 +62,37 @@ void JavaDownloadWorker::run()
     McJavaFileList list;
     memset(&list, 0, sizeof(list));
 
+    // Emit a status update so the UI shows "fetching manifest" instead of appearing stuck
+    emit subTaskChanged(QStringLiteral("Fetching Java %1 manifest...").arg(m_majorVersion));
+    emit progressChanged(0.01, QStringLiteral("Fetching manifest..."));
+
+    bool manifestOk = false;
     if (!mc_java_download_manifest(m_majorVersion, mc_download_effective_mirror(), &list)) {
+        if (m_cancelled.load()) {
+            mc_info("[DL-J] Java %d cancelled during manifest fetch", m_majorVersion);
+            emit finished(false, QString(), m_majorVersion);
+            return;
+        }
         mc_info("[DL-J] primary mirror failed, trying bmclapi...");
         if (!mc_java_download_manifest(m_majorVersion, "bmclapi", &list)) {
-            mc_info("[DL-J] bmclapi failed, trying mojang...");
-            if (!mc_java_download_manifest(m_majorVersion, "mojang", &list)) {
-                mc_error("[DL-J] Failed to fetch Java %d manifest", m_majorVersion);
+            if (m_cancelled.load()) {
+                mc_info("[DL-J] Java %d cancelled during manifest fetch", m_majorVersion);
                 emit finished(false, QString(), m_majorVersion);
                 return;
             }
+            mc_info("[DL-J] bmclapi failed, trying mojang...");
+            manifestOk = mc_java_download_manifest(m_majorVersion, "mojang", &list);
+        } else {
+            manifestOk = true;
         }
+    } else {
+        manifestOk = true;
+    }
+
+    if (!manifestOk) {
+        mc_error("[DL-J] Failed to fetch Java %d manifest", m_majorVersion);
+        emit finished(false, QString(), m_majorVersion);
+        return;
     }
 
     QString javaDir = m_targetDir;
@@ -190,7 +218,7 @@ void JavaDownloadWorker::run()
         mc_info("[DL-J] Java %d cancelled by user, removing partial files (%d/%d done)",
                 m_majorVersion, okFiles, total);
         QDir(javaDir).removeRecursively();
-        emit finished(false, QString(), m_majorVersion);
+        emit finished(false, javaDir, m_majorVersion);
         return;
     }
 

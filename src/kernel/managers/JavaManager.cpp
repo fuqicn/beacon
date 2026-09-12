@@ -31,16 +31,13 @@ JavaManager::JavaManager(QObject *parent) : QObject(parent) {}
 JavaManager::~JavaManager()
 {
     if (m_workerThread) {
-        mc_qt_download_set_cancel(true);
+        if (m_activeJavaWorker) m_activeJavaWorker->cancel();
+        m_activeJavaWorker = nullptr;
         m_workerThread->quit();
-        if (!m_workerThread->wait(3000)) {
-            m_workerThread->terminate();
-            m_workerThread->wait(1000);
-        }
+        if (!m_workerThread->wait(5000))
+            m_workerThread->wait(5000);
         delete m_workerThread;
         m_workerThread = nullptr;
-        m_activeJavaWorker = nullptr;
-        mc_qt_download_set_cancel(false);
     }
 }
 
@@ -149,19 +146,22 @@ void JavaManager::downloadJava(int majorVersion)
         return;
     }
 
-    // Stop any previous download worker to avoid multi-thread race and UI freeze
+    // Stop any previous download worker to avoid multi-thread race and UI freeze.
+    // If the previous download was cancelled, clean up its partial files.
+    // Never terminate: the kernel manifest fetch spawns std::threads that would
+    // crash if the QThread were force-killed mid-join.
     if (m_workerThread) {
-        mc_qt_download_set_cancel(true);
-        m_activeJavaWorker->cancel();
+        bool prevCancelled = m_cancelled;
+        QString prevDir = m_activeJavaWorker ? m_activeJavaWorker->targetDir() : QString();
+        if (m_activeJavaWorker) m_activeJavaWorker->cancel();
         m_activeJavaWorker = nullptr;
         m_workerThread->quit();
-        if (!m_workerThread->wait(3000)) {
-            m_workerThread->terminate();
-            m_workerThread->wait(1000);
-        }
+        if (!m_workerThread->wait(5000))
+            m_workerThread->wait(5000);
         delete m_workerThread;
         m_workerThread = nullptr;
-        mc_qt_download_set_cancel(false);
+        if (prevCancelled && !prevDir.isEmpty())
+            QDir(prevDir).removeRecursively();
     }
 
     m_searching = true;
@@ -172,12 +172,14 @@ void JavaManager::downloadJava(int majorVersion)
     m_workerThread = new QThread(this);
     auto *worker = new JavaDownloadWorker(majorVersion, targetDir);
     m_activeJavaWorker = worker;
+    m_cancelled = false;
     worker->moveToThread(m_workerThread);
 
     connect(m_workerThread, &QThread::started, worker, &JavaDownloadWorker::run);
     connect(worker, &JavaDownloadWorker::finished, this, [this](bool ok, const QString &path, int ver) {
         m_searching = false;
         m_activeJavaWorker = nullptr;
+        m_cancelled = false;
         mc_qt_download_set_cancel(false);
         emit searchingChanged();
 
@@ -206,6 +208,7 @@ void JavaManager::cancelDownloadJava()
 {
     if (!m_workerThread) return;
     mc_qt_download_set_cancel(true);
+    m_cancelled = true;
     if (m_activeJavaWorker)
         m_activeJavaWorker->cancel();
     m_searching = false;

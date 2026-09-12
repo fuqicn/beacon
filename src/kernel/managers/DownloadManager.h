@@ -59,6 +59,7 @@ public:
                                     const QString &mirror = "bmclapi");
     Q_INVOKABLE void downloadJava(int majorVersion, const QString &dir);
     Q_INVOKABLE void cancelAll();
+    void setJavaRuntimeDir(const QString &dir) { m_javaRuntimeDir = dir; }
 
 signals:
     void progressChanged(qreal progress, const QString &currentFile);
@@ -90,6 +91,7 @@ private:
     int m_completedFiles = 0;
     double m_speedBytes = 0.0;
     QString m_lastDownloadDir;
+    QString m_javaRuntimeDir;
 
     QThread *m_workerThread = nullptr;
     QPointer<DownloadWorker> m_activeWorker;

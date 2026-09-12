@@ -217,7 +217,12 @@ void DownloadManager::downloadJava(int majorVersion, const QString &dir)
     emit completedFilesChanged();
     emit speedBytesChanged();
 
-    QString javaDir = QDir(localDir).filePath(QStringLiteral(".runtime/java-%1").arg(majorVersion));
+    // Java runtimes go to the launcher's own .runtime dir (same location the
+    // auto-download path / JavaManager uses), NOT the mc/instance dir.
+    QString javaDir = (m_javaRuntimeDir.isEmpty()
+                          ? QCoreApplication::applicationDirPath()
+                          : m_javaRuntimeDir)
+                     + QStringLiteral("/java-%1").arg(majorVersion);
 
     auto *worker = new JavaDownloadWorker(majorVersion, javaDir);
     m_activeJavaWorker = worker;

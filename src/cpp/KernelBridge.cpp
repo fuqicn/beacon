@@ -175,6 +175,9 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     // Set runtime dir for java
     QString runtimeDir = launcherDir + "/.runtime";
     s_instance->m_javaManager->setRuntimeDir(runtimeDir);
+    // Manual Java download (ToolsPage) shares the same runtime dir as the
+    // auto-download path, so it does not land under the mc/instance dir.
+    s_instance->m_downloadManager->setJavaRuntimeDir(runtimeDir);
 
     // Set default mc dir for instances
     s_instance->m_instanceManager->setDefaultRootDir(s_instance->m_mcDir);
@@ -1329,29 +1332,34 @@ void KernelBridge::launchGame(int memory)
             return;
         }
 
-        // 2. Scan system Java for exact version match
-        McJavaRuntime runtimes[128];
-        int count = mc_java_find_all(runtimes, 128);
-        mc_info("Found %d system Java runtimes", count);
-
-        QString bestPath;
-        for (int i = 0; i < count; ++i) {
-            if (runtimes[i].major_version == requiredJava) {
-                bestPath = QString::fromUtf8(runtimes[i].path);
-                break;
+        // 2. Scan system Java for exact version match.
+        // Use the lightweight cached scan (no QProcess spawning). The full
+        // mc_java_find_all does per-candidate "java -version" QProcess probes
+        // which, when run on a bare std::thread, contend with the GUI event
+        // loop and freeze the UI. For launch we only need an exact major
+        // version match; if not found we download the required runtime.
+        {
+            QString scanDir = s_launcherDir.isEmpty()
+                                  ? QCoreApplication::applicationDirPath()
+                                  : s_launcherDir;
+            QString candidate = scanDir + QStringLiteral("/.runtime/java-%1/bin/java")
+                                                        .arg(requiredJava);
+#ifdef Q_OS_WIN
+            candidate = scanDir + QStringLiteral("/.runtime/java-%1/bin/java.exe")
+                                                         .arg(requiredJava);
+#endif
+            if (QFile::exists(candidate)) {
+                mc_info("Found cached runtime Java %d: %s", requiredJava,
+                        candidate.toUtf8().constData());
+                if (!guard) return;
+                QMetaObject::invokeMethod(this, [this, candidate]() {
+                    setJavaDownloading(false);
+                    if (m_launchCancelled) return;
+                    m_launchManager->setJavaPath(candidate);
+                    doAuthAndLaunch();
+                }, Qt::QueuedConnection);
+                return;
             }
-        }
-
-        if (!bestPath.isEmpty()) {
-            mc_info("Found exact Java %d: %s", requiredJava, bestPath.toUtf8().constData());
-            if (!guard) return;
-            QMetaObject::invokeMethod(this, [this, bestPath]() {
-                setJavaDownloading(false);
-                if (m_launchCancelled) return;
-                m_launchManager->setJavaPath(bestPath);
-                doAuthAndLaunch();
-            }, Qt::QueuedConnection);
-            return;
         }
 
         // 3. No matching Java found — download required version

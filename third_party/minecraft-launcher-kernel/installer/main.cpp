@@ -154,7 +154,7 @@ static int install_fabric(const char *mc_ver, const char *loader_ver, const char
     } else {
     char list_url[512];
     snprintf(list_url, sizeof(list_url), "https://meta.fabricmc.net/v2/versions/loader/%s", mc_ver);
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     char resolved[2048];
     resolve_mirror_url(list_url, resolved, sizeof(resolved));
     McHttpResponse *resp = mc_http_get(&client, resolved);
@@ -184,7 +184,7 @@ static int install_fabric(const char *mc_ver, const char *loader_ver, const char
     else
         snprintf(url, sizeof(url), "https://meta.fabricmc.net/v2/versions/loader/%s/profile/json", mc_ver);
 
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     char resolved[2048];
     resolve_mirror_url(url, resolved, sizeof(resolved));
     McHttpResponse *resp = mc_http_get(&client, resolved);
@@ -259,7 +259,7 @@ static int install_forge(const char *mc_ver, const char *forge_ver, const char *
     mc_info("Installing Forge for MC %s...", mc_ver);
     char url[512];
     snprintf(url, sizeof(url), "https://bmclapi2.bangbang93.com/forge/minecraft/%s", mc_ver);
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     char resolved[2048];
     resolve_mirror_url(url, resolved, sizeof(resolved));
     McHttpResponse *resp = mc_http_get(&client, resolved);
@@ -352,7 +352,7 @@ static int install_quilt(const char *mc_ver, const char *loader_ver, const char 
     } else {
         char list_url[512];
         snprintf(list_url, sizeof(list_url), "https://meta.quiltmc.org/v3/versions/loader/%s", mc_ver);
-        McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+        HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
         McHttpResponse *resp = mc_http_get(&client, list_url);
         if (resp && resp->success && resp->data) {
             QJsonParseError err;
@@ -380,7 +380,7 @@ static int install_quilt(const char *mc_ver, const char *loader_ver, const char 
     else
         snprintf(url, sizeof(url), "https://meta.quiltmc.org/v3/versions/loader/%s/profile/json", mc_ver);
 
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     McHttpResponse *resp = mc_http_get(&client, url);
     if (!resp || !resp->success || !resp->data) {
         mc_error("Failed to fetch Quilt profile");
@@ -409,7 +409,7 @@ static int install_neoforge(const char *mc_ver, const char *nforge_ver, const ch
 
     char list_url[512];
     snprintf(list_url, sizeof(list_url), "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/%s", pkg);
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     char resolved[2048];
     resolve_mirror_url(list_url, resolved, sizeof(resolved));
     McHttpResponse *resp = mc_http_get(&client, resolved);
@@ -493,7 +493,7 @@ static int install_optifine(const char *mc_ver, const char *mc_dir, const char *
     mc_info("Installing OptiFine for MC %s...", mc_ver);
     char url[512];
     snprintf(url, sizeof(url), "https://bmclapi2.bangbang93.com/optifine/versionList");
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     char resolved[2048];
     resolve_mirror_url(url, resolved, sizeof(resolved));
     McHttpResponse *resp = mc_http_get(&client, resolved);
@@ -556,7 +556,7 @@ static int install_liteloader(const char *mc_ver, const char *mc_dir, const char
     mc_info("Installing LiteLoader for MC %s...", mc_ver);
         char url[512];
     snprintf(url, sizeof(url), "https://dl.liteloader.com/versions/versions.json");
-    McHttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
+    HttpClient client; mc_http_init(&client); mc_http_set_timeout(&client, 30000);
     char resolved[2048];
     resolve_mirror_url(url, resolved, sizeof(resolved));
     McHttpResponse *resp = mc_http_get(&client, resolved);

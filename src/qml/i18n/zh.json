@@ -77,6 +77,7 @@
   "java.version": "Java 版本",
   "java.downloading": "下载中...",
   "java.downloadBtn": "下载",
+  "java.cancel": "取消",
   "java.downloaded": "Java %1 下载完成",
   "log.title": "日志查看",
   "log.path": "游戏日志（尾部）",

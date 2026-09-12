@@ -18,7 +18,7 @@ void mc_qt_download_init(void);
 void mc_qt_download_cleanup(void);
 
 // Thread-safe single file download using QtNetwork internals.
-// Routes to main thread for shared QNAM connection reuse (PCLCE IHttpClientFactory pattern).
+// Routes to main thread for shared QNAM connection reuse (shared QNAM reuse pattern).
 int mc_qt_download_file(const char *url, const char *output_path,
                         const char *expected_sha1, long expected_size,
                         long timeout_ms);
@@ -64,7 +64,7 @@ int mc_qt_download_batch(const char **urls, const char **paths,
                            McQtDownloadProgressFn progress, void *userdata);
 
 // ---------------------------------------------------------------------------
-// PCL-style batch engine (per-file ordered sources + parallel range download).
+// batch engine (per-file ordered sources + parallel range download).
 // ---------------------------------------------------------------------------
 
 // One file to download. 'urls' is an ordered source list (e.g. mirror first,

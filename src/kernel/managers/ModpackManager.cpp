@@ -384,7 +384,7 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
 
     // A base failure aborts the whole install; the pack worker stops early.
     // Pack-file failures are non-fatal: missing optional files degrade the pack
-    // but the instance is still created, mirroring PCL behavior.
+    // but the instance is still created.
     if (baseFailed.load())
         return fail("原版游戏文件下载失败" + (baseErr.isEmpty() ? QString() : ": " + baseErr));
 
@@ -493,7 +493,7 @@ public slots:
             emit installCompleted(id);
 
         // Remove the whole temp dir (not just the main file): a failed ranged
-        // download leaves .chunk.N / .PCLDownloading partials that would defeat
+        // download leaves .chunk.N / .downloading partials that would defeat
         // QDir().rmdir and pollute the next install with stale pieces.
         removeDirRecursively(tmpDir);
     }

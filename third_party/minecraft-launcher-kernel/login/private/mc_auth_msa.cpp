@@ -102,7 +102,7 @@ static int http_ok(McHttpResponse *resp) {
 }
 
 static McHttpResponse *post_form(const char *url, const char *form_body) {
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 30000);
     return mc_http_post(&client, url, "application/x-www-form-urlencoded",
@@ -252,7 +252,7 @@ static char *xbl_authenticate(const char *msa_token, char *uhs, size_t uhs_size)
         "}", msa_token ? msa_token : "");
     mc_debug("[MSA] XBL request body length: %d", n);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
     McHttpResponse *resp = mc_http_post_json(&client,
@@ -317,7 +317,7 @@ static char *xsts_authenticate(const char *xbl_token) {
         "\"TokenType\":\"JWT\""
         "}", xbl_token);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
     McHttpResponse *resp = mc_http_post_json(&client,
@@ -357,7 +357,7 @@ static char *mc_login(const char *uhs, const char *xsts_token) {
     snprintf(body, sizeof(body),
         "{\"identityToken\":\"%s\"}", identity);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
     McHttpResponse *resp = mc_http_post_json(&client,
@@ -461,7 +461,7 @@ static int get_mc_profile(const char *mc_token, char *uuid, size_t uuid_size,
     mc_debug("[MSA] Profile header: %.150s...", auth_header);
     const char *headers[] = { auth_header };
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
     McHttpResponse *resp = mc_http_get_with_headers(&client,

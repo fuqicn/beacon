@@ -26,7 +26,7 @@
 #include <QStringList>
 
 // Groups a flat list of version entries into collapsible "Minecraft x.y.z"
-// sections (PCL-style), mirroring the grouping/ordering/collapse logic that
+// sections, mirroring the grouping/ordering/collapse logic that
 // used to live in the QML detail pages. Each row is either a header row or a
 // version row:
 //   header: { type: "header", primary: <mc version>, count: <n> }

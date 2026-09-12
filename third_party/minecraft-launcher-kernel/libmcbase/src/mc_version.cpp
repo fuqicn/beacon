@@ -347,7 +347,7 @@ int mc_version_parse_file(McVersion *v, const char *path) {
 int mc_version_fetch(McVersion *v, const char *url) {
     if (!v || !url) return 0;
     strncpy(v->source_url, url, sizeof(v->source_url) - 1);
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 30000);
     mc_info("Fetching version JSON: %s", url);

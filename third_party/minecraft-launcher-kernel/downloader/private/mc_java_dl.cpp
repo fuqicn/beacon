@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2026 fuqicn
@@ -86,7 +86,7 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
 
     auto try_source = [&](const Source &src) {
         active.fetch_add(1);
-        McHttpClient client;
+        HttpClient client;
         mc_http_init(&client);
         mc_http_set_timeout(&client, 5000);
         McHttpResponse *resp = mc_http_get(&client, src.url);
@@ -239,7 +239,7 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
         if (mc_download_translate_mojang_url(manifestUrlUtf8.constData(), translated, sizeof(translated), mirror))
             strncpy(manifest_url_translated, translated, sizeof(manifest_url_translated) - 1);
     }
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 30000);
     McHttpResponse *resp = mc_http_get(&client, manifest_url_translated);

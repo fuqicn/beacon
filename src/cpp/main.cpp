@@ -330,7 +330,7 @@ private:
 
     static QImage tryFetch(const char *target)
     {
-        McHttpClient client;
+        HttpClient client;
         mc_http_init(&client);
         mc_http_set_timeout(&client, 8000);
         McHttpResponse *resp = mc_http_get(&client, target);

@@ -26,6 +26,7 @@
 #include <QElapsedTimer>
 
 class DownloadWorker;
+class JavaDownloadWorker;
 
 class DownloadManager : public QObject
 {
@@ -92,6 +93,7 @@ private:
 
     QThread *m_workerThread = nullptr;
     QPointer<DownloadWorker> m_activeWorker;
+    QPointer<JavaDownloadWorker> m_activeJavaWorker;
     // True when *this* manager requested a global download cancellation.
     // Used to pair mc_qt_download_set_cancel(true) with a matching false only
     // after our worker actually finishes, so we never clear another module's

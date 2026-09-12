@@ -126,14 +126,19 @@ Item {
                         currentIndex: 2
                     }
                     Button {
-                        text: kernel.downloadManager.busy ? I18n.tr("java.downloading") : I18n.tr("java.downloadBtn")
-                        enabled: !kernel.downloadManager.busy
+                        visible: !kernel.downloadManager.busy
+                        text: I18n.tr("java.downloadBtn")
                         highlighted: true
                         font.weight: Font.Normal
                         onClicked: {
                             var ver = parseInt(javaVerCombo.currentText)
                             kernel.downloadManager.downloadJava(ver, kernel.instanceManager.currentRootDir || kernel.mcDir)
                         }
+                    }
+                    Button {
+                        visible: kernel.downloadManager.busy
+                        text: I18n.tr("java.cancel")
+                        onClicked: kernel.downloadManager.cancelAll()
                     }
                 }
             }

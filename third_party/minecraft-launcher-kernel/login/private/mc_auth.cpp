@@ -53,7 +53,7 @@ static int do_auth_request(McAuthSession *session, const char *endpoint,
     mc_debug("[auth] POST %s", url);
     mc_debug("[auth] request: %s", json_body);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 30000);
 
@@ -202,7 +202,7 @@ int mc_auth_validate(McAuthSession *session) {
         "{\"accessToken\":\"%s\",\"clientToken\":\"%s\"}",
         session->access_token, session->client_token);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
 
@@ -241,7 +241,7 @@ int mc_auth_signout(const char *username, const char *password) {
         "{\"username\":\"%s\",\"password\":\"%s\"}",
         username, password);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
 
@@ -263,7 +263,7 @@ int mc_auth_invalidate(McAuthSession *session) {
         "{\"accessToken\":\"%s\",\"clientToken\":\"%s\"}",
         session->access_token, session->client_token);
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 15000);
 

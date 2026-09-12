@@ -400,7 +400,7 @@ int mc_mirror_probe(const char *mirror_type, McMirrorProbe *result) {
                                           result->mirror_type))
         return 0;
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, MC_MIRROR_PROBE_TIMEOUT_MS);
 

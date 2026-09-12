@@ -44,7 +44,7 @@
 #include <algorithm>
 #include "KernelBridge.h"
 
-// PCLCE-style download: try BMCLAPI first, then official URL, with up to 4 retry attempts and random delay
+// Mirror-first download: try translated mirror URL, then official URL, with up to 3 retry attempts and random delay
 static bool isMojangUrl(const QString &url) {
     return url.contains("piston-data.mojang.com") ||
            url.contains("piston-meta.mojang.com") ||
@@ -54,7 +54,7 @@ static bool isMojangUrl(const QString &url) {
            url.contains("resources.download.minecraft.net");
 }
 
-static bool mc_download_pclce(const char *url, const char *path, const char *sha1, long size, int timeout) {
+static bool mc_download_fallback(const char *url, const char *path, const char *sha1, long size, int timeout) {
     char mirrorUrl[2048];
     const char *urls[2];
     QByteArray mirrorBuf;
@@ -245,7 +245,7 @@ static bool forgeVersionLess(const QString &a, const QString &b)
     return false;
 }
 
-// PCL-CE style: BMCLAPI's dedicated Forge endpoint is fast and up to date
+// BMCLAPI's dedicated Forge endpoint is fast and up to date
 // (every MC version up to the latest). The mirror-translated maven-metadata
 // snapshot is stale (missing everything above 1.18), so it must not be used.
 static QStringList forgeVersionsFromBmclapi(const QString &mcVersion)
@@ -793,7 +793,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
         };
         postVerify("Post-verify");
 
-        // Retry failed files individually with fallback URLs (PCLCE pattern)
+        // Retry failed files individually with fallback URLs
         ok = 0;
         for (int i = 0; i < count; ++i) ok += results[i];
         if (ok < count) {
@@ -916,7 +916,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
                         mc_library_resolve_url(lib->name, lib->url[0] ? lib->url : nullptr, libUrl, sizeof(libUrl));
                     if (!libUrl[0]) continue;
                     mc_info("[Install] Post-check: downloading missing %s", lib->name);
-                    mc_download_pclce(libUrl, fp.toUtf8().constData(),
+                    mc_download_fallback(libUrl, fp.toUtf8().constData(),
                                       lib->sha1[0] ? lib->sha1 : nullptr, 0, 20000);
                 }
             }
@@ -959,7 +959,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
                     QDir().mkpath(QFileInfo(seedPath).absolutePath());
                     QString seedUrl = QString("https://bmclapi2.bangbang93.com/version/%1/client").arg(inheritsFrom);
                     mc_info("[Install] Pre-seeding client jar for installer: %s", seedUrl.toUtf8().constData());
-                    mc_download_pclce(seedUrl.toUtf8().constData(), seedPath.toUtf8().constData(), nullptr, 0, 30000);
+                    mc_download_fallback(seedUrl.toUtf8().constData(), seedPath.toUtf8().constData(), nullptr, 0, 30000);
                     if (!(QFileInfo::exists(seedPath) && QFileInfo(seedPath).size() > 0)) {
                         mc_warn("[Install] Client jar pre-seed failed; installer will try Mojang");
                         QFile::remove(seedPath);
@@ -1074,7 +1074,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
             mc_info("[Install] Downloading base client jar");
             McVersion *bv = new McVersion; mc_version_init(bv);
             if (mc_version_parse_file(bv, bvJson.toUtf8().constData()) && bv->client_url[0]) {
-                mc_download_pclce(bv->client_url, bvJar.toUtf8().constData(),
+                mc_download_fallback(bv->client_url, bvJar.toUtf8().constData(),
                                   bv->client_sha1, bv->client_size, 30000);
                 // A 0-byte (or SHA1-mismatched) jar must never pass as "installed":
                 // the Forge processors and ModLauncher both rely on a real client jar.
@@ -1104,7 +1104,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
                 if (!QFileInfo::exists(aip)) {
                     progress(0.82, "Downloading asset index");
                     QDir().mkpath(QFileInfo(aip).absolutePath());
-                    mc_download_pclce(bv->asset_index.url, aip.toUtf8().constData(),
+                    mc_download_fallback(bv->asset_index.url, aip.toUtf8().constData(),
                                       bv->asset_index.sha1, 0, 30000);
                 }
             }
@@ -1116,7 +1116,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
                 QString lp = QDir(QDir(mcDir).filePath("assets/logs")).filePath(fn);
                 if (!QFileInfo::exists(lp)) {
                     QDir().mkpath(QFileInfo(lp).absolutePath());
-                    mc_download_pclce(bv->logging_client_url, lp.toUtf8().constData(),
+                    mc_download_fallback(bv->logging_client_url, lp.toUtf8().constData(),
                                       bv->logging_client_sha1, 0, 30000);
                 }
             }
@@ -1135,7 +1135,7 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
 static QJsonObject httpGetJson(const QString &url)
 {
     QString translated = translateUrl(url);
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     client.timeout_ms = 120000;
     McHttpResponse *resp = mc_http_get(&client, translated.toUtf8().constData());
@@ -1160,7 +1160,7 @@ static QJsonObject httpGetJson(const QString &url)
 static QByteArray httpGetRaw(const QString &url)
 {
     QString translated = translateUrl(url);
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     client.timeout_ms = 120000;
     McHttpResponse *resp = mc_http_get(&client, translated.toUtf8().constData());
@@ -1185,7 +1185,7 @@ static QByteArray httpGetRaw(const QString &url)
 
 static QByteArray httpGetRawDirect(const QString &url)
 {
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     client.timeout_ms = 120000;
     McHttpResponse *resp = mc_http_get(&client, url.toUtf8().constData());

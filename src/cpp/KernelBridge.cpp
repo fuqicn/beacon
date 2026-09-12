@@ -161,7 +161,7 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
             s_instance->m_settingsManager->setValue("download/source", "auto");
     }
 
-    // Apply download concurrency from settings (PCL-style parallel ranges).
+    // Apply download concurrency from settings.
     s_instance->setDownloadThreads(
         s_instance->m_settingsManager->value("download/threads", 64).toInt());
 

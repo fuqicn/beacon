@@ -77,6 +77,7 @@
   "java.version": "Version Java",
   "java.downloading": "Téléchargement...",
   "java.downloadBtn": "Télécharger",
+  "java.cancel": "Annuler",
   "java.downloaded": "Java %1 téléchargé",
   "log.title": "Visionneuse de logs",
   "log.path": "Log du jeu (fin)",

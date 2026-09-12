@@ -207,12 +207,14 @@ void DownloadManager::downloadJava(int majorVersion, const QString &dir)
     QString javaDir = QDir(localDir).filePath(QStringLiteral(".runtime/java-%1").arg(majorVersion));
 
     auto *worker = new JavaDownloadWorker(majorVersion, javaDir);
+    m_activeJavaWorker = worker;
     connect(worker, &JavaDownloadWorker::progressChanged, this, &DownloadManager::onWorkerProgress);
     connect(worker, &JavaDownloadWorker::subTaskChanged, this, &DownloadManager::onWorkerSubTask);
     connect(worker, &JavaDownloadWorker::totalFilesChanged, this, &DownloadManager::onWorkerTotalFiles);
     connect(worker, &JavaDownloadWorker::completedFilesChanged, this, &DownloadManager::onWorkerCompletedFiles);
     connect(worker, &JavaDownloadWorker::finished, this, [this](bool ok, const QString &javaPath, int majorVer) {
         m_busy = false;
+        m_activeJavaWorker = nullptr;
         emit busyChanged();
         if (ok && !javaPath.isEmpty()) {
             emit javaDownloaded(majorVer, javaPath);
@@ -232,6 +234,9 @@ void DownloadManager::downloadJava(int majorVersion, const QString &dir)
     connect(m_workerThread, &QThread::started, worker, &JavaDownloadWorker::run);
     connect(worker, &JavaDownloadWorker::finished, m_workerThread, &QThread::quit);
     connect(m_workerThread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(m_workerThread, &QThread::finished, this, [this]() {
+        m_activeJavaWorker = nullptr;
+    });
     m_workerThread->start();
 }
 
@@ -241,5 +246,8 @@ void DownloadManager::cancelAll()
     m_cancelPending = true;
     if (m_activeWorker) {
         m_activeWorker->cancel();
+    }
+    if (m_activeJavaWorker) {
+        m_activeJavaWorker->cancel();
     }
 }

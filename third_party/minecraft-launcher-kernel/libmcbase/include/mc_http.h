@@ -28,17 +28,17 @@ typedef struct {
     int use_proxy;
     int timeout_ms;
     char user_agent[256];
-} McHttpClient;
+} HttpClient;
 
-void mc_http_init(McHttpClient *client);
-void mc_http_set_proxy(McHttpClient *client, const char *host, int port);
-void mc_http_set_timeout(McHttpClient *client, int timeout_ms);
+void mc_http_init(HttpClient *client);
+void mc_http_set_proxy(HttpClient *client, const char *host, int port);
+void mc_http_set_timeout(HttpClient *client, int timeout_ms);
 
-McHttpResponse *mc_http_get(McHttpClient *client, const char *url);
-McHttpResponse *mc_http_get_with_headers(McHttpClient *client, const char *url, const char **headers, int header_count);
-McHttpResponse *mc_http_post(McHttpClient *client, const char *url, const char *content_type, const unsigned char *body, size_t body_len);
-McHttpResponse *mc_http_post_json(McHttpClient *client, const char *url, const char *json_body);
-McHttpResponse *mc_http_head(McHttpClient *client, const char *url);
+McHttpResponse *mc_http_get(HttpClient *client, const char *url);
+McHttpResponse *mc_http_get_with_headers(HttpClient *client, const char *url, const char **headers, int header_count);
+McHttpResponse *mc_http_post(HttpClient *client, const char *url, const char *content_type, const unsigned char *body, size_t body_len);
+McHttpResponse *mc_http_post_json(HttpClient *client, const char *url, const char *json_body);
+McHttpResponse *mc_http_head(HttpClient *client, const char *url);
 
 void mc_http_response_free(McHttpResponse *resp);
 

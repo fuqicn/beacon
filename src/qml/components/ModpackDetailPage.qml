@@ -54,7 +54,7 @@ property var project: ({})
         return t || ""
     }
 
-// PCL-style grouping, collapse/expand and version ordering are implemented
+// Grouping, collapse/expand and version ordering are implemented
     // in C++ (VersionGroupModel) so the view only deals with display.
 
 function reloadVersions() {

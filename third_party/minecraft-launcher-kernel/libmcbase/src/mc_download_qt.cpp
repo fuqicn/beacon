@@ -178,7 +178,7 @@ static void pool_shutdown() {
         doomed.swap(g_pool_threads);
     }
     g_pool_cv.notify_all();
-    // Do NOT join â€” Qt TLS cleanup in worker threads requires a running event
+    // Do NOT join â€?Qt TLS cleanup in worker threads requires a running event
     // loop and blocks for many seconds when join is called. Detach and let the
     // OS reclaim thread resources when the process exits.
     for (auto &t : doomed)
@@ -294,7 +294,7 @@ static void clean_temp(const char *path) {
         char p[2048]; snprintf(p,sizeof(p),"%s.chunk.%d",path,i);
         QFile::remove(QString::fromUtf8(p));
     }
-    char t[2048]; snprintf(t,sizeof(t),"%s%s",path,".PCLDownloading");
+    char t[2048]; snprintf(t,sizeof(t),"%s%s",path,".downloading");
     QFile::remove(QString::fromUtf8(t));
 }
 
@@ -306,7 +306,7 @@ static int merge_file(const char *out, long long expect_size, const char *expect
     }
     if (n == 0) return 0;
 
-    char tmp[2048]; snprintf(tmp,sizeof(tmp),"%s%s",out,".PCLDownloading");
+    char tmp[2048]; snprintf(tmp,sizeof(tmp),"%s%s",out,".downloading");
     FILE *fo = fopen(tmp,"wb");
     if (!fo) { clean_temp(out); return 0; }
     long long written = 0;
@@ -386,7 +386,7 @@ static void bmclapi_throttle(const char *url) {
     auto last = g_throttle_last.load(std::memory_order_relaxed);
     auto gap = std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count();
     if (gap < 50) {
-        // Brief non-blocking sleep â€” avoids holding the CPU in a tight spin
+        // Brief non-blocking sleep â€?avoids holding the CPU in a tight spin
         std::this_thread::sleep_for(std::chrono::milliseconds(50 - (int)gap));
         now = std::chrono::steady_clock::now();
     }
@@ -484,7 +484,7 @@ static int download_piece(const char *url, const char *sink_path,
             long long idle_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - *last_activity).count();
             long long tot_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - t_start).count();
             // Abort only when the source makes NO progress at all for a sustained
-            // window (PCL BlockTimeout behavior). Slow-but-flowing sources are
+            // window (slow-transfer detection behavior). Slow-but-flowing sources are
             // allowed to run as long as bytes keep arriving.
             if (tot_ms > SLOW_GRACE_MS && idle_ms >= STALL_ABORT_MS) {
                 *slow_abort = true;
@@ -691,7 +691,7 @@ static int download_ranges(const char *url, const char *path, long size,
             long long idle_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - *last_activity).count();
             long long tot_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - t_start).count();
             // Abort only when NO range makes progress for a sustained window
-            // (PCL BlockTimeout behavior). Slow-but-flowing sources survive.
+            // (slow-transfer detection behavior). Slow-but-flowing sources survive.
             if (tot_ms > SLOW_GRACE_MS && idle_ms >= STALL_ABORT_MS) {
                 *slow_abort = true;
                 loop.quit();
@@ -868,7 +868,7 @@ static int download_one_file(const McQtBatchItem *it, long timeout_ms, ProgressR
             }
             mc_info("[DL-Q] file %s: %d pieces x %ldB", it->path, npieces, piece_len);
 
-            // NOTE: no clean_temp() here â€” valid chunks are reused across
+            // NOTE: no clean_temp() here â€?valid chunks are reused across
             // sources so a stalling mirror never costs already-fetched bytes.
             bool range_hostile = false;
             int got = download_ranges(url, it->path, it->size, npieces, piece_len, eff_timeout,

@@ -211,7 +211,7 @@ Item {
                     anchors.margins: 16
                     spacing: 16
 
-                    // Instance icon (real image; PCL-style block/loader icon or
+                    // Instance icon (real image; block/loader icon or
                     // a custom/modpack cover saved alongside the version)
                     Rectangle {
                         Layout.preferredWidth: 48

@@ -39,25 +39,25 @@ static void ensure_qt(void) {
     get_nam();
 }
 
-extern "C" void mc_http_init(McHttpClient *client) {
+extern "C" void mc_http_init(HttpClient *client) {
     if (!client) return;
-    memset(client, 0, sizeof(McHttpClient));
+    memset(client, 0, sizeof(HttpClient));
     client->timeout_ms = 30000;
     strcpy(client->user_agent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 }
 
-extern "C" void mc_http_set_proxy(McHttpClient *client, const char *host, int port) {
+extern "C" void mc_http_set_proxy(HttpClient *client, const char *host, int port) {
     if (!client || !host) return;
     strncpy(client->proxy_host, host, sizeof(client->proxy_host) - 1);
     client->proxy_port = port;
     client->use_proxy = 1;
 }
 
-extern "C" void mc_http_set_timeout(McHttpClient *client, int timeout_ms) {
+extern "C" void mc_http_set_timeout(HttpClient *client, int timeout_ms) {
     if (client) client->timeout_ms = timeout_ms > 0 ? timeout_ms : 30000;
 }
 
-static McHttpResponse *do_request(McHttpClient *client, const char *url,
+static McHttpResponse *do_request(HttpClient *client, const char *url,
     const char *method, const char *content_type, const unsigned char *body, size_t body_len,
     const char **extra_headers, int header_count)
 {
@@ -170,28 +170,28 @@ static McHttpResponse *do_request(McHttpClient *client, const char *url,
     return resp;
 }
 
-extern "C" McHttpResponse *mc_http_get(McHttpClient *client, const char *url) {
+extern "C" McHttpResponse *mc_http_get(HttpClient *client, const char *url) {
     return do_request(client, url, "GET", NULL, NULL, 0, NULL, 0);
 }
 
-extern "C" McHttpResponse *mc_http_get_with_headers(McHttpClient *client, const char *url,
+extern "C" McHttpResponse *mc_http_get_with_headers(HttpClient *client, const char *url,
     const char **headers, int header_count)
 {
     return do_request(client, url, "GET", NULL, NULL, 0, headers, header_count);
 }
 
-extern "C" McHttpResponse *mc_http_post(McHttpClient *client, const char *url,
+extern "C" McHttpResponse *mc_http_post(HttpClient *client, const char *url,
     const char *content_type, const unsigned char *body, size_t body_len)
 {
     return do_request(client, url, "POST", content_type, body, body_len, NULL, 0);
 }
 
-extern "C" McHttpResponse *mc_http_post_json(McHttpClient *client, const char *url, const char *json_body) {
+extern "C" McHttpResponse *mc_http_post_json(HttpClient *client, const char *url, const char *json_body) {
     return do_request(client, url, "POST", "application/json",
         (const unsigned char *)json_body, json_body ? strlen(json_body) : 0, NULL, 0);
 }
 
-extern "C" McHttpResponse *mc_http_head(McHttpClient *client, const char *url) {
+extern "C" McHttpResponse *mc_http_head(HttpClient *client, const char *url) {
     return do_request(client, url, "HEAD", NULL, NULL, 0, NULL, 0);
 }
 

@@ -265,8 +265,8 @@ void InstanceManager::scanInstances()
     emit instancesChanged();
 }
 
-// Detect the loader/edition state of a version instance, mirroring PCL's
-// McInstanceState so we can pick a matching block/loader icon.
+// Detect the loader/edition state of a version instance, mirroring McInstanceState
+// so we can pick a matching block/loader icon.
 static QString detectInstanceState(const QJsonObject &root, const QString &verId)
 {
     if (root["type"].toString() == "snapshot")
@@ -297,7 +297,7 @@ static QString detectInstanceState(const QJsonObject &root, const QString &verId
 
 static QString iconKeyForState(const QString &state)
 {
-    // PCL mapping: original->grass, snapshot->commandblock, old->cobblestone,
+    // State mapping: original->grass, snapshot->commandblock, old->cobblestone,
     // forge->anvil, neoforge->neoforge, fabric/quilt->fabric, optifine->grasspath,
     // fool->goldblock, else->redstoneblock.
     if (state == "snapshot") return "commandblock";

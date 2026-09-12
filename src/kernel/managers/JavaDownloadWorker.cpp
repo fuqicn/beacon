@@ -45,6 +45,13 @@ void JavaDownloadWorker::run()
     QElapsedTimer timer;
     timer.start();
 
+    // Cooperative cancel check: bail out immediately if cancellation was requested
+    if (m_cancelled.load()) {
+        mc_info("[DL-J] Java %d cancelled before start", m_majorVersion);
+        emit finished(false, QString(), m_majorVersion);
+        return;
+    }
+
     McJavaFileList list;
     memset(&list, 0, sizeof(list));
 
@@ -127,6 +134,13 @@ void JavaDownloadWorker::run()
         emit progressChanged(0.0, QStringLiteral("Downloading Java %1...").arg(m_majorVersion));
 
         for (int chunkStart = 0; chunkStart < n; chunkStart += chunkSize) {
+            // Cancel check between chunks so the user can abort a long download
+            if (m_cancelled.load()) {
+                mc_info("[DL-J] Java %d cancelled at chunk %d/%d", m_majorVersion,
+                        chunkStart, n);
+                break;
+            }
+
             int chunkEnd = std::min(chunkStart + chunkSize, n);
             int chunkCount = chunkEnd - chunkStart;
 
@@ -170,6 +184,14 @@ void JavaDownloadWorker::run()
     }
 
     mc_java_file_list_free(&list);
+
+    // If the user cancelled, report failure without deleting already-downloaded files
+    if (m_cancelled.load()) {
+        mc_info("[DL-J] Java %d cancelled by user (%d/%d files done)",
+                m_majorVersion, okFiles, total);
+        emit finished(false, QString(), m_majorVersion);
+        return;
+    }
 
     bool allOk = (okFiles >= total);
     if (!allOk) {

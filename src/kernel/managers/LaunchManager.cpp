@@ -43,7 +43,7 @@
 #include <shellapi.h>
 #endif
 
-static bool mc_download_pclce(const char *url, const char *path, const char *sha1, long size, int timeout) {
+static bool mc_download_fallback(const char *url, const char *path, const char *sha1, long size, int timeout) {
     char mirrorUrl[2048];
     const char *urls[2];
     QByteArray mirrorBuf;
@@ -79,7 +79,7 @@ static bool rawInflate(const QByteArray &in, QByteArray &out, unsigned int expec
     return true;
 }
 
-// Shorten long paths using Win32 GetShortPathNameW (like PCLCE).
+// Shorten long paths using Win32 GetShortPathNameW.
 // On Unix paths are not length-limited, so the original path is returned.
 static QString shortenPath(const QString &path, int threshold = 247)
 {
@@ -264,8 +264,7 @@ void LaunchManager::doVerifyAndLaunch()
         m_vs.ver.library_count = 0;
 }
 
-    // Handle inherits_from: resolve the whole ancestor chain recursively
-    // (PCLCE-style). Libraries from every level are merged into the struct,
+    // Handle inherits_from: resolve the whole ancestor chain recursively.
     // the deepest ancestor that owns a client jar becomes the "jar" version,
     // and when the instance JSON carries no own "arguments" (e.g. modpack
     // instances), the merged jvm/game arguments are written back into
@@ -343,7 +342,7 @@ void LaunchManager::doVerifyAndLaunch()
 
             // Collect arguments for the merge pass (deepest base first, so
             // loader-specific args such as -p / --add-opens come after the
-            // base version's own jvm args, matching PCLCE's merge order).
+            // base version's own jvm args).
             // Prepending each ancestor's batch in reverse preserves the
             // batch's internal order while keeping the base version first.
             if (!haveArgs) {
@@ -768,7 +767,7 @@ void LaunchManager::downloadMissingFiles()
     };
     postVerify("Post-verify");
 
-    // Retry failed files with PCLCE pattern
+    // Retry failed files with fallback pattern
     okCount = 0;
     for (int i = 0; i < count; ++i) okCount += results[i];
     if (okCount < count) {
@@ -1203,7 +1202,7 @@ void LaunchManager::doLaunch()
     // When the effective version uses the Java module path (e.g. Forge's
     // BootstrapLauncher), the base version's redundant "-cp ${classpath}"
     // argument must be dropped; the real classpath is delivered through
-    // classpath.txt / -DlegacyClassPath.file (PCLCE does the same).
+    // classpath.txt / -DlegacyClassPath.file.
     if (useModulePath) {
         QStringList filtered;
         filtered.reserve(verJvmArgs.size());

@@ -92,7 +92,7 @@ int mc_asset_index_fetch(McAssetIndex *idx, McVersion *v, const char *mc_dir) {
     }
 
     mc_info("Fetching asset index: %s", index_url);
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 30000);
     McHttpResponse *resp = mc_http_get(&client, index_url);

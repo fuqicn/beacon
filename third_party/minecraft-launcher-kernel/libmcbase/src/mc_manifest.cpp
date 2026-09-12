@@ -148,7 +148,7 @@ int mc_manifest_fetch_mirror(McManifest *m, int force_refresh, const char *mirro
     };
     int nm = 3;
 
-    McHttpClient client;
+    HttpClient client;
     mc_http_init(&client);
     mc_http_set_timeout(&client, 30000);
 

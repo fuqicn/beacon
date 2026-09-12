@@ -159,7 +159,7 @@ public:
     Q_INVOKABLE void setDownloadSource(const QString &source);
 
     // Game directory for an instance: rootDir when version isolation is off,
-    // otherwise rootDir/versions/<versionId> (PCL-style isolation). Old data
+    // otherwise rootDir/versions/<versionId>. Old data
     // under rootDir/instances/<versionId> is migrated on first access.
     Q_INVOKABLE QString gameDirFor(const QString &rootDir, const QString &versionId) const;
     Q_INVOKABLE void setInstanceIsolation(const QString &versionId, bool override, bool enabled);

@@ -26,6 +26,7 @@
 #include <mc_java_dl.h>
 
 class QThread;
+class JavaDownloadWorker;
 
 class JavaManager : public QObject
 {
@@ -47,6 +48,7 @@ public:
     Q_INVOKABLE QVariantMap findBest() const;
     Q_INVOKABLE void findJavaAsync();
     Q_INVOKABLE void downloadJava(int majorVersion);
+    Q_INVOKABLE void cancelDownloadJava();
 
 signals:
     void runtimesChanged();
@@ -64,6 +66,7 @@ private:
     bool m_searching = false;
     QString m_runtimeDir;
     QThread *m_workerThread = nullptr;
+    JavaDownloadWorker *m_activeJavaWorker = nullptr;
 };
 
 #endif

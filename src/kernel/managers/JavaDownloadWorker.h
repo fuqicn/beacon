@@ -21,6 +21,7 @@
 
 #include <QObject>
 #include <QString>
+#include <atomic>
 
 // Downloads a Java runtime into targetDir (the "java-<major>" folder).
 // Runs inside a dedicated QThread; emits progress + a single finished signal.
@@ -30,6 +31,8 @@ class JavaDownloadWorker : public QObject
 public:
     explicit JavaDownloadWorker(int majorVersion, const QString &targetDir,
                                 QObject *parent = nullptr);
+
+    void cancel() { m_cancelled = true; }
 
 public slots:
     void run();
@@ -44,6 +47,7 @@ signals:
 private:
     int m_majorVersion;
     QString m_targetDir;
+    std::atomic<bool> m_cancelled{false};
 };
 
 #endif

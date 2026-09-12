@@ -146,20 +146,38 @@ void JavaManager::downloadJava(int majorVersion)
         return;
     }
 
+    // Clear any stale global cancel left by a previous cancelled download so
+    // this fresh download does not immediately fail-fast on every piece.
+    // (Mirrors DownloadManager which clears m_cancelPending at start.)
+    mc_qt_download_set_cancel(false);
+
     // Stop any previous download worker to avoid multi-thread race and UI freeze.
     // If the previous download was cancelled, clean up its partial files.
     // Never terminate: the kernel manifest fetch spawns std::threads that would
     // crash if the QThread were force-killed mid-join.
+    //
+    // The global cancel flag is shared across every download module, so a stale
+    // "cancelled" state left by a previous (or concurrently cancelled) task
+    // makes every in-flight piece fail-fast and the download stalls at 0%.
+    // Pair a cancel here so this fresh download starts clean, mirroring
+    // DownloadManager which clears m_cancelPending at start.
+    if (mc_qt_download_cancel())
+        mc_qt_download_set_cancel(false);
+
     if (m_workerThread) {
         bool prevCancelled = m_cancelled;
         QString prevDir = m_activeJavaWorker ? m_activeJavaWorker->targetDir() : QString();
         if (m_activeJavaWorker) m_activeJavaWorker->cancel();
         m_activeJavaWorker = nullptr;
+        // Mark a pending release of the global flag; the finishing worker will
+        // clear it once all its in-flight pieces have bailed out.
+        mc_qt_download_set_cancel(true);
         m_workerThread->quit();
         if (!m_workerThread->wait(5000))
             m_workerThread->wait(5000);
         delete m_workerThread;
         m_workerThread = nullptr;
+        mc_qt_download_set_cancel(false);
         if (prevCancelled && !prevDir.isEmpty())
             QDir(prevDir).removeRecursively();
     }

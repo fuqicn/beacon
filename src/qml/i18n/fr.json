@@ -77,6 +77,7 @@
   "tools.memOpt.confirmText": "La récupération de la mémoire figera brièvement l'interface (quelques secondes) et interrompra tout téléchargement/analyse en cours.\n\nContinuer ?",
   "tools.memOpt.optimizing": "Récupération de la mémoire...",
   "tools.memOpt.done": "Optimisation mémoire terminée",
+  "tools.javaDownloadDesc": "Choisir et télécharger un runtime Java",
   "tools.logSub": "Visionneuse de logs",
   "java.download": "Télécharger Java",
   "java.version": "Version Java",

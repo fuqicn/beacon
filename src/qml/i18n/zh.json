@@ -77,6 +77,7 @@
   "tools.memOpt.confirmText": "执行内存回收会导致启动器界面短暂冻结（约数秒），且正在进行的下载/搜索会中断。\n\n确定继续吗？",
   "tools.memOpt.optimizing": "正在回收内存...",
   "tools.memOpt.done": "内存优化完成",
+  "tools.javaDownloadDesc": "选择并下载 Java 运行时",
   "java.download": "下载 Java",
   "java.version": "Java 版本",
   "java.downloading": "下载中...",

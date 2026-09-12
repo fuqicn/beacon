@@ -62,6 +62,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QSysInfo>
 #include <memory>
 #include <QJsonDocument>
@@ -1144,23 +1145,44 @@ void KernelBridge::qmlCollectGarbage()
 }
 
 // Manual "launcher memory optimization". The user explicitly confirmed this, so
-// we run a heavier, blocking reclaim: trim the QML component cache, collect
-// QML garbage, clear the global pixmap cache, and drop the QML engine's
-// cached compiled units. This intentionally blocks the GUI thread briefly (the
-// same kind of short freeze the Java download used to cause) in exchange for
-// releasing accumulated memory. It is only ever called from an explicit click.
+// we run a short blocking task on the GUI thread that intentionally lags the
+// UI for ~1.5 s (reproducing the lagging, briefly-frozen feel of the old
+// Java-download bug: the window keeps existing but becomes unresponsive for a
+// moment) while doing real reclamation work: repeatedly trimming the QML
+// component cache, forcing QML GC and clearing the pixmap cache. The blocking
+// happens with no event pumping, which is what creates the stutter. It is
+// only ever called from an explicit user click.
 void KernelBridge::launcherMemoryOptimize()
 {
     mc_info("[Bridge] launcherMemoryOptimize start");
     QElapsedTimer t;
     t.start();
 
-    if (m_engine) {
-        m_engine->trimComponentCache();
-        m_engine->collectGarbage();
-    }
+    auto reclaimOnce = [this]() {
+        if (m_engine) {
+            m_engine->trimComponentCache();
+            m_engine->collectGarbage();
+        }
+        QPixmapCache::clear();
+    };
 
-    QPixmapCache::clear();
+    reclaimOnce();
+
+    // Intentional blocking task: stall the GUI thread for a bounded window
+    // WITHOUT pumping events, reproducing the historical Java-download lag
+    // (window stays up but the UI is briefly frozen). Reclaim is repeated in
+    // small slices so actual memory is returned during the stall.
+    const qint64 windowMs = 1500;
+    QElapsedTimer budget;
+    budget.start();
+    while (budget.elapsed() < windowMs) {
+        for (int i = 0; i < 4; ++i)
+            reclaimOnce();
+        // Busy-wait slice so the window is visible (not a hard sleep that
+        // would let other threads steal CPU), mirroring the nested-loop
+        // stutter of the old bug.
+        QThread::msleep(10);
+    }
 
     mc_info("[Bridge] launcherMemoryOptimize done in %lldms", (long long)t.elapsed());
 }

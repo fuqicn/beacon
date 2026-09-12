@@ -77,6 +77,7 @@
   "tools.memOpt.confirmText": "メモリ解放を実行すると、起動器のUIが数秒間フリーズし、進行中のダウンロード/検索が中断されます。\n\n続行しますか？",
   "tools.memOpt.optimizing": "メモリ解放中...",
   "tools.memOpt.done": "メモリ最適化完了",
+  "tools.javaDownloadDesc": "Java ランタイムを選択してダウンロード",
   "tools.logSub": "ログ表示",
   "java.download": "Java をダウンロード",
   "java.version": "Java バージョン",

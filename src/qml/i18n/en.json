@@ -77,6 +77,7 @@
   "tools.memOpt.confirmText": "Reclaiming memory will briefly freeze the launcher UI (a few seconds) and interrupt any in-progress download/search.\n\nContinue?",
   "tools.memOpt.optimizing": "Reclaiming memory...",
   "tools.memOpt.done": "Memory optimization complete",
+  "tools.javaDownloadDesc": "Pick and download a Java runtime",
   "java.download": "Download Java",
   "java.version": "Java version",
   "java.downloading": "Downloading...",

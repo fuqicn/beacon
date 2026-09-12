@@ -185,10 +185,11 @@ void JavaDownloadWorker::run()
 
     mc_java_file_list_free(&list);
 
-    // If the user cancelled, report failure without deleting already-downloaded files
+    // If the user cancelled, clean up partial files and report failure
     if (m_cancelled.load()) {
-        mc_info("[DL-J] Java %d cancelled by user (%d/%d files done)",
+        mc_info("[DL-J] Java %d cancelled by user, removing partial files (%d/%d done)",
                 m_majorVersion, okFiles, total);
+        QDir(javaDir).removeRecursively();
         emit finished(false, QString(), m_majorVersion);
         return;
     }

@@ -156,14 +156,14 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
             s_instance->m_settingsManager->setValue("system/animations",
                                                      sys.value("animations", true));
         if (!s_instance->m_settingsManager->contains("download/threads"))
-            s_instance->m_settingsManager->setValue("download/threads", 64);
+            s_instance->m_settingsManager->setValue("download/threads", 8);
         if (!s_instance->m_settingsManager->contains("download/source"))
             s_instance->m_settingsManager->setValue("download/source", "auto");
     }
 
     // Apply download concurrency from settings.
     s_instance->setDownloadThreads(
-        s_instance->m_settingsManager->value("download/threads", 64).toInt());
+        s_instance->m_settingsManager->value("download/threads", 8).toInt());
 
     // Apply download source (mirror) selection.
     s_instance->setDownloadSource(

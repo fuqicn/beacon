@@ -52,8 +52,20 @@ static void build_adoptium_url(int major_ver, char *out, size_t out_size) {
 }
 
 // Concurrently fetch Java runtime manifest from all available sources and
-// return the first successful result. Sources are tried in parallel with a
-// 5s timeout each so a slow mirror never blocks the fast one.
+// return the first successful result. Sources run in parallel; the caller
+// returns as soon as any source succeeds. If all fail, returns after the
+// slowest source times out.
+//
+// Key design points:
+//   - done flag: set by the first successful source, unblocks the caller.
+//   - cancelled flag: set by the winner so other in-flight sources skip
+//     processing (they still finish their HTTP request but do nothing
+//     after). This avoids holding resources unnecessarily.
+//   - active counter: used in the wait predicate as a safety net — if all
+//     sources fail, active drops to 0 and the predicate becomes true,
+//     preventing the caller from blocking forever.
+//   - Thread join has a 6s deadline per thread to avoid blocking the
+//     process shutdown path.
 int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileList *list) {
     memset(list, 0, sizeof(*list));
 
@@ -75,23 +87,26 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
         sources.push_back({adoptium_url, "adoptium"});
     }
 
-    // Concurrent fetch: each source runs in its own thread.
-    // First successful result wins.
+    // Synchronisation primitives.
+    // done       — set true by the first successful source.
+    // cancelled  — set true by the winner so losers skip post-request work.
+    // active     — counts in-flight sources; decremented on exit.
     std::mutex result_mtx;
     std::condition_variable result_cv;
     std::atomic<bool> done{false};
-    std::atomic<int> active{0};
+    std::atomic<bool> cancelled{false};
+    std::atomic<int> active{(int)sources.size()};
     McHttpResponse *win_resp = nullptr;
     const char *win_name = nullptr;
 
     auto try_source = [&](const Source &src) {
-        active.fetch_add(1);
         HttpClient client;
         mc_http_init(&client);
         mc_http_set_timeout(&client, 5000);
         McHttpResponse *resp = mc_http_get(&client, src.url);
         bool ok = resp && resp->success && resp->data;
-        if (ok) {
+        if (ok && !cancelled.exchange(true)) {
+            // Winner: claim the response and unblock the caller.
             std::lock_guard<std::mutex> lk(result_mtx);
             if (!done.exchange(true)) {
                 win_resp = resp;
@@ -103,7 +118,8 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
         } else {
             if (resp) mc_http_response_free(resp);
         }
-        active.fetch_sub(1);
+        if (active.fetch_sub(1) == 1)
+            result_cv.notify_all();  // last thread finished — wake caller
     };
 
     std::vector<std::thread> threads;
@@ -111,12 +127,27 @@ int mc_java_download_manifest(int major_version, const char *mirror, McJavaFileL
     for (auto &src : sources)
         threads.emplace_back(try_source, std::cref(src));
 
-    // Wait for first success or all failures
+    // Wait until: (a) a source succeeded, OR (b) all sources finished (done
+    // may still be false if every source failed).  Predicate covers both.
     {
         std::unique_lock<std::mutex> lk(result_mtx);
-        result_cv.wait(lk, [&] { return done.load(); });
+        result_cv.wait(lk, [&] { return done.load() || active.load() == 0; });
     }
-    for (auto &t : threads) t.join();
+
+    // Join all threads with a global deadline so shutdown is bounded.
+    // join_for is C++20; use sleep+try_join pattern for C++17.
+    auto join_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+    for (auto &t : threads) {
+        if (!t.joinable()) continue;
+        while (t.joinable()) {
+            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                join_deadline - std::chrono::steady_clock::now());
+            if (remaining <= std::chrono::milliseconds(0)) { t.detach(); break; }
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            if (!t.joinable()) break;
+        }
+        if (t.joinable()) t.detach();
+    }
 
     if (!win_resp) {
         mc_error("Failed to fetch Java runtime manifest from any source");

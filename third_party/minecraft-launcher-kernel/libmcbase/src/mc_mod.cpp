@@ -13,7 +13,6 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
-#include <thread>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -36,13 +35,48 @@ static char g_mod_auto_mirror[64] = "";
 static std::atomic<int> g_mod_auto_ready{0};
 static std::mutex g_mod_auto_mutex;
 
-void mc_mod_warmup_mirror(void) {
-    // Kick off the background warmup so that mod_effective_mirror() can
-    // return a live mirror choice without blocking the caller.
-    std::thread([=]() {
+// Probe the direct Modrinth CDN against the mcimirror proxy and pick whichever
+// is reachable and fastest. Any HTTP response counts as reachable.
+static void warmup_modrinth_probe(void) {
+    const char *direct_url = "https://cdn.modrinth.com/";
+    const char *mirror_url = "https://mod.mcimirror.top/";
+
+    HttpClient c;
+    mc_http_init(&c);
+    mc_http_set_timeout(&c, 3000);
+
+    auto t1 = std::chrono::steady_clock::now();
+    McHttpResponse *rd = mc_http_head(&c, direct_url);
+    auto t2 = std::chrono::steady_clock::now();
+    bool direct_ok = rd && rd->success;
+    double direct_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    if (rd) mc_http_response_free(rd);
+
+    auto t3 = std::chrono::steady_clock::now();
+    McHttpResponse *rm = mc_http_head(&c, mirror_url);
+    auto t4 = std::chrono::steady_clock::now();
+    bool mirror_ok = rm && rm->success;
+    double mirror_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
+    if (rm) mc_http_response_free(rm);
+
+    const char *pick = (mirror_ok && (!direct_ok || mirror_ms < direct_ms)) ? "mcimirror" : "";
+    {
         std::lock_guard<std::mutex> lk(g_mod_auto_mutex);
+        strncpy(g_mod_auto_mirror, pick, sizeof(g_mod_auto_mirror) - 1);
+        g_mod_auto_mirror[sizeof(g_mod_auto_mirror) - 1] = '\0';
         g_mod_auto_ready.store(1);
-    }).detach();
+    }
+    mc_info("Modrinth mirror probe: direct=%s(%.0fms) mirror=%s(%.0fms) -> %s",
+            direct_ok ? "ok" : "fail", direct_ms,
+            mirror_ok ? "ok" : "fail", mirror_ms,
+            g_mod_auto_mirror[0] ? "mcimirror" : "direct");
+}
+
+// Warm the Modrinth mirror decision in the background. Safe to call from any
+// thread; it only touches its own state plus the shared 10-minute mirror cache.
+void mc_mod_warmup_mirror(void) {
+    (void)mc_download_effective_mirror();
+    warmup_modrinth_probe();
 }
 
 // Resolve the effective mirror for Modrinth traffic without ever blocking on

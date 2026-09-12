@@ -41,10 +41,12 @@ JavaDownloadWorker::JavaDownloadWorker(int majorVersion, const QString &targetDi
 
 void JavaDownloadWorker::run()
 {
-    // Run on a plain worker thread: block on the pool future instead of
-    // pumping the Qt event loop, which is not safe from a non-main thread
-    // and would freeze the UI or crash with a nested processEvents.
-    mc_qt_download_thread_no_pump(1);
+    // Keep the normal Qt event-pump path (do NOT set no_pump here, unlike the
+    // headless modpack workers): mc_java_download_manifest spawns std::threads
+    // that run nested QEventLoop + thread-local QNAM, which is incompatible
+    // with the no_pump sleep-poll mode and deadlocks when the GUI main event
+    // loop is active. DownloadWorker (Minecraft) also leaves pumping enabled.
+    mc_qt_download_thread_no_pump(0);
 
     mc_info("[DL-J] Worker started: ver=%d dir=%s",
             m_majorVersion, m_targetDir.toUtf8().constData());

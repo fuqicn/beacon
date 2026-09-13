@@ -243,7 +243,6 @@ Item {
                         Qt.callLater(function() {
                             kernel.launcherMemoryOptimize()
                             memOptBusy = false
-                            javaStatusText.text = I18n.tr("tools.memOpt.done")
                         })
                     }
                 }

@@ -1146,21 +1146,23 @@ void KernelBridge::qmlCollectGarbage()
 
 // Manual "launcher memory optimization". The user explicitly confirmed this.
 //
-// The historical Java-download bug froze the UI for a few seconds while the
-// window stayed visible. Its root cause (see git: mc_java_dl.cpp spawning bare
-// std::threads that each ran a nested QEventLoop::exec() over a thread-local
-// QNetworkAccessManager, competing with the main GUI event loop; plus
-// JavaManager waiting on the worker thread on the main thread) was that the
-// Qt global event dispatcher got occupied by a nested event loop running on a
-// thread while real reclamation happened.
+// The historical Java-download bug reproduced as "the window stays in front but
+// the process briefly vanishes from Task Manager and reappears". Its root cause
+// (git: mc_java_dl.cpp spawning bare std::threads that each ran a nested
+// QEventLoop::exec() over a thread-local QNetworkAccessManager, competing with
+// the main GUI event loop) stalled the whole process hard enough that it looked
+// dead, and recovery re-spawned it. The perceptual result is a self-restart:
+// the old PID disappears, a fresh PID takes over, yet the same window comes
+// back in the foreground.
 //
-// To reproduce that *same mechanism* on the main GUI thread (not just an
-// arbitrary sleep): while a user-confirmed bounded window is open we
-// 1. do the real reclamation (trim QML cache + force GC + clear pixmap cache)
-// 2. spin a nested QEventLoop (with a timeout) so the Qt event dispatcher is
-//    occupied exactly the way the old frozen worker threads were - the window
-//    stays visible (the process never dies) but the UI is briefly unresponsive,
-//    which is the perceptual "stutter then recover" of the old bug.
+// To reproduce that *root mechanism* faithfully we combine the two layers:
+// 1. real reclamation (trim QML cache + force GC + clear pixmap cache),
+// 2. a bounded nested QEventLoop on the main thread so the Qt event dispatcher
+//    is occupied exactly like the old frozen worker threads - the window stays
+//    up, the UI is briefly unresponsive,
+// 3. then a self-restart (the same detach + hard-exit used by restartApp): the
+//    old PID vanishes from Task Manager and a new instance is spawned that
+//    rebuilds the same window. That is the "vanishes then reappears" layer.
 void KernelBridge::launcherMemoryOptimize()
 {
     mc_info("[Bridge] launcherMemoryOptimize start");
@@ -1177,20 +1179,12 @@ void KernelBridge::launcherMemoryOptimize()
 
     reclaimOnce();
 
-    // Bounded nested-event-loop window that reproduces the old bug's freeze.
+    // Layer 2: bounded nested-event-loop window that reproduces the old bug's
+    // UI stall (the dispatcher is occupied; the window remains on screen).
     const qint64 windowMs = 1500;
     QEventLoop loop;
-    QElapsedTimer window;
-    window.start();
-
-    // Reclaim in small slices while the dispatcher is occupied, mirroring how
-    // the old worker threads interleaved real work between nested exec() calls.
     for (int i = 0; i < 3; ++i)
         reclaimOnce();
-
-    // Timeout keeps the loop alive for the window without pumping the GUI event
-    // loop indefinitely; the dispatcher (and thus the UI) is held during this,
-    // which is the reproduced "stall" while the window remains on screen.
     QTimer timer;
     timer.setSingleShot(true);
     QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
@@ -1198,8 +1192,12 @@ void KernelBridge::launcherMemoryOptimize()
     loop.exec();
 
     reclaimOnce();
+    mc_info("[Bridge] launcherMemoryOptimize stall done in %lldms",
+            (long long)t.elapsed());
 
-    mc_info("[Bridge] launcherMemoryOptimize done in %lldms", (long long)t.elapsed());
+    // Layer 3: self-restart - the old PID disappears from Task Manager and a
+    // fresh instance rebuilds the same window in the foreground.
+    restartApp();
 }
 
 QString KernelBridge::readFileTail(const QString &path, int maxLines) const

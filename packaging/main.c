@@ -20,6 +20,7 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <shellapi.h>
+#include <dwmapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,8 +82,9 @@ static void init_lang(void) {
     }
 }
 
+static HINSTANCE g_hInst = NULL;
+
 static HWND g_hWnd = NULL;
-static HWND g_hProgress = NULL;
 static HWND g_hLabel = NULL;
 static int g_progress_pos = 0;
 
@@ -91,21 +93,82 @@ static int g_progress_pos = 0;
 enum { PHASE_EXTRACT = 0, PHASE_LAUNCH = 1, PHASE_DONE = 2 };
 static int g_phase = PHASE_EXTRACT;
 
-static void CALLBACK progress_tick(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
+/* Timer tick: advance the position by one per ~30 ms, then invalidate the
+   dialog's client area so WM_PAINT redraws the bar. */
+static void CALLBACK progress_timer(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
     (void)hwnd; (void)uMsg; (void)idEvent; (void)dwTime;
-    if (!g_hProgress) return;
     if (g_phase == PHASE_EXTRACT) {
         if (g_progress_pos < 90) g_progress_pos += 1;
     } else if (g_phase == PHASE_LAUNCH) {
         if (g_progress_pos < 98) g_progress_pos += 1;
     }
-    SendMessageA(g_hProgress, PBM_SETPOS, (WPARAM)g_progress_pos, 0);
+    if (g_hWnd)
+        InvalidateRect(g_hWnd, NULL, FALSE);
 }
 
 static void set_progress(int pos) {
     g_progress_pos = pos;
-    if (g_hProgress) SendMessageA(g_hProgress, PBM_SETPOS, (WPARAM)pos, 0);
+    if (g_hWnd)
+        InvalidateRect(g_hWnd, NULL, FALSE);
+}
+
+/* The modern accent (Win10/11 window-frame) color, falling back to the
+   standard highlight color on older systems. */
+static COLORREF accent_color(void) {
+    COLORREF c = (COLORREF)GetSysColor(COLOR_HIGHLIGHT);
+    HWND fore = GetForegroundWindow();
+    if (fore) {
+        COLORREF attr = 0;
+        /* DWMWA_COLOR_WINDOW = 33; query the modern accent (Win10/11) which
+           reflects the user's system accent. Falls back to COLOR_HIGHLIGHT
+           on older systems or when the value is unavailable. */
+        if (DwmGetWindowAttribute(fore, 33, &attr, sizeof(attr)) == S_OK
+            && attr != 0)
+            c = attr;
+    }
+    return c;
+}
+
+/* Draw a flat, rounded progress bar at the bottom of the dialog's client
+   area. The classic comctl32 progress control renders segmented blocks; a
+   custom GDI rounded-rect bar matches the modern WinUI3 style the launcher
+   itself uses. */
+static void paint_progress(HWND hwnd) {
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint(hwnd, &ps);
+    FillRect(hdc, &ps.rcPaint, (HBRUSH)GetSysColorBrush(COLOR_WINDOW));
+
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    int barW = rc.right - rc.left;
+    int barH = 6;
+    int barY = rc.bottom - barH - 26;
+    int radius = barH / 2;
+
+    /* Track (a hairline border + the surface color) */
+    HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
+    HGDIOBJ oldBrush = SelectObject(hdc, (HBRUSH)GetSysColorBrush(COLOR_BTNSHADOW));
+    RoundRect(hdc, 0, barY, barW, barY + barH, radius, radius);
+    HBRUSH surface = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
+    SelectObject(hdc, surface);
+    RoundRect(hdc, 1, barY + 1, barW - 1, barY + barH - 1, radius, radius);
+    DeleteObject(surface);
+    SelectObject(hdc, oldBrush);
+
+    /* Fill */
+    if (g_progress_pos > 0) {
+        int fillRight = (int)((DWORD)g_progress_pos * (barW - 2) / 100) + 1;
+        if (fillRight > barW - 1) fillRight = barW - 1;
+        HBRUSH fill = CreateSolidBrush(accent_color());
+        SelectObject(hdc, fill);
+        RoundRect(hdc, 1, barY + 1, fillRight, barY + barH - 1, radius, radius);
+        DeleteObject(fill);
+    }
+
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    EndPaint(hwnd, &ps);
 }
 
 /* Source is UTF-8; Windows GUI text APIs need UTF-16. */
@@ -167,19 +230,60 @@ static void log_msg(const char *fmt, ...) {
     }
 }
 
-static HWND create_dialog(HINSTANCE hInst) {
-    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_PROGRESS_CLASS };
-    InitCommonControlsEx(&icc);
+static HWND g_hDialog = NULL;
+static HFONT g_hDialogFont = NULL;
 
+/* The progress dialog's window proc: forward every message to DefWindowProc
+   except WM_PAINT, which draws the flat, rounded progress bar itself. */
+static LRESULT CALLBACK progress_wnd_proc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
+    switch (msg) {
+    case WM_PAINT:
+        paint_progress(hwnd);
+        return 0;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_DESTROY:
+        KillTimer(hwnd, 1);
+        if (g_hDialogFont) { DeleteObject(g_hDialogFont); g_hDialogFont = NULL; }
+        break;
+    default:
+        break;
+    }
+    return DefWindowProcA(hwnd, msg, w, l);
+}
+
+static HWND create_dialog(HINSTANCE hInst) {
+    g_hInst = hInst;
     int dlgW = 380, dlgH = 120;
     int scrW = GetSystemMetrics(SM_CXSCREEN);
     int scrH = GetSystemMetrics(SM_CYSCREEN);
 
-    HWND hWnd = CreateWindowExA(0, "STATIC", L_TITLE,
+    /* Register a custom window class so we own WM_PAINT for the whole dialog
+       and can draw the rounded bar; the system STATIC class paints its own
+       background and would fight us. The label is a child STATIC control, so
+       only the parent needs the custom proc. */
+    static int s_registered = 0;
+    if (!s_registered) {
+        WNDCLASSEXW wc = {0};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = progress_wnd_proc;
+        wc.hInstance = hInst;
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        wc.lpszClassName = L"BeaconProgress";
+        wc.hIcon = LoadIconA(hInst, MAKEINTRESOURCE(IDI_BEACON_ICON));
+        if (RegisterClassExW(&wc))
+            s_registered = 1;
+    }
+
+    const wchar_t *wTitle = L"Beacon Launcher";
+    HWND hWnd = CreateWindowExW(0, L"BeaconProgress", wTitle,
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
         (scrW - dlgW) / 2, (scrH - dlgH) / 2, dlgW, dlgH,
         NULL, NULL, hInst, NULL);
     if (!hWnd) return NULL;
+
+    g_hDialog = hWnd;
 
     HICON hIcon = LoadIconA(hInst, MAKEINTRESOURCE(IDI_BEACON_ICON));
     if (hIcon) {
@@ -187,11 +291,14 @@ static HWND create_dialog(HINSTANCE hInst) {
         SendMessageA(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
     }
 
-    HFONT hFont = CreateFontA(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    HFONT hFont = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                               CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, "Microsoft YaHei");
-    if (hFont) SendMessageA(hWnd, WM_SETFONT, (WPARAM)hFont, TRUE);
+                              DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+    if (hFont) {
+        SendMessageA(hWnd, WM_SETFONT, (WPARAM)hFont, TRUE);
+        g_hDialogFont = hFont;
+    }
 
     wchar_t *wReady = utf8_to_wide(L_READY);
     g_hLabel = CreateWindowExW(0, L"STATIC", wReady,
@@ -201,15 +308,7 @@ static HWND create_dialog(HINSTANCE hInst) {
     free(wReady);
     if (hFont && g_hLabel) SendMessageA(g_hLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
 
-    g_hProgress = CreateWindowExA(0, PROGRESS_CLASS, "",
-        WS_CHILD | WS_VISIBLE,
-        12, 60, dlgW - 24, 18,
-        hWnd, NULL, hInst, NULL);
-    if (g_hProgress) {
-        SendMessageA(g_hProgress, PBM_SETRANGE32, 0, 100);
-        SendMessageA(g_hProgress, PBM_SETPOS, 0, 0);
-        SetTimer(hWnd, 1, 30, progress_tick);
-    }
+    SetTimer(hWnd, 1, 30, progress_timer);
 
     ShowWindow(hWnd, SW_SHOW);
     UpdateWindow(hWnd);

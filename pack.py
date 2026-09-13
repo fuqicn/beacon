@@ -319,9 +319,9 @@ def _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin):
              "/DWIN32", "/D_WINDOWS", "/D_NDEBUG",
              "/I" + str(msvc["cl"].parent.parent.parent.parent / "include"),
              str(packaging / "main.c"), str(res),
-             "/link", "/SUBSYSTEM:WINDOWS",
-             "shell32.lib", "user32.lib", "gdi32.lib", "comctl32.lib",
-             "/OUT:" + str(launcher)])
+              "/link", "/SUBSYSTEM:WINDOWS",
+              "shell32.lib", "user32.lib", "gdi32.lib", "comctl32.lib", "dwmapi.lib",
+              "/OUT:" + str(launcher)])
         log("compiled launcher with MSVC: %s" % launcher)
     else:
         # mingw fallback (local dev without VS)
@@ -343,7 +343,7 @@ def _build_launcher(packaging, pack_tmp, dist, msvc, mingw_bin):
         res = pack_tmp / "beacon.res"
         run([str(windres), "-O", "coff", str(packaging / "beacon.rc"), "-o", str(res)])
         run([str(gcc), str(packaging / "main.c"), str(res), "-o", str(launcher),
-             "-lshell32", "-luser32", "-lgdi32", "-lcomctl32", "-O2", "-s", "-mwindows"])
+             "-lshell32", "-luser32", "-lgdi32", "-lcomctl32", "-ldwmapi", "-O2", "-s", "-mwindows"])
         log("compiled launcher with mingw: %s" % launcher)
 
     return launcher

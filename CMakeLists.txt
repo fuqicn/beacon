@@ -267,6 +267,7 @@ if(WIN32)
         user32
         gdi32
         comctl32
+        dwmapi
     )
     target_compile_definitions(BeaconLauncher PRIVATE
         WIN32

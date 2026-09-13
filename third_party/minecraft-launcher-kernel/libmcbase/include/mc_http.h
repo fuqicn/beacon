@@ -42,6 +42,11 @@ McHttpResponse *mc_http_head(HttpClient *client, const char *url);
 
 void mc_http_response_free(McHttpResponse *resp);
 
+// Free the calling thread's thread-local QNetworkAccessManager. Call this from
+// a bare std::thread after its mc_http_* work so the thread's TLS does not
+// keep a live NAM (and its 100ms Qt timer) running after the thread exits.
+void mc_http_release_thread_resources(void);
+
 void mc_http_sleep(int ms);
 
 #ifdef __cplusplus

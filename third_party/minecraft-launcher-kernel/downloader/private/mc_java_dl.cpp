@@ -350,6 +350,10 @@ int mc_java_download_manifest_legacy(int major_version, const char *mirror, McJa
         } else {
             if (resp) mc_http_response_free(resp);
         }
+        // Drop this bare thread's thread-local QNetworkAccessManager so it is
+        // not leaked in TLS after the thread exits (which would keep Qt's
+        // 100ms network timer firing and pin CPU in the background).
+        mc_http_release_thread_resources();
         if (active.fetch_sub(1) == 1)
             result_cv.notify_all();
     };
@@ -364,18 +368,11 @@ int mc_java_download_manifest_legacy(int major_version, const char *mirror, McJa
         result_cv.wait(lk, [&] { return done.load() || active.load() == 0; });
     }
 
-    auto join_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
-    for (auto &t : threads) {
-        if (!t.joinable()) continue;
-        while (t.joinable()) {
-            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-                join_deadline - std::chrono::steady_clock::now());
-            if (remaining <= std::chrono::milliseconds(0)) { t.detach(); break; }
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            if (!t.joinable()) break;
-        }
-        if (t.joinable()) t.detach();
-    }
+    // Now that every thread has signalled completion (active == 0 above), a
+    // plain join() always returns - no detached threads are left behind.
+    for (auto &t : threads)
+        if (t.joinable())
+            t.join();
 
     if (!win_resp) {
         mc_error("Failed to fetch Java runtime manifest from any source (legacy)");

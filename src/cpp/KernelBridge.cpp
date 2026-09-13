@@ -26,6 +26,7 @@
 #include "LaunchManager.h"
 #include "InstanceManager.h"
 #include "SettingsManager.h"
+#include "LauncherMemoryOptimizer.h"
 
 #include <QDir>
 #include <QFile>
@@ -1146,58 +1147,39 @@ void KernelBridge::qmlCollectGarbage()
 
 // Manual "launcher memory optimization". The user explicitly confirmed this.
 //
-// The historical Java-download bug reproduced as "the window stays in front but
-// the process briefly vanishes from Task Manager and reappears". Its root cause
-// (git: mc_java_dl.cpp spawning bare std::threads that each ran a nested
-// QEventLoop::exec() over a thread-local QNetworkAccessManager, competing with
-// the main GUI event loop) stalled the whole process hard enough that it looked
-// dead, and recovery re-spawned it. The perceptual result is a self-restart:
-// the old PID disappears, a fresh PID takes over, yet the same window comes
-// back in the foreground.
+// The historical Java-download bug froze the GUI while fetching the Java
+// runtime manifest. Its root cause was the kernel's *concurrent* manifest
+// fetch (now preserved as mc_java_download_manifest_legacy): it spawned a
+// bare std::thread per candidate source, each running mc_http_get - a nested
+// QEventLoop::exec() over a thread-local QNetworkAccessManager. Those bare
+// threads compete with the main GUI event loop over Qt's global
+// (non-thread-safe) event dispatcher, stalling the whole process: the window
+// stays up but the UI is briefly unresponsive. The stall ends exactly when
+// the manifest returns, i.e. once the file count is known.
 //
-// To reproduce that *root mechanism* faithfully we combine the two layers:
-// 1. real reclamation (trim QML cache + force GC + clear pixmap cache),
-// 2. a bounded nested QEventLoop on the main thread so the Qt event dispatcher
-//    is occupied exactly like the old frozen worker threads - the window stays
-//    up, the UI is briefly unresponsive,
-// 3. then a self-restart (the same detach + hard-exit used by restartApp): the
-//    old PID vanishes from Task Manager and a new instance is spawned that
-//    rebuilds the same window. That is the "vanishes then reappears" layer.
+// To reproduce that *exact* freeze (and only that):
+//   1. do the real reclamation (trim QML cache + force GC + clear pixmap
+//      cache) so the "optimization" is not purely cosmetic, and
+//   2. run the legacy concurrent manifest fetch on a throwaway worker thread
+//      via LauncherMemoryOptimizer, which cancels the moment the file count
+//      is known. That reproduces the old freeze for its natural duration and
+//      never downloads anything; because it is a bare worker with no
+//      DownloadManager signals, it never shows up in the download list.
 void KernelBridge::launcherMemoryOptimize()
 {
     mc_info("[Bridge] launcherMemoryOptimize start");
-    QElapsedTimer t;
-    t.start();
 
-    auto reclaimOnce = [this]() {
-        if (m_engine) {
-            m_engine->trimComponentCache();
-            m_engine->collectGarbage();
-        }
-        QPixmapCache::clear();
-    };
+    if (m_engine) {
+        m_engine->trimComponentCache();
+        m_engine->collectGarbage();
+    }
+    QPixmapCache::clear();
 
-    reclaimOnce();
+    if (!m_memOptimizer)
+        m_memOptimizer = new LauncherMemoryOptimizer(this);
+    m_memOptimizer->run(17);
 
-    // Layer 2: bounded nested-event-loop window that reproduces the old bug's
-    // UI stall (the dispatcher is occupied; the window remains on screen).
-    const qint64 windowMs = 1500;
-    QEventLoop loop;
-    for (int i = 0; i < 3; ++i)
-        reclaimOnce();
-    QTimer timer;
-    timer.setSingleShot(true);
-    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timer.start(static_cast<int>(windowMs));
-    loop.exec();
-
-    reclaimOnce();
-    mc_info("[Bridge] launcherMemoryOptimize stall done in %lldms",
-            (long long)t.elapsed());
-
-    // Layer 3: self-restart - the old PID disappears from Task Manager and a
-    // fresh instance rebuilds the same window in the foreground.
-    restartApp();
+    mc_info("[Bridge] launcherMemoryOptimize dispatched legacy manifest probe");
 }
 
 QString KernelBridge::readFileTail(const QString &path, int maxLines) const

@@ -36,6 +36,8 @@
 #include "SettingsManager.h"
 #include "SkinManager.h"
 
+class LauncherMemoryOptimizer;
+
 class QQuickWindow;
 class QQmlEngine;
 class QNetworkAccessManager;
@@ -175,7 +177,9 @@ public:
     // Auto-update helpers
     Q_INVOKABLE QString detectLinuxPackageType() const;
     Q_INVOKABLE void qmlCollectGarbage();
-    // Explicit, user-confirmed blocking memory reclaim (brief UI freeze).
+    // Explicit, user-confirmed memory reclaim that reproduces the historical
+    // Java-download freeze (legacy concurrent manifest fetch on a worker
+    // thread, cancelled once the file count is known; never downloads).
     Q_INVOKABLE void launcherMemoryOptimize();
 
     // Log viewer helpers
@@ -227,6 +231,7 @@ private:
     InstanceManager *m_instanceManager = nullptr;
     SettingsManager *m_settingsManager = nullptr;
     SkinManager *m_skinManager = nullptr;
+    LauncherMemoryOptimizer *m_memOptimizer = nullptr;
 
     bool m_updateAvailable = false;
     bool m_checkingUpdate = false;

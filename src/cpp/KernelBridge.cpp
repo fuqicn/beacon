@@ -1177,9 +1177,19 @@ void KernelBridge::launcherMemoryOptimize()
 
     if (!m_memOptimizer)
         m_memOptimizer = new LauncherMemoryOptimizer(this);
+    m_memOptimizer->setOnFinished([this]() { setMemOptimizing(false); });
+    setMemOptimizing(true);
     m_memOptimizer->run(17);
 
     mc_info("[Bridge] launcherMemoryOptimize dispatched legacy manifest probe");
+}
+
+void KernelBridge::setMemOptimizing(bool v)
+{
+    if (m_memOptimizing == v)
+        return;
+    m_memOptimizing = v;
+    emit memOptimizingChanged();
 }
 
 QString KernelBridge::readFileTail(const QString &path, int maxLines) const

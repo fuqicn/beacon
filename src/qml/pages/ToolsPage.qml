@@ -24,7 +24,14 @@ import "../components"
 Item {
     id: root
 
-    property bool memOptBusy: false
+    Connections {
+        target: kernel
+        function onMemOptimizingChanged() {
+            javaStatusText.text = kernel.memOptimizing
+                ? I18n.tr("tools.memOpt.optimizing")
+                : I18n.tr("tools.memOpt.done")
+        }
+    }
 
     Flickable {
         id: flick
@@ -231,21 +238,18 @@ Item {
                     font.weight: Font.Normal
                     onClicked: memOptConfirm.close()
                 }
-                Button {
-                    text: I18n.tr("delete")
-                    highlighted: true
-                    font.weight: Font.Normal
-                    enabled: !memOptBusy
-                    onClicked: {
-                        memOptConfirm.close()
-                        memOptBusy = true
-                        javaStatusText.text = I18n.tr("tools.memOpt.optimizing")
-                        Qt.callLater(function() {
-                            kernel.launcherMemoryOptimize()
-                            memOptBusy = false
-                        })
-                    }
-                }
+                 Button {
+                     text: I18n.tr("delete")
+                     highlighted: true
+                     font.weight: Font.Normal
+                     enabled: !kernel.memOptimizing
+                     onClicked: {
+                         memOptConfirm.close()
+                         Qt.callLater(function() {
+                             kernel.launcherMemoryOptimize()
+                         })
+                     }
+                 }
             }
         }
     }

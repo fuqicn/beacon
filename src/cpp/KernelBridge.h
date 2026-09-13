@@ -59,6 +59,7 @@ class KernelBridge : public QObject
     Q_PROPERTY(SkinManager *skinManager READ skinManager CONSTANT)
     Q_PROPERTY(QString mcDir READ mcDir CONSTANT)
     Q_PROPERTY(bool javaDownloading READ javaDownloading NOTIFY javaDownloadingChanged)
+    Q_PROPERTY(bool memOptimizing READ memOptimizing NOTIFY memOptimizingChanged)
 
 public:
     static KernelBridge *instance();
@@ -192,9 +193,12 @@ public:
 
     bool javaDownloading() const { return m_javaDownloading; }
     void setJavaDownloading(bool v);
+    bool memOptimizing() const { return m_memOptimizing; }
+    void setMemOptimizing(bool v);
 
 signals:
     void javaDownloadingChanged();
+    void memOptimizingChanged();
     void minecraftRunningChanged();
     void paletteChanged();
     void updateAvailableChanged();
@@ -217,6 +221,7 @@ private:
     QString m_mcDir;
     int m_launchMemory = 4096;
     bool m_javaDownloading = false;
+    bool m_memOptimizing = false;
     bool m_launchCancelled = false;
     QQuickWindow *m_mainWindow = nullptr;
     QQmlEngine *m_engine = nullptr;

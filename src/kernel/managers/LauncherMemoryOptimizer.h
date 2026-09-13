@@ -22,6 +22,7 @@
 #include <QObject>
 #include <QThread>
 #include <atomic>
+#include <functional>
 
 #include "mc_java_dl.h"
 
@@ -73,11 +74,16 @@ public:
     void stop();
     bool isRunning() const { return m_running.load(); }
 
+    // Optional callback invoked (on the main thread) once the probe worker
+    // thread has fully finished. Lets callers reset their busy state.
+    void setOnFinished(std::function<void()> cb) { m_onFinished = std::move(cb); }
+
 private:
     QThread *m_workerThread = nullptr;
     LauncherMemoryOptimizerWorker *m_activeWorker = nullptr;
     std::atomic<bool> m_cancelled{false};
     std::atomic<bool> m_running{false};
+    std::function<void()> m_onFinished;
 };
 
 #endif

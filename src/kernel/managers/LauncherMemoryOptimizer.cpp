@@ -69,6 +69,8 @@ void LauncherMemoryOptimizer::run(int majorVersion)
     QObject::connect(m_workerThread, &QThread::finished, this, [this]() {
         m_running = false;
         m_activeWorker = nullptr;
+        if (m_onFinished)
+            m_onFinished();
     });
     m_workerThread->start();
 }

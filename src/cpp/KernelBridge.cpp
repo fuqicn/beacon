@@ -1144,14 +1144,23 @@ void KernelBridge::qmlCollectGarbage()
     m_engine->collectGarbage();
 }
 
-// Manual "launcher memory optimization". The user explicitly confirmed this, so
-// we run a short blocking task on the GUI thread that intentionally lags the
-// UI for ~1.5 s (reproducing the lagging, briefly-frozen feel of the old
-// Java-download bug: the window keeps existing but becomes unresponsive for a
-// moment) while doing real reclamation work: repeatedly trimming the QML
-// component cache, forcing QML GC and clearing the pixmap cache. The blocking
-// happens with no event pumping, which is what creates the stutter. It is
-// only ever called from an explicit user click.
+// Manual "launcher memory optimization". The user explicitly confirmed this.
+//
+// The historical Java-download bug froze the UI for a few seconds while the
+// window stayed visible. Its root cause (see git: mc_java_dl.cpp spawning bare
+// std::threads that each ran a nested QEventLoop::exec() over a thread-local
+// QNetworkAccessManager, competing with the main GUI event loop; plus
+// JavaManager waiting on the worker thread on the main thread) was that the
+// Qt global event dispatcher got occupied by a nested event loop running on a
+// thread while real reclamation happened.
+//
+// To reproduce that *same mechanism* on the main GUI thread (not just an
+// arbitrary sleep): while a user-confirmed bounded window is open we
+// 1. do the real reclamation (trim QML cache + force GC + clear pixmap cache)
+// 2. spin a nested QEventLoop (with a timeout) so the Qt event dispatcher is
+//    occupied exactly the way the old frozen worker threads were - the window
+//    stays visible (the process never dies) but the UI is briefly unresponsive,
+//    which is the perceptual "stutter then recover" of the old bug.
 void KernelBridge::launcherMemoryOptimize()
 {
     mc_info("[Bridge] launcherMemoryOptimize start");
@@ -1168,21 +1177,27 @@ void KernelBridge::launcherMemoryOptimize()
 
     reclaimOnce();
 
-    // Intentional blocking task: stall the GUI thread for a bounded window
-    // WITHOUT pumping events, reproducing the historical Java-download lag
-    // (window stays up but the UI is briefly frozen). Reclaim is repeated in
-    // small slices so actual memory is returned during the stall.
+    // Bounded nested-event-loop window that reproduces the old bug's freeze.
     const qint64 windowMs = 1500;
-    QElapsedTimer budget;
-    budget.start();
-    while (budget.elapsed() < windowMs) {
-        for (int i = 0; i < 4; ++i)
-            reclaimOnce();
-        // Busy-wait slice so the window is visible (not a hard sleep that
-        // would let other threads steal CPU), mirroring the nested-loop
-        // stutter of the old bug.
-        QThread::msleep(10);
-    }
+    QEventLoop loop;
+    QElapsedTimer window;
+    window.start();
+
+    // Reclaim in small slices while the dispatcher is occupied, mirroring how
+    // the old worker threads interleaved real work between nested exec() calls.
+    for (int i = 0; i < 3; ++i)
+        reclaimOnce();
+
+    // Timeout keeps the loop alive for the window without pumping the GUI event
+    // loop indefinitely; the dispatcher (and thus the UI) is held during this,
+    // which is the reproduced "stall" while the window remains on screen.
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(static_cast<int>(windowMs));
+    loop.exec();
+
+    reclaimOnce();
 
     mc_info("[Bridge] launcherMemoryOptimize done in %lldms", (long long)t.elapsed());
 }

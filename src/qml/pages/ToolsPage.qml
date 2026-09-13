@@ -58,11 +58,19 @@ Item {
                         { name: I18n.tr("tools.memOpt"), desc: I18n.tr("tools.memOptDesc"), icon: "refresh", action: "mem" }
                     ]
 
-                    delegate: Frame {
+                    delegate: Rectangle {
+                        id: card
                         width: 220; height: 120
+                        radius: Theme.shapeLarge
+                        color: cardMa.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer
+                        border.color: "transparent"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 150 } }
 
                         MouseArea {
+                            id: cardMa
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (modelData.action === "log")

@@ -194,12 +194,19 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     // IMPORTANT: the callback uses SendMessageTimeout(SMTO_ABORTIFHUNG, 200ms)
     // so a hung window never blocks the poller (and therefore the whole process).
     {
+        // Capture pollThread BY VALUE so the singleShot callback always
+        // holds a valid pointer even after this lambda exits.
+        // Use a heap-allocated std::function so the recursive call outlives
+        // the local lambda scope (avoiding the dangling-reference crash).
         auto *pollThread = new QThread(s_instance);
         pollThread->setObjectName("mcRunningPoller");
-        QObject::connect(pollThread, &QThread::started, []() {
+        QObject::connect(pollThread, &QThread::started, [pollThread]() {
             bool prev = false;
-            std::function<void()> loop;
-            loop = [&prev, &loop]() {
+            // Store the recursive lambda on the heap (via std::shared_ptr)
+            // so that QTimer::singleShot's copy of it always refers to
+            // valid memory even after this lambda returns.
+            auto rec = std::make_shared<std::function<void()>>();
+            *rec = [pollThread, &prev, rec]() {
                 bool running = pollMinecraftRunning();
                 if (running != prev) {
                     prev = running;
@@ -207,10 +214,12 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
                         bridge->setMinecraftRunning(running);
                     }, Qt::QueuedConnection);
                 }
-                QTimer::singleShot(15000, loop);
+                QTimer::singleShot(15000, pollThread, *rec);
             };
-            loop();
+            QTimer::singleShot(0, pollThread, *rec);
         });
+        QObject::connect(pollThread, &QThread::finished, pollThread, &QObject::deleteLater);
+        pollThread->start();
         QObject::connect(pollThread, &QThread::finished, pollThread, &QObject::deleteLater);
         pollThread->start();
         mc_info("[Bridge] Minecraft-running background poller started");

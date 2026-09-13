@@ -199,7 +199,7 @@ property var stackView: null
                         if (model[i].key === root.source) { currentIndex = i; break }
                 }
                 onCurrentIndexChanged: {
-                    root.source = model.get(currentIndex).key
+                    root.source = model[currentIndex].key
                     root.doSearch()
                 }
             }

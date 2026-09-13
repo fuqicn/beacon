@@ -194,6 +194,11 @@ void DownloadWorker::run()
     mc_info("[DL-W] Worker started: versionId=%s dir=%s",
             m_versionId.toUtf8().constData(), m_dir.toUtf8().constData());
 
+    // Block on the global download pool futures without pumping the Qt event
+    // loop.  Concurrent processEvents from this thread and the GUI main thread
+    // is undefined behaviour in Qt6Core (crashes inside QEventDispatcher).
+    mc_qt_download_thread_no_pump(1);
+
     m_totalFiles = 0;
     m_completedFiles = 0;
     m_speedBytes = 0.0;

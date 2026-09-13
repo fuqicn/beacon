@@ -181,6 +181,10 @@ public slots:
                    const QString &loaderVer, const QString &javaPath,
                    const QString &dir)
     {
+        // Block on the global download pool futures without pumping the Qt event
+        // loop.  Concurrent processEvents from this thread and the GUI main
+        // thread is undefined behaviour in Qt6Core.
+        mc_qt_download_thread_no_pump(1);
         QString error, verId;
         bool ok = installLoaderSync(
             mcVersion, loader, loaderVer, javaPath, dir, &error, &verId,

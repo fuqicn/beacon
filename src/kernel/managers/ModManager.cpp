@@ -443,6 +443,12 @@ void ModManager::startTask(const std::shared_ptr<ModTaskState> &st)
 
     QThread *thread = QThread::create(
         [st, url = st->url, mirrorUrl, outPath, sha1 = st->sha1, size = st->expectedSize]() {
+            // This thread waits on the global download pool futures and must
+            // not pump Qt's event loop concurrently with the pool threads
+            // (concurrent processEvents is UB in Qt6Core).  Blocking on the
+            // pool's internal QEventLoop is fine; the pool threads own their
+            // own event loops and do the actual network work.
+            mc_qt_download_thread_no_pump(1);
             QByteArray urlBa = url.toUtf8();
             QByteArray mirrorBa = mirrorUrl.toUtf8();
             QByteArray outBa = outPath.toUtf8();

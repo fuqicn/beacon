@@ -30,6 +30,13 @@
 JavaManager::JavaManager(QObject *parent) : QObject(parent) {}
 JavaManager::~JavaManager()
 {
+    if (m_findThread) {
+        m_findThread->quit();
+        if (!m_findThread->wait(3000))
+            m_findThread->terminate();
+        delete m_findThread;
+        m_findThread = nullptr;
+    }
     if (m_workerThread) {
         if (m_activeJavaWorker) m_activeJavaWorker->cancel();
         m_activeJavaWorker = nullptr;
@@ -56,10 +63,19 @@ void JavaManager::findJavaAsync()
     m_searching = true;
     emit searchingChanged();
 
-    QTimer::singleShot(0, this, [this]() { doFindJava(); });
+    // Run mc_java_find_all on a dedicated worker thread so the GUI event loop
+    // is not blocked by the directory scans + java -version subprocess probes
+    // that this function performs (a full scan can take several seconds).
+    m_workerThread = new QThread(this);
+    QObject *worker = new QObject;
+    worker->moveToThread(m_workerThread);
+    connect(m_workerThread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(m_workerThread, &QThread::finished, m_workerThread, &QObject::deleteLater);
+    connect(m_workerThread, &QThread::started, worker, [this]() { doFindJavaOnThread(); });
+    m_workerThread->start();
 }
 
-void JavaManager::doFindJava()
+void JavaManager::doFindJavaOnThread()
 {
     McJavaRuntime runtimes[128];
     int count = mc_java_find_all(runtimes, 128);
@@ -77,6 +93,8 @@ void JavaManager::doFindJava()
         list.append(rt);
     }
 
+    // Write back on the GUI thread so signals are emitted from the main thread
+    // (as required by Qt's signal-slot rules).
     m_runtimes = list;
     m_searching = false;
     emit runtimesChanged();

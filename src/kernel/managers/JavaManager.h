@@ -59,7 +59,7 @@ signals:
     void errorOccurred(const QString &message);
 
 private:
-    void doFindJava();
+    void doFindJavaOnThread();
     void addBundledJava();
     // Stopping the old worker without blocking: clear the global cancel flag
     // and, if the previous download was cancelled, remove its partial files.
@@ -68,7 +68,8 @@ private:
     QVariantList m_runtimes;
     bool m_searching = false;
     QString m_runtimeDir;
-    QThread *m_workerThread = nullptr;
+    QThread *m_workerThread = nullptr;       // download worker (JavaDownloadWorker)
+    QThread *m_findThread = nullptr;         // findJava worker
     JavaDownloadWorker *m_activeJavaWorker = nullptr;
     bool m_cancelled = false;
 };

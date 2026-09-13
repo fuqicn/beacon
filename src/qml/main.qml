@@ -223,7 +223,11 @@ ApplicationWindow {
                 onCurrentChanged: activatePage(current, true)
                 Component.onCompleted: activatePage(0, false)
 
-                // Unload pages left for a while to reclaim QML object/binding memory
+                // Unload pages left for a while to reclaim QML object/binding memory.
+                // IMPORTANT: qmlCollectGarbage() is a synchronous GC pass that blocks
+                // the GUI event loop; calling it directly here would freeze the UI
+                // every 20 seconds. Schedule it via callLater so the current event
+                // (the timer callback) finishes first, then GC runs on the idle path.
                 Timer {
                     id: unloadTimer
                     interval: 20000
@@ -241,7 +245,7 @@ ApplicationWindow {
                             }
                         }
                         if (unloaded)
-                            kernel.qmlCollectGarbage()
+                            Qt.callLater(function() { kernel.qmlCollectGarbage() })
                     }
                 }
 

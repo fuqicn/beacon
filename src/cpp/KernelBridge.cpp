@@ -82,15 +82,19 @@
 #ifdef Q_OS_WIN
 struct EnumMinecraftData { DWORD pid; bool found; };
 
+// Window callback: use SendMessageTimeout with SMTO_ABORTIFHUNG so a hung
+// window never blocks the poller (and therefore the whole process) forever.
 static BOOL CALLBACK enumMinecraftWindow(HWND hwnd, LPARAM lParam)
 {
     auto *ed = reinterpret_cast<EnumMinecraftData*>(lParam);
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid != ed->pid) return TRUE;
-    wchar_t title[256];
-    int len = GetWindowTextW(hwnd, title, 256);
-    if (len > 0 && wcsstr(title, L"Minecraft")) {
+    // Use SendMessageTimeout so a hung window can't block the poller forever.
+    wchar_t title[256] = {};
+    SendMessageTimeoutW(hwnd, WM_GETTEXT, WPARAM(sizeof(title) / sizeof(wchar_t)),
+                        LPARAM(title), SMTO_ABORTIFHUNG, 200, nullptr);
+    if (wcsstr(title, L"Minecraft")) {
         ed->found = true;
         return FALSE;
     }
@@ -184,16 +188,18 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     s_instance->applyGlobalUserAgent();
 
     // Start the background Minecraft-running poller: EnumWindows is expensive
-    // and must not run on the main GUI thread.  The poller runs every 3 s in
+    // and must not run on the main GUI thread.  The poller runs every 15 s in
     // a dedicated QThread; when the cached flag changes it emits the signal
     // back on the main thread via a queued callback.
+    // IMPORTANT: the callback uses SendMessageTimeout(SMTO_ABORTIFHUNG, 200ms)
+    // so a hung window never blocks the poller (and therefore the whole process).
     {
         QThread *pollThread = new QThread(s_instance);
         pollThread->setObjectName("mcRunningPoller");
         QObject::connect(pollThread, &QThread::started, [pollThread]() {
             bool prev = false;
             QTimer *timer = new QTimer(pollThread);
-            timer->setInterval(3000);
+            timer->setInterval(15000);  // 15 s is plenty for this low-frequency check
             QObject::connect(timer, &QTimer::timeout, [pollThread, &prev]() {
                 bool running = pollMinecraftRunning();
                 if (running != prev) {

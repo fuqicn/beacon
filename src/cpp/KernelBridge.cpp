@@ -101,6 +101,9 @@ static BOOL CALLBACK enumMinecraftWindow(HWND hwnd, LPARAM lParam)
 KernelBridge *KernelBridge::s_instance = nullptr;
 QString KernelBridge::s_launcherDir;
 
+// Forward declaration: pollMinecraftRunning is defined later in this file.
+static bool pollMinecraftRunning();
+
 void KernelBridge::setLauncherDir(const QString &dir)
 {
     s_launcherDir = dir;
@@ -179,6 +182,35 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
 
     // Apply the global User-Agent for all kernel HTTP requests.
     s_instance->applyGlobalUserAgent();
+
+    // Start the background Minecraft-running poller: EnumWindows is expensive
+    // and must not run on the main GUI thread.  The poller runs every 3 s in
+    // a dedicated QThread; when the cached flag changes it emits the signal
+    // back on the main thread via a queued callback.
+    {
+        QThread *pollThread = new QThread(s_instance);
+        pollThread->setObjectName("mcRunningPoller");
+        QObject::connect(pollThread, &QThread::started, [pollThread]() {
+            bool prev = false;
+            QTimer *timer = new QTimer(pollThread);
+            timer->setInterval(3000);
+            QObject::connect(timer, &QTimer::timeout, [pollThread, &prev]() {
+                bool running = pollMinecraftRunning();
+                if (running != prev) {
+                    prev = running;
+                    // Emit the signal on the main thread (kernel instance lives
+                    // there), not on this background poll thread.
+                    QMetaObject::invokeMethod(KernelBridge::instance(), [bridge = KernelBridge::instance(), running]() {
+                        bridge->setMinecraftRunning(running);
+                    }, Qt::QueuedConnection);
+                }
+            });
+            timer->start();
+        });
+        QObject::connect(pollThread, &QThread::finished, pollThread, &QObject::deleteLater);
+        pollThread->start();
+        mc_info("[Bridge] Minecraft-running background poller started");
+    }
 
     // Apply the selected mod source (modrinth / curseforge).
     s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "modrinth").toString();
@@ -734,13 +766,22 @@ void KernelBridge::installPendingUpdate()
 
 
 KernelBridge::KernelBridge(QObject *parent) : QObject(parent) {}
-KernelBridge::~KernelBridge() = default;
+KernelBridge::~KernelBridge()
+{
+}
 
 void KernelBridge::setJavaDownloading(bool v)
 {
     if (m_javaDownloading == v) return;
     m_javaDownloading = v;
     emit javaDownloadingChanged();
+}
+
+void KernelBridge::setMinecraftRunning(bool v)
+{
+    if (m_minecraftRunning == v) return;
+    m_minecraftRunning = v;
+    emit minecraftRunningChanged();
 }
 
 void KernelBridge::setLanguage(const QString &lang)
@@ -1092,7 +1133,9 @@ int KernelBridge::getRequiredJavaVersion() const
     return readRequiredJavaVersion(m_launchManager->versionId(), m_launchManager->mcDir());
 }
 
-bool KernelBridge::isAnyMinecraftRunning() const
+// Background poller: runs EnumWindows on a separate thread so the main GUI
+// thread is never blocked by the expensive per-window GetWindowTextW call.
+static bool pollMinecraftRunning()
 {
 #if defined(Q_OS_WIN)
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -1126,10 +1169,9 @@ bool KernelBridge::isAnyMinecraftRunning() const
     CloseHandle(snapshot);
     return false;
 #elif defined(Q_OS_UNIX)
-    // Unix: pgrep for the Minecraft main class.
     QProcess proc;
     proc.start(QStringLiteral("pgrep"), QStringList() << "-f" << "net.minecraft.client");
-    if (!proc.waitForFinished(3000)) return false;
+    proc.waitForFinished(3000);
     return proc.exitCode() == 0;
 #else
     return false;
@@ -1536,3 +1578,5 @@ void KernelBridge::doAuthAndLaunch()
 
     m_authManager->refreshBeforeLaunch();
 }
+
+#include "KernelBridge.moc"

@@ -178,7 +178,9 @@ public:
     Q_INVOKABLE bool isLoaderVersion(const QString &versionId) const;
 
     Q_INVOKABLE int getRequiredJavaVersion() const;
-    Q_INVOKABLE bool isAnyMinecraftRunning() const;
+    // Returns the cached Minecraft-running flag (updated by the background poller).
+    bool minecraftRunning() const { return m_minecraftRunning; }
+    void setMinecraftRunning(bool v);
     Q_INVOKABLE void killAllMinecraft();
     // Auto-update helpers
     Q_INVOKABLE QString detectLinuxPackageType() const;
@@ -245,6 +247,8 @@ private:
     SettingsManager *m_settingsManager = nullptr;
     SkinManager *m_skinManager = nullptr;
     LauncherMemoryOptimizer *m_memOptimizer = nullptr;
+    // Cached Minecraft-running state (updated by background poller, not on main thread).
+    bool m_minecraftRunning = false;
 
     bool m_updateAvailable = false;
     bool m_checkingUpdate = false;

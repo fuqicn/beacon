@@ -417,12 +417,15 @@ ApplicationWindow {
     property bool mcRunning: false
 
     function refreshMcRunning() {
-        mcRunning = kernel.launchManager.running || kernel.isAnyMinecraftRunning()
+        mcRunning = kernel.launchManager.running || kernel.minecraftRunning
     }
 
+    // Poll only when a launcher-tracked run is active; the background poller
+    // (mc_mcPollThread) already updates kernel.minecraftRunning every 3 s on
+    // a worker thread, so this Timer stays off most of the time.
     Timer {
         interval: 3000
-        running: kernel.launchManager.running || kernel.isAnyMinecraftRunning()
+        running: kernel.launchManager.running || kernel.minecraftRunning
         repeat: true
         onTriggered: refreshMcRunning()
     }

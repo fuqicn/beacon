@@ -29,6 +29,7 @@ property var stackView: null
     property string sortKey: "relevance"
     property string loader: ""
     property string mcVersion: ""
+    property string source: kernel.modSource
     property var results: []
 
     // Pagination: Modrinth offset-based, auto-load on near-bottom scroll.
@@ -78,7 +79,7 @@ property var stackView: null
     function requestPage(offset) {
         root.pendingOffset = offset
         kernel.modManager.search(root.query, root.sortKey, root.pageSize,
-                                 root.mcVersion, root.loader, offset)
+                                 root.mcVersion, root.loader, offset, root.source)
     }
 
     function doSearch() {
@@ -90,6 +91,7 @@ property var stackView: null
     }
 
     Component.onCompleted: {
+        root.source = kernel.modSource
         if (!kernel.modManager.searching)
             root.requestPage(0)
     }
@@ -175,6 +177,32 @@ property var stackView: null
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
+
+            Text {
+                text: I18n.tr("modSearch.sourceLabel")
+                font.pixelSize: 13
+                color: palette.placeholderText
+            }
+
+            ComboBox {
+                id: sourceCombo
+                font.weight: Font.Medium
+                model: [
+                    { text: I18n.tr("modSearch.sourceModrinth"), key: "modrinth" },
+                    { text: I18n.tr("modSearch.sourceCurseForge"), key: "curseforge" }
+                ]
+                textRole: "text"
+                valueRole: "key"
+                enabled: !kernel.modManager.searching
+                Component.onCompleted: {
+                    for (var i = 0; i < model.length; ++i)
+                        if (model[i].key === root.source) { currentIndex = i; break }
+                }
+                onCurrentIndexChanged: {
+                    root.source = model.get(currentIndex).key
+                    root.doSearch()
+                }
+            }
 
             Text {
                 text: I18n.tr("modSearch.gameVersion")

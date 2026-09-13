@@ -18,6 +18,7 @@ static void print_help(void) {
     mc_console_printf("packsearch - %s\n", mc_i18n("packsearch_desc"));
     mc_console_printf("%s: packsearch [query] [%s]\n\n", mc_i18n("usage"), mc_i18n("options"));
     mc_console_printf("%s:\n", mc_i18n("options"));
+    mc_console_printf("  --cfapi <key>  %s\n", mc_i18n("cf_api_key_opt"));
     mc_console_printf("  --sort <downloads|relevance|follows|newest>  %s\n", mc_i18n("mod_sort"));
     mc_console_printf("  --limit <n>  %s (default: 20)\n", mc_i18n("mod_limit"));
     mc_console_printf("  --page <n>  %s (default: 0)\n", mc_i18n("mod_page"));
@@ -28,7 +29,7 @@ static void print_help(void) {
     mc_console_printf("\n%s:\n", mc_i18n("examples"));
     mc_console_printf("  packsearch\n");
     mc_console_printf("  packsearch skyfactory\n");
-    mc_console_printf("  packsearch --sort downloads --page 1 --limit 30\n");
+    mc_console_printf("  packsearch --cfapi <key> --sort downloads --limit 30\n");
 }
 
 int main(int argc, char **argv) {
@@ -45,6 +46,7 @@ int main(int argc, char **argv) {
 
     const char *query = nullptr;
     const char *mirror = nullptr;
+    const char *cf_api_key = nullptr;
     int sort = MC_MOD_SORT_DOWNLOADS;
     int limit = 20;
     int page = 0;
@@ -56,6 +58,8 @@ int main(int argc, char **argv) {
             mc_i18n_set(argv[++i]);
         } else if (strcmp(argv[i], "--mirror") == 0 && i + 1 < argc) {
             mirror = argv[++i];
+        } else if (strcmp(argv[i], "--cfapi") == 0 && i + 1 < argc) {
+            cf_api_key = argv[++i];
         } else if (strcmp(argv[i], "--sort") == 0 && i + 1 < argc) {
             const char *val = argv[++i];
             if (strcmp(val, "relevance") == 0) sort = MC_MOD_SORT_RELEVANCE;
@@ -74,6 +78,9 @@ int main(int argc, char **argv) {
             query = argv[i];
         }
     }
+
+    if (cf_api_key)
+        mc_mod_set_curseforge_api_key(cf_api_key);
 
     if (!query) { sort = MC_MOD_SORT_DOWNLOADS; }
     else if (sort == MC_MOD_SORT_DOWNLOADS) { sort = MC_MOD_SORT_RELEVANCE; }
@@ -105,11 +112,13 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < count; i++) {
         McModProject *p = &results[i];
-        mc_console_printf("%-28s %-48s %-12ld %s\n",
+        const char *src = p->source == MC_MOD_CURSEFORGE ? "CF" : "MR";
+        mc_console_printf("%-28s %-48s %-12ld %s [%s]\n",
                           p->id ? p->id : "",
                           p->name ? p->name : "",
                           p->download_count,
-                          p->game_versions ? p->game_versions : "");
+                          p->game_versions ? p->game_versions : "",
+                          src);
 
         if (p->description && p->description[0]) {
             std::string desc = p->description;

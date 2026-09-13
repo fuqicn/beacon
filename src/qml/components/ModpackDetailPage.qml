@@ -28,7 +28,8 @@ property var stackView: null
     property var installDialog: null
     property string projectId: ""
     property string mcVersion: ""
-property string loader: ""
+    property string loader: ""
+    property string source: kernel.modSource
 
 property var project: ({})
     property var versions: []
@@ -60,11 +61,12 @@ property var project: ({})
 function reloadVersions() {
         root.versionsLoading = true
         root.versions = []
-        kernel.modManager.getVersions(root.projectId, root.mcVersion, root.loader)
+        kernel.modManager.getVersions(root.projectId, root.mcVersion, root.loader, root.source)
     }
 
     Component.onCompleted: {
-        kernel.modManager.getProject(root.projectId)
+        root.source = kernel.modSource
+        kernel.modManager.getProject(root.projectId, root.source)
         reloadVersions()
     }
 
@@ -120,13 +122,19 @@ function onVersionsLoaded(versions) {
                 }
 
                 Button {
-                    text: I18n.tr("modpackDetail.openInModrinth")
+                    text: root.source === "curseforge"
+                         ? I18n.tr("modpackDetail.openInCurseForge")
+                         : I18n.tr("modpackDetail.openInModrinth")
                     flat: true
                     font.weight: Font.Normal
                     onClicked: {
                         var url = root.project.websiteUrl
-                        if (!url)
-                            url = "https://modrinth.com/modpack/" + (root.project.slug || root.projectId)
+                        if (!url) {
+                            if (root.source === "curseforge")
+                                url = "https://www.curseforge.com/minecraft/modpacks/" + (root.project.slug || root.projectId)
+                            else
+                                url = "https://modrinth.com/modpack/" + (root.project.slug || root.projectId)
+                        }
                         Qt.openUrlExternally(url)
                     }
                 }

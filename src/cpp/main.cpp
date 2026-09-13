@@ -270,6 +270,27 @@ public:
         return img.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     }
 
+    // CurseForge covers must never be cached (their CDN URLs carry time-
+    // limited auth tokens, so a cached copy goes 404, and persisting CF media
+    // to disk/our in-memory cache is against CurseForge's ToS). Only Modrinth
+    // icons go through the disk + memory cache below.
+    static bool isCurseForgeUrl(const QString &url)
+    {
+        static const QList<QString> cfHosts = {
+            QStringLiteral("edge.forgecdn.net"),
+            QStringLiteral("media.curseforge.com"),
+            QStringLiteral("curseforge.com"),
+        };
+        QUrl u(url);
+        const QString host = u.host().toLower();
+        if (cfHosts.contains(host))
+            return true;
+        // Any subdomain of curseforge.com also counts.
+        return host == QStringLiteral("curseforge.com") ||
+               host.endsWith(QStringLiteral(".curseforge.com")) ||
+               host.endsWith(QStringLiteral(".forgecdn.net"));
+    }
+
     QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize) override
     {
         QByteArray decoded = QByteArray::fromBase64(id.toUtf8());
@@ -277,30 +298,34 @@ public:
         if (url.isEmpty())
             return new ModIconResponse(url);
 
-        if (QImage *cached = m_memCache.object(url)) {
-            ModIconResponse *r = new ModIconResponse(url);
-            QTimer::singleShot(0, r, [r, cached]() { r->deliver(*cached); });
-            return r;
-        }
+        const bool cfCover = isCurseForgeUrl(url);
 
-        QString cacheKey = QString::fromLatin1(
-            QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
-        QString cachePath = m_iconsDir + QLatin1String("/") + cacheKey + QLatin1String(".png");
-        if (QFile::exists(cachePath)) {
-            QImage img(cachePath);
-            if (!img.isNull()) {
-                QImage scaled = fitThumbnail(img, requestedSize);
-                if (scaled.sizeInBytes() > 0)
-                    m_memCache.insert(url, new QImage(scaled),
-                                      qMax(1, scaled.sizeInBytes() / 1024));
+        if (!cfCover) {
+            if (QImage *cached = m_memCache.object(url)) {
                 ModIconResponse *r = new ModIconResponse(url);
-                QTimer::singleShot(0, r, [r, scaled]() { r->deliver(scaled); });
+                QTimer::singleShot(0, r, [r, cached]() { r->deliver(*cached); });
                 return r;
+            }
+
+            QString cacheKey = QString::fromLatin1(
+                QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
+            QString cachePath = m_iconsDir + QLatin1String("/") + cacheKey + QLatin1String(".png");
+            if (QFile::exists(cachePath)) {
+                QImage img(cachePath);
+                if (!img.isNull()) {
+                    QImage scaled = fitThumbnail(img, requestedSize);
+                    if (scaled.sizeInBytes() > 0)
+                        m_memCache.insert(url, new QImage(scaled),
+                                          qMax(1, scaled.sizeInBytes() / 1024));
+                    ModIconResponse *r = new ModIconResponse(url);
+                    QTimer::singleShot(0, r, [r, scaled]() { r->deliver(scaled); });
+                    return r;
+                }
             }
         }
 
         ModIconResponse *r = new ModIconResponse(url);
-        startDownload(r, url, cachePath, requestedSize);
+        startDownload(r, url, cfCover ? QString() : cachePathFor(url), requestedSize);
         return r;
     }
 
@@ -309,14 +334,15 @@ private:
                        const QString &cachePath, const QSize &requested)
     {
         QPointer<ModIconResponse> guard(resp);
-        m_pool.start([guard, url, cachePath, requested, this]() {
-            QImage image = fetch(url, cachePath);
+        const bool noCache = cachePath.isEmpty();
+        m_pool.start([guard, url, cachePath, requested, noCache, this]() {
+            QImage image = fetch(url, cachePath, noCache);
             if (!guard.isNull()) {
-                QMetaObject::invokeMethod(guard.data(), [guard, image, requested, this]() {
+                QMetaObject::invokeMethod(guard.data(), [guard, image, requested, noCache, this]() {
                     if (guard.isNull()) return;
                     if (!image.isNull()) {
                         QImage scaled = fitThumbnail(image, requested);
-                        if (scaled.sizeInBytes() > 0)
+                        if (!noCache && scaled.sizeInBytes() > 0)
                             m_memCache.insert(guard->url(), new QImage(scaled),
                                               qMax(1, scaled.sizeInBytes() / 1024));
                         guard->deliver(scaled);
@@ -326,6 +352,13 @@ private:
                 }, Qt::QueuedConnection);
             }
         });
+    }
+
+    QString cachePathFor(const QString &url) const
+    {
+        QString cacheKey = QString::fromLatin1(
+            QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
+        return m_iconsDir + QLatin1String("/") + cacheKey + QLatin1String(".png");
     }
 
     static QImage tryFetch(const char *target)
@@ -351,7 +384,7 @@ private:
         }
     }
 
-    static QImage fetch(const QString &url, const QString &cachePath)
+    static QImage fetch(const QString &url, const QString &cachePath, bool noCache)
     {
         QByteArray urlBytes = url.toUtf8();
         char mirrored[1024];
@@ -363,7 +396,8 @@ private:
         QImage image = tryFetch(target);
         if (image.isNull() && target != direct)
             image = tryFetch(direct);
-        saveCache(image, cachePath);
+        if (!noCache)
+            saveCache(image, cachePath);
         return image;
     }
 

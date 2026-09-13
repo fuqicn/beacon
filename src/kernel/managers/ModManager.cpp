@@ -44,6 +44,11 @@ static int sortFromString(const QString &s)
     return MC_MOD_SORT_RELEVANCE;
 }
 
+static int sourceFromName(const QString &s)
+{
+    return s.trimmed().toLower() == "curseforge" ? MC_MOD_CURSEFORGE : MC_MOD_MODRINTH;
+}
+
 static QVariantMap projectToVariant(const McModProject &p)
 {
     QVariantMap m;
@@ -57,6 +62,7 @@ static QVariantMap projectToVariant(const McModProject &p)
     m["loaders"] = QString::fromUtf8(p.loaders);
     m["projectType"] = QString::fromUtf8(p.project_type);
     m["websiteUrl"] = QString::fromUtf8(p.website_url);
+    m["source"] = (p.source == MC_MOD_CURSEFORGE) ? QString("curseforge") : QString("modrinth");
     return m;
 }
 
@@ -82,7 +88,8 @@ public:
 
 public slots:
     void doSearch(const QString &query, const QString &sort, int limit,
-                  const QString &mcVersion, const QString &loader, int offset)
+                  const QString &mcVersion, const QString &loader, int offset,
+                  const QString &source)
     {
         int maxResults = qBound(1, limit, 100);
         std::vector<McModProject> results(maxResults);
@@ -92,19 +99,22 @@ public slots:
             query.isEmpty() ? nullptr : query.toUtf8().constData(),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
             loader.isEmpty() ? nullptr : loader.toUtf8().constData(),
-            MC_MOD_MODRINTH, maxResults, qMax(offset, 0), sortFromString(sort),
+            sourceFromName(source), maxResults, qMax(offset, 0), sortFromString(sort),
             results.data(), maxResults);
 
         emit searchCompleted(projectsToVariant(results, count));
     }
 
     void doSearchPacks(const QString &query, const QString &sort, int limit,
-                       const QString &mcVersion, const QString &loader, int offset)
+                       const QString &mcVersion, const QString &loader, int offset,
+                       const QString &source)
     {
         int maxResults = qBound(1, limit, 100);
         std::vector<McModProject> results(maxResults);
         for (auto &r : results) mc_mod_project_init(&r);
 
+        // CurseForge modpacks (classId=4471) are searched inside the kernel when
+        // a CF API key is configured; otherwise only Modrinth modpacks.
         int count = mc_mod_search_pack(
             query.isEmpty() ? nullptr : query.toUtf8().constData(),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
@@ -112,15 +122,20 @@ public slots:
             maxResults, qMax(offset, 0), sortFromString(sort),
             results.data(), maxResults);
 
+        // If the caller explicitly wanted CurseForge packs but got a Modrinth
+        // result set instead (no key / no CF hits), keep the merged result.
         emit packSearchCompleted(projectsToVariant(results, count));
     }
 
-    void doGetProject(const QString &projectId)
+    void doGetProject(const QString &projectId, const QString &source)
     {
         McModProject project;
         mc_mod_project_init(&project);
 
-        if (!mc_mod_get_project(projectId.toUtf8().constData(), MC_MOD_MODRINTH, &project)) {
+        bool ok = (sourceFromName(source) == MC_MOD_CURSEFORGE)
+                      ? mc_mod_get_project_cf(projectId.toUtf8().constData(), &project)
+                      : mc_mod_get_project(projectId.toUtf8().constData(), MC_MOD_MODRINTH, &project);
+        if (!ok) {
             emit failed(QString("项目不存在: %1").arg(projectId));
             return;
         }
@@ -129,13 +144,14 @@ public slots:
         emit projectLoaded(m);
     }
 
-    void doGetVersions(const QString &projectId, const QString &mcVersion, const QString &loader)
+    void doGetVersions(const QString &projectId, const QString &mcVersion,
+                      const QString &loader, const QString &source)
     {
         McModFile files[100];
         for (int i = 0; i < 100; ++i) mc_mod_file_init(&files[i]);
 
         int count = mc_mod_get_versions(
-            projectId.toUtf8().constData(), MC_MOD_MODRINTH,
+            projectId.toUtf8().constData(), sourceFromName(source),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
             loader.isEmpty() ? nullptr : loader.toUtf8().constData(),
             files, 100);
@@ -173,8 +189,9 @@ m["releaseType"] = QString::fromUtf8(files[i].release_type);
         emit versionsLoaded(list);
     }
 
-    void doGetProjects(const QStringList &ids)
+    void doGetProjects(const QStringList &ids, const QString &source)
     {
+        (void)source;
         std::vector<const char *> cids;
         std::vector<QByteArray> bufs;
         bufs.reserve(ids.size());
@@ -279,49 +296,52 @@ QString ModManager::modsDir(const QString &rootDir) const
 }
 
 void ModManager::search(const QString &query, const QString &sort, int limit,
-                        const QString &mcVersion, const QString &loader, int offset)
+                        const QString &mcVersion, const QString &loader, int offset,
+                        const QString &source)
 {
     if (m_searching) return;
     m_searching = true;
     emit searchingChanged();
 
-    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader, offset]() {
-        w->doSearch(query, sort, limit, mcVersion, loader, offset);
+    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader, offset, source]() {
+        w->doSearch(query, sort, limit, mcVersion, loader, offset, source);
     });
 }
 
 void ModManager::searchPacks(const QString &query, const QString &sort, int limit,
-                            const QString &mcVersion, const QString &loader, int offset)
+                             const QString &mcVersion, const QString &loader, int offset,
+                             const QString &source)
 {
     if (m_searchingPacks) return;
     m_searchingPacks = true;
     emit searchingPacksChanged();
 
-    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader, offset]() {
-        w->doSearchPacks(query, sort, limit, mcVersion, loader, offset);
+    m_workerPool->start([w = m_worker, query, sort, limit, mcVersion, loader, offset, source]() {
+        w->doSearchPacks(query, sort, limit, mcVersion, loader, offset, source);
     });
 }
 
-void ModManager::getProject(const QString &projectId)
+void ModManager::getProject(const QString &projectId, const QString &source)
 {
-    m_workerPool->start([w = m_worker, projectId]() {
-        w->doGetProject(projectId);
+    m_workerPool->start([w = m_worker, projectId, source]() {
+        w->doGetProject(projectId, source);
     });
 }
 
 void ModManager::getVersions(const QString &projectId,
-                             const QString &mcVersion,
-                             const QString &loader)
+                              const QString &mcVersion,
+                              const QString &loader,
+                              const QString &source)
 {
-    m_workerPool->start([w = m_worker, projectId, mcVersion, loader]() {
-        w->doGetVersions(projectId, mcVersion, loader);
+    m_workerPool->start([w = m_worker, projectId, mcVersion, loader, source]() {
+        w->doGetVersions(projectId, mcVersion, loader, source);
     });
 }
 
-void ModManager::getProjects(const QStringList &ids)
+void ModManager::getProjects(const QStringList &ids, const QString &source)
 {
-    m_workerPool->start([w = m_worker, ids]() {
-        w->doGetProjects(ids);
+    m_workerPool->start([w = m_worker, ids, source]() {
+        w->doGetProjects(ids, source);
     });
 }
 

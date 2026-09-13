@@ -75,17 +75,20 @@ public:
                             int limit = 20,
                             const QString &mcVersion = QString(),
                             const QString &loader = QString(),
-                            int offset = 0);
+                            int offset = 0,
+                            const QString &source = "modrinth");
     Q_INVOKABLE void searchPacks(const QString &query, const QString &sort = "relevance",
                                  int limit = 20,
                                  const QString &mcVersion = QString(),
                                  const QString &loader = QString(),
-                                 int offset = 0);
-    Q_INVOKABLE void getProject(const QString &projectId);
+                                 int offset = 0,
+                                 const QString &source = "modrinth");
+    Q_INVOKABLE void getProject(const QString &projectId, const QString &source = "modrinth");
     Q_INVOKABLE void getVersions(const QString &projectId,
-                                 const QString &mcVersion = QString(),
-                                 const QString &loader = QString());
-    Q_INVOKABLE void getProjects(const QStringList &ids);
+                                  const QString &mcVersion = QString(),
+                                  const QString &loader = QString(),
+                                  const QString &source = "modrinth");
+    Q_INVOKABLE void getProjects(const QStringList &ids, const QString &source = "modrinth");
 
     // Enqueue a mod file download. Multiple files download concurrently
     // (see kMaxConcurrent). Returns the new task's id ("" on invalid input).

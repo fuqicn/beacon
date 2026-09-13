@@ -52,6 +52,7 @@ typedef struct {
 
 enum McModSource {
     MC_MOD_MODRINTH = 1,
+    MC_MOD_CURSEFORGE = 3,
     MC_MOD_ANY = 2,
 };
 
@@ -70,6 +71,11 @@ void mc_mod_file_free(McModFile *f);
 
 void mc_mod_set_mirror(const char *mirror);
 
+// Set the CurseForge API key (x-api-key header). CurseForge requires a key
+// for all read endpoints; without one, CurseForge search/download is
+// disabled and only Modrinth is used. The key is not persisted to disk.
+void mc_mod_set_curseforge_api_key(const char *api_key);
+
 // Warm the Modrinth mirror decision in the background (non-blocking for callers).
 void mc_mod_warmup_mirror(void);
 
@@ -78,12 +84,17 @@ int mc_mod_search(const char *query, const char *mc_version, const char *loader,
                    McModProject *results, int max_results);
 
 // Search Modrinth for modpacks (project_type=modpack). Same result struct.
+// When a CurseForge API key is set (via mc_mod_set_curseforge_api_key), this
+// also searches CurseForge (classId=4471) and merges both result sets.
 int mc_mod_search_pack(const char *query, const char *mc_version, const char *loader,
-                        int limit, int offset, int sort,
-                        McModProject *results, int max_results);
+                       int limit, int offset, int sort,
+                       McModProject *results, int max_results);
 
 int mc_mod_get_project(const char *project_id, int source,
                        McModProject *project);
+
+// Get a CurseForge project by its numeric ID string.
+int mc_mod_get_project_cf(const char *project_id, McModProject *project);
 
 int mc_mod_get_versions(const char *project_id, int source,
                         const char *mc_version, const char *loader,
@@ -91,9 +102,12 @@ int mc_mod_get_versions(const char *project_id, int source,
 
 // Batch project lookup (Modrinth GET /projects?ids=[...]).
 int mc_mod_get_projects(const char **ids, int count,
-                        McModProject *results, int max_results);
+                       McModProject *results, int max_results);
 
 // Translate a Modrinth file/API URL to the configured mirror, if any.
 int mc_mod_translate_download_url(const char *url, char *out, size_t out_size);
+
+// Return 1 if a CurseForge API key has been configured (CF search is enabled).
+int mc_mod_curseforge_available(void);
 
 #endif

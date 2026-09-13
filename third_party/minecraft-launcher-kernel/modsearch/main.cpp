@@ -18,6 +18,8 @@ static void print_help(void) {
     mc_console_printf("modsearch - %s\n", mc_i18n("modsearch_desc"));
     mc_console_printf("%s: modsearch [query] [%s]\n\n", mc_i18n("usage"), mc_i18n("options"));
     mc_console_printf("%s:\n", mc_i18n("options"));
+    mc_console_printf("  --from <curseforge|modrinth|all>  %s (default: all when --cfapi set, else modrinth)\n", mc_i18n("source_opt"));
+    mc_console_printf("  --cfapi <key>  %s\n", mc_i18n("cf_api_key_opt"));
     mc_console_printf("  --sort <downloads|relevance|follows|newest>  %s\n", mc_i18n("mod_sort"));
     mc_console_printf("  --limit <n>  %s (default: 20)\n", mc_i18n("mod_limit"));
     mc_console_printf("  --page <n>  %s (default: 0)\n", mc_i18n("mod_page"));
@@ -29,6 +31,7 @@ static void print_help(void) {
     mc_console_printf("  modsearch\n");
     mc_console_printf("  modsearch sodium\n");
     mc_console_printf("  modsearch sodium --sort downloads\n");
+    mc_console_printf("  modsearch sodium --cfapi <key> --from all\n");
     mc_console_printf("  modsearch --page 1 --limit 30\n");
 }
 
@@ -46,6 +49,8 @@ int main(int argc, char **argv) {
 
     const char *query = nullptr;
     const char *mirror = nullptr;
+    const char *source_str = nullptr;
+    const char *cf_api_key = nullptr;
     int sort = MC_MOD_SORT_DOWNLOADS;
     int limit = 20;
     int page = 0;
@@ -57,6 +62,10 @@ int main(int argc, char **argv) {
             mc_i18n_set(argv[++i]);
         } else if (strcmp(argv[i], "--mirror") == 0 && i + 1 < argc) {
             mirror = argv[++i];
+        } else if (strcmp(argv[i], "--from") == 0 && i + 1 < argc) {
+            source_str = argv[++i];
+        } else if (strcmp(argv[i], "--cfapi") == 0 && i + 1 < argc) {
+            cf_api_key = argv[++i];
         } else if (strcmp(argv[i], "--sort") == 0 && i + 1 < argc) {
             const char *val = argv[++i];
             if (strcmp(val, "relevance") == 0) sort = MC_MOD_SORT_RELEVANCE;
@@ -76,6 +85,14 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (cf_api_key)
+        mc_mod_set_curseforge_api_key(cf_api_key);
+
+    int source;
+    if (source_str && strcmp(source_str, "curseforge") == 0) source = MC_MOD_CURSEFORGE;
+    else if (source_str && strcmp(source_str, "modrinth") == 0) source = MC_MOD_MODRINTH;
+    else source = MC_MOD_ANY;  // "all" or default: use CF if key set, else Modrinth
+
     // when no query, default sort is downloads (popular mods)
     if (!query) {
         sort = MC_MOD_SORT_DOWNLOADS;
@@ -88,7 +105,7 @@ int main(int argc, char **argv) {
     McModProject results[200];
     int offset = page * limit;
     int count = mc_mod_search(query, nullptr, nullptr,
-                               MC_MOD_MODRINTH, limit, offset, sort, results, 200);
+                               source, limit, offset, sort, results, 200);
 
     if (count == 0) {
         if (query)
@@ -110,11 +127,13 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < count; i++) {
         McModProject *p = &results[i];
-        mc_console_printf("%-28s %-48s %-12ld %s\n",
+        const char *src = p->source == MC_MOD_CURSEFORGE ? "CF" : "MR";
+        mc_console_printf("%-28s %-48s %-12ld %s [%s]\n",
                           p->id ? p->id : "",
                           p->name ? p->name : "",
                           p->download_count,
-                          p->game_versions ? p->game_versions : "");
+                          p->game_versions ? p->game_versions : "",
+                          src);
 
         if (p->description && p->description[0]) {
             std::string desc = p->description;

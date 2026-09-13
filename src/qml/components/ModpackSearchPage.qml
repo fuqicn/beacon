@@ -29,6 +29,7 @@ property var stackView: null
     property string sortKey: "relevance"
     property string mcVersion: ""
     property string loader: ""
+    property string source: kernel.modSource
     property var results: []
 
     // Pagination: Modrinth offset-based, auto-load on near-bottom scroll.
@@ -78,7 +79,7 @@ property var stackView: null
     function requestPage(offset) {
         root.pendingOffset = offset
         kernel.modManager.searchPacks(root.query, root.sortKey, root.pageSize,
-                                      root.mcVersion, root.loader, offset)
+                                      root.mcVersion, root.loader, offset, root.source)
     }
 
     function doSearch() {
@@ -90,6 +91,7 @@ property var stackView: null
     }
 
     Component.onCompleted: {
+        root.source = kernel.modSource
         if (!kernel.modManager.searchingPacks)
             root.requestPage(0)
     }
@@ -175,6 +177,32 @@ property var stackView: null
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
+
+            Text {
+                text: I18n.tr("modpackSearch.sourceLabel")
+                font.pixelSize: 13
+                color: palette.placeholderText
+            }
+
+            ComboBox {
+                id: packSourceCombo
+                font.weight: Font.Medium
+                model: [
+                    { text: I18n.tr("modpackSearch.sourceModrinth"), key: "modrinth" },
+                    { text: I18n.tr("modpackSearch.sourceCurseForge"), key: "curseforge" }
+                ]
+                textRole: "text"
+                valueRole: "key"
+                enabled: !kernel.modManager.searchingPacks
+                Component.onCompleted: {
+                    for (var i = 0; i < model.length; ++i)
+                        if (model[i].key === root.source) { currentIndex = i; break }
+                }
+                onCurrentIndexChanged: {
+                    root.source = model.get(currentIndex).key
+                    root.doSearch()
+                }
+            }
 
             Text {
                 text: I18n.tr("modpackSearch.gameVersion")
@@ -320,11 +348,12 @@ property var stackView: null
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         if (root.stackView)
-root.stackView.push(Qt.resolvedUrl("ModpackDetailPage.qml"), {
+                                root.stackView.push(Qt.resolvedUrl("ModpackDetailPage.qml"), {
                                 stackView: root.stackView,
                                 projectId: modelData.id,
                                 mcVersion: root.mcVersion,
                                 loader: root.loader,
+                                source: root.source,
                                 installDialog: root.installDialog
                             })
                     }

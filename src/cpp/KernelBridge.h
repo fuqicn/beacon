@@ -60,6 +60,7 @@ class KernelBridge : public QObject
     Q_PROPERTY(QString mcDir READ mcDir CONSTANT)
     Q_PROPERTY(bool javaDownloading READ javaDownloading NOTIFY javaDownloadingChanged)
     Q_PROPERTY(bool memOptimizing READ memOptimizing NOTIFY memOptimizingChanged)
+    Q_PROPERTY(QString modSource READ modSource NOTIFY modSourceChanged)
 
 public:
     static KernelBridge *instance();
@@ -160,6 +161,8 @@ public:
     Q_INVOKABLE void selectInstance(const QString &versionId, const QString &rootDir = QString());
     Q_INVOKABLE void setDownloadThreads(int n);
     Q_INVOKABLE void setDownloadSource(const QString &source);
+    Q_INVOKABLE void setCurseForgeApiKey(const QString &key);
+    Q_INVOKABLE void setModSource(const QString &source);
 
     // Game directory for an instance: rootDir when version isolation is off,
     // otherwise rootDir/versions/<versionId>. Old data
@@ -195,10 +198,12 @@ public:
     void setJavaDownloading(bool v);
     bool memOptimizing() const { return m_memOptimizing; }
     void setMemOptimizing(bool v);
+    QString modSource() const { return m_modSource; }
 
 signals:
     void javaDownloadingChanged();
     void memOptimizingChanged();
+    void modSourceChanged();
     void minecraftRunningChanged();
     void paletteChanged();
     void updateAvailableChanged();
@@ -222,6 +227,7 @@ private:
     int m_launchMemory = 4096;
     bool m_javaDownloading = false;
     bool m_memOptimizing = false;
+    QString m_modSource = "modrinth";
     bool m_launchCancelled = false;
     QQuickWindow *m_mainWindow = nullptr;
     QQmlEngine *m_engine = nullptr;

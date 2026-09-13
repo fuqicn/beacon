@@ -173,6 +173,17 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     s_instance->setDownloadSource(
         s_instance->m_settingsManager->value("download/source", "auto").toString());
 
+    // Apply the CurseForge API key (persisted in settings; not in the kernel).
+    QString cfKey = s_instance->m_settingsManager->value("mod/curseforgeApiKey", QString()).toString();
+    mc_mod_set_curseforge_api_key(cfKey.toUtf8().constData());
+
+    // Apply the selected mod source (modrinth / curseforge).
+    s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "modrinth").toString();
+    s_instance->emit modSourceChanged();
+    mc_info("[Bridge] mod source=%s cfKey=%s",
+            s_instance->m_modSource.toUtf8().constData(),
+            cfKey.isEmpty() ? "none" : "set");
+
     // Set skin cache dir
     s_instance->m_skinManager->setCacheDir(launcherDir + "/cache/skins");
 
@@ -761,6 +772,29 @@ void KernelBridge::setDownloadSource(const QString &source)
     warmup->setObjectName("modMirrorWarmup");
     QObject::connect(warmup, &QThread::finished, warmup, &QObject::deleteLater);
     warmup->start();
+}
+
+void KernelBridge::setCurseForgeApiKey(const QString &key)
+{
+    QString trimmed = key.trimmed();
+    m_settingsManager->setValue("mod/curseforgeApiKey", trimmed);
+    mc_mod_set_curseforge_api_key(trimmed.toUtf8().constData());
+    mc_info("[Bridge] CurseForge API key %s", trimmed.isEmpty() ? "cleared" : "set");
+}
+
+void KernelBridge::setModSource(const QString &source)
+{
+    QString s = source.trimmed().toLower();
+    if (s != "modrinth" && s != "curseforge")
+        s = QStringLiteral("modrinth");
+    m_settingsManager->setValue("mod/source", s);
+    // CurseForge requires the API key; if the user picks it without a key,
+    // the kernel falls back to Modrinth and we surface that in the UI.
+    if (s == "curseforge" && !mc_mod_curseforge_available())
+        mc_info("[Bridge] mod source=curseforge but no API key configured");
+    m_modSource = s;
+    mc_info("[Bridge] mod source -> %s", s.toUtf8().constData());
+    emit modSourceChanged();
 }
 
 void KernelBridge::setColorScheme(bool dark)

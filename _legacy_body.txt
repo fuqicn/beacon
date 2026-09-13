@@ -1,0 +1,278 @@
+﻿
+// Legacy concurrent manifest fetch (pre-fix version). Spawns a bare
+// std::thread per candidate source; each thread runs mc_http_get which
+// embeds a nested QEventLoop::exec() over a thread-local
+// QNetworkAccessManager. Those bare threads compete with the main GUI event
+// loop over Qt's global (non-thread-safe) event dispatcher, which is the
+// historical root cause of the Java-download UI freeze. The current
+// mc_java_download_manifest above replaced this with sequential mc_http_get
+// calls on the calling thread.
+//
+// This function is kept verbatim so the manual memory-optimization tool can
+// reproduce the exact stall by invoking it on a worker thread and cancelling
+// as soon as the file count is known. It is NOT used by the normal download
+// path. The freeze ends the moment the manifest returns (file count known).
+int mc_java_download_manifest_legacy(int major_version, const char *mirror, McJavaFileList *list) {
+    memset(list, 0, sizeof(*list));
+
+    // Build URLs for all candidate sources
+    struct Source { const char *url; const char *name; };
+    std::vector<Source> sources;
+    sources.push_back({"https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json", "mojang"});
+    if (mirror && strcmp(mirror, "mojang") != 0 && strcmp(mirror, "auto") != 0) {
+        sources.push_back({"https://bmclapi2.bangbang93.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json", "bmclapi"});
+    }
+    // Always add Adoptium as a fallback source
+    {
+        char plat[64];
+        mc_platform_adoptium_name(plat, sizeof(plat));
+        char adoptium_url[1024];
+        snprintf(adoptium_url, sizeof(adoptium_url),
+                 "https://api.adoptium.net/v3/binary/latest/%d/ga/%s?architecture=%s&os=%s&project=jdk",
+                 major_version, plat, mc_arch_adoptium(mc_platform_arch_get()), mc_platform_get());
+        sources.push_back({adoptium_url, "adoptium"});
+    }
+
+    // Synchronisation primitives.
+    std::mutex result_mtx;
+    std::condition_variable result_cv;
+    std::atomic<bool> done{false};
+    std::atomic<bool> cancelled{false};
+    std::atomic<int> active{(int)sources.size()};
+    McHttpResponse *win_resp = nullptr;
+    const char *win_name = nullptr;
+
+    auto try_source = [&](const Source &src) {
+        HttpClient client;
+        mc_http_init(&client);
+        mc_http_set_timeout(&client, 5000);
+        McHttpResponse *resp = mc_http_get(&client, src.url);
+        bool ok = resp && resp->success && resp->data;
+        if (ok && !cancelled.exchange(true)) {
+            std::lock_guard<std::mutex> lk(result_mtx);
+            if (!done.exchange(true)) {
+                win_resp = resp;
+                win_name = src.name;
+                result_cv.notify_all();
+            } else {
+                mc_http_response_free(resp);
+            }
+        } else {
+            if (resp) mc_http_response_free(resp);
+        }
+        // Drop this bare thread's thread-local QNetworkAccessManager so it is
+        // not leaked in TLS after the thread exits (which would keep Qt's
+        // 100ms network timer firing and pin CPU in the background).
+        mc_http_release_thread_resources();
+        if (active.fetch_sub(1) == 1)
+            result_cv.notify_all();
+    };
+
+    std::vector<std::thread> threads;
+    threads.reserve(sources.size());
+    for (auto &src : sources)
+        threads.emplace_back(try_source, std::cref(src));
+
+    {
+        std::unique_lock<std::mutex> lk(result_mtx);
+        result_cv.wait(lk, [&] { return done.load() || active.load() == 0; });
+    }
+
+    // Now that every thread has signalled completion (active == 0 above), a
+    // plain join() always returns - no detached threads are left behind.
+    for (auto &t : threads)
+        if (t.joinable())
+            t.join();
+
+    if (!win_resp) {
+        mc_error("Failed to fetch Java runtime manifest from any source (legacy)");
+        return 0;
+    }
+    mc_info("Java manifest from: %s (legacy)", win_name ? win_name : "unknown");
+
+    QJsonParseError parseErr;
+    QJsonDocument doc = QJsonDocument::fromJson(QByteArray(win_resp->data), &parseErr);
+    mc_http_response_free(win_resp);
+    if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+        mc_error("Failed to parse Java manifest JSON (legacy)");
+        return 0;
+    }
+    QJsonObject root = doc.object();
+
+    const char *version_key = "jre-legacy";
+    if (major_version >= 22) version_key = "java-runtime-epsilon";
+    else if (major_version >= 21) version_key = "java-runtime-delta";
+    else if (major_version >= 17) version_key = "java-runtime-beta";
+    else if (major_version >= 16) version_key = "java-runtime-alpha";
+
+    const char *plat = mc_platform_get();
+    const char *arch = mc_platform_arch_get();
+    char plat_key[32];
+    snprintf(plat_key, sizeof(plat_key), "%s-%s", plat, arch);
+    QJsonValue platVal = root.value(plat_key);
+    if (platVal.isUndefined()) {
+        snprintf(plat_key, sizeof(plat_key), "%s-x64", plat);
+        platVal = root.value(plat_key);
+    }
+
+    if (platVal.isUndefined()) {
+        QJsonValue dl = root.value("download_link");
+        if (!dl.toString().isEmpty()) {
+            const char *bundle_url = dl.toString().toUtf8().constData();
+            list->count = 1;
+            list->capacity = 1;
+            list->files = (McJavaFile *)malloc(sizeof(McJavaFile));
+            if (list->files) {
+                memset(list->files, 0, sizeof(McJavaFile));
+                strncpy(list->files[0].url, bundle_url, sizeof(list->files[0].url) - 1);
+                strncpy(list->files[0].path, "adoptium-bundle", sizeof(list->files[0].path) - 1);
+                list->files[0].size = 0;
+            }
+            return 1;
+        }
+        QJsonValue releases = root.value("releases");
+        if (releases.isArray() && !releases.toArray().isEmpty()) {
+            QJsonObject release = releases.toArray().first().toObject();
+            QJsonValue dl2 = release.value("download_link");
+            if (!dl2.toString().isEmpty()) {
+                const char *bundle_url = dl2.toString().toUtf8().constData();
+                list->count = 1;
+                list->capacity = 1;
+                list->files = (McJavaFile *)malloc(sizeof(McJavaFile));
+                if (list->files) {
+                    memset(list->files, 0, sizeof(McJavaFile));
+                    strncpy(list->files[0].url, bundle_url, sizeof(list->files[0].url) - 1);
+                    strncpy(list->files[0].path, "adoptium-bundle", sizeof(list->files[0].path) - 1);
+                    list->files[0].size = 0;
+                }
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    QJsonValue rtVal = platVal.toObject().value(version_key);
+    if (rtVal.isUndefined() || !rtVal.isArray()) {
+        if (platVal.isObject()) {
+            QJsonObject platObj = platVal.toObject();
+            for (auto it = platObj.begin(); it != platObj.end(); ++it) {
+                rtVal = it.value();
+                version_key = it.key().toUtf8().constData();
+                break;
+            }
+        }
+    }
+    if (rtVal.isUndefined() || !rtVal.isArray()) {
+        mc_error("No Java runtime '%s' found in manifest (legacy)", version_key);
+        return 0;
+    }
+    QJsonArray rtArr = rtVal.toArray();
+
+    QJsonValue rtEntryVal = rtArr.at(0);
+    if (rtEntryVal.isUndefined()) {
+        mc_error("Empty Java runtime array (legacy)");
+        return 0;
+    }
+    QJsonObject rtEntryObj = rtEntryVal.toObject();
+
+    QJsonValue manifestVal = rtEntryObj.value("manifest");
+    if (manifestVal.isUndefined()) {
+        mc_error("No manifest in Java runtime entry (legacy)");
+        return 0;
+    }
+    QJsonObject manifestObj = manifestVal.toObject();
+    QString manifestUrl = manifestObj.value("url").toString();
+    if (manifestUrl.isNull()) {
+        mc_error("No manifest URL in Java runtime entry (legacy)");
+        return 0;
+    }
+
+    char manifest_url_translated[2048];
+    QByteArray manifestUrlUtf8 = manifestUrl.toUtf8();
+    strncpy(manifest_url_translated, manifestUrlUtf8.constData(), sizeof(manifest_url_translated) - 1);
+    manifest_url_translated[sizeof(manifest_url_translated) - 1] = '\0';
+    if (mirror && strcmp(mirror, "mojang") != 0) {
+        char translated[2048];
+        if (mc_download_translate_mojang_url(manifestUrlUtf8.constData(), translated, sizeof(translated), mirror))
+            strncpy(manifest_url_translated, translated, sizeof(manifest_url_translated) - 1);
+    }
+    HttpClient client;
+    mc_http_init(&client);
+    mc_http_set_timeout(&client, 30000);
+    McHttpResponse *resp = mc_http_get(&client, manifest_url_translated);
+    if (!resp || !resp->success || !resp->data) {
+        mc_error("Failed to fetch Java runtime file manifest (legacy)");
+        if (resp) mc_http_response_free(resp);
+        return 0;
+    }
+
+    QJsonParseError fileParseErr;
+    QJsonDocument fileDoc = QJsonDocument::fromJson(QByteArray(resp->data), &fileParseErr);
+    mc_http_response_free(resp);
+    if (fileParseErr.error != QJsonParseError::NoError || !fileDoc.isObject()) {
+        mc_error("Failed to parse file manifest JSON (legacy)");
+        return 0;
+    }
+    QJsonObject fileRoot = fileDoc.object();
+
+    QJsonValue filesVal = fileRoot.value("files");
+    if (filesVal.isUndefined() || !filesVal.isObject()) {
+        mc_error("No files in Java runtime manifest (legacy)");
+        return 0;
+    }
+    QJsonObject filesObj = filesVal.toObject();
+
+    std::vector<McJavaFile> file_list;
+    for (auto it = filesObj.begin(); it != filesObj.end(); ++it) {
+        QByteArray relPathBa = it.key().toUtf8();
+        const char *rel_path = relPathBa.constData();
+
+        QJsonValue entryVal = it.value();
+        if (!entryVal.isObject()) continue;
+
+        QJsonObject entryObj = entryVal.toObject();
+        QJsonValue downloadsVal = entryObj.value("downloads");
+        if (downloadsVal.isUndefined()) continue;
+        QJsonValue rawVal = downloadsVal.toObject().value("raw");
+        if (rawVal.isUndefined()) continue;
+
+        QJsonObject rawObj = rawVal.toObject();
+        QString dlUrl = rawObj.value("url").toString();
+        QString dlSha1 = rawObj.value("sha1").toString();
+        long dlSize = (long)rawObj.value("size").toDouble(0);
+
+        if (dlUrl.isNull() || dlSha1.isNull()) continue;
+
+        QByteArray dlUrlBa = dlUrl.toUtf8();
+        QByteArray dlSha1Ba = dlSha1.toUtf8();
+
+        McJavaFile f;
+        memset(&f, 0, sizeof(f));
+        strncpy(f.url, dlUrlBa.constData(), sizeof(f.url) - 1);
+        strncpy(f.path, rel_path, sizeof(f.path) - 1);
+        strncpy(f.sha1, dlSha1Ba.constData(), sizeof(f.sha1) - 1);
+        f.size = dlSize;
+        file_list.push_back(f);
+    }
+
+    if (file_list.empty()) { mc_error("No downloadable files in Java manifest (legacy)"); return 0; }
+
+    list->count = (int)file_list.size();
+    list->capacity = list->count;
+    list->files = (McJavaFile *)malloc(sizeof(McJavaFile) * list->count);
+    if (!list->files) { list->count = 0; return 0; }
+    for (int i = 0; i < list->count; i++)
+        list->files[i] = file_list[i];
+
+    mc_info("Java manifest: %d files for %s (legacy)", list->count, version_key);
+    return 1;
+}
+
+void mc_java_file_list_free(McJavaFileList *list) {
+    if (list && list->files) {
+        free(list->files);
+        list->files = nullptr;
+    }
+    list->count = 0;
+    list->capacity = 0;
+}

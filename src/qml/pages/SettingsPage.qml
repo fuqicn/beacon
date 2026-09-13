@@ -52,6 +52,10 @@ Item {
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
         langCombo.currentIndex = kernel.settingsManager.value("language/index", -1) + 1
         cfKeyInput.text = kernel.settingsManager.value("mod/curseforgeApiKey", "")
+        var storedUa = kernel.settingsManager.value("mod/userAgent", "").toString()
+        uaInput.text = (storedUa === "")
+            ? ("Beacon/" + kernel.readVersion() + " (https://github.com/fuqicn/beacon)")
+            : storedUa
         var dlSource = kernel.settingsManager.value("download/source", "auto")
         for (var i = 0; i < dlSourceCombo.model.length; ++i) {
             if (dlSourceCombo.model[i].key === dlSource) {
@@ -343,6 +347,45 @@ Item {
                         ToolTip.visible: mcimHover.hovered
                         ToolTip.delay: 500
                         ToolTip.text: I18n.tr("settings.mcimirrorHint")
+                    }
+                }
+            }
+
+            // Custom User-Agent (MCIM / CF prerequisite)
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: uaInner.implicitHeight + 32
+                radius: Theme.shapeMedium
+                color: Theme.surfaceContainer
+                ColumnLayout {
+                    id: uaInner
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Text { text: I18n.tr("settings.userAgent"); color: palette.placeholderText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        TextField {
+                            id: uaInput
+                            Layout.preferredWidth: 300
+                            placeholderText: I18n.tr("settings.userAgentPlaceholder")
+                            font.pixelSize: 13
+                            onTextEdited: kernel.setGlobalUserAgent(text.trim())
+                            HoverHandler { id: uaHover }
+                            ToolTip.visible: uaHover.hovered
+                            ToolTip.delay: 500
+                            ToolTip.text: I18n.tr("settings.userAgentHint")
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("settings.userAgentDesc")
+                        font.pixelSize: 11
+                        color: palette.placeholderText
+                        wrapMode: Text.Wrap
+                        lineHeight: 1.35
                     }
                 }
             }

@@ -163,6 +163,7 @@ public:
     Q_INVOKABLE void setDownloadSource(const QString &source);
     Q_INVOKABLE void setCurseForgeApiKey(const QString &key);
     Q_INVOKABLE void setModSource(const QString &source);
+    Q_INVOKABLE void setGlobalUserAgent(const QString &userAgent);
 
     // Game directory for an instance: rootDir when version isolation is off,
     // otherwise rootDir/versions/<versionId>. Old data

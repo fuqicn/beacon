@@ -284,14 +284,16 @@ static int search_modrinth(const char *query, const char *mc_version, const char
 static int search_curseforge(const char *query, const char *mc_version, const char *loader,
                              int limit, int offset, int sort, int class_id,
                              McModProject *results, int max_results);
+static int cf_search_available(void);
 
 int mc_mod_search(const char *query, const char *mc_version, const char *loader,
                   int source, int limit, int offset, int sort,
                   McModProject *results, int max_results) {
     if (!results || max_results <= 0) return 0;
 
-    // CurseForge first (when requested or in ANY mode with a key set)
-    if ((source == MC_MOD_CURSEFORGE || source == MC_MOD_ANY) && g_cf_api_key[0]) {
+    // CurseForge first (when requested, or in ANY mode when reachable: key
+    // present, or the mcimirror relay proxies the CF API without a key)
+    if ((source == MC_MOD_CURSEFORGE || source == MC_MOD_ANY) && cf_search_available()) {
         int cf = search_curseforge(query, mc_version, loader, limit, offset, sort,
                                     CF_CLASS_MOD, results, max_results);
         if (cf > 0) return cf;
@@ -311,8 +313,8 @@ int mc_mod_search_pack(const char *query, const char *mc_version, const char *lo
                        McModProject *results, int max_results) {
     if (!results || max_results <= 0) return 0;
 
-    // CurseForge modpacks (classId=4471) when a key is configured.
-    if (g_cf_api_key[0]) {
+    // CurseForge modpacks (classId=4471) when reachable (key or mcimirror).
+    if (cf_search_available()) {
         int cf = search_curseforge(query, mc_version, loader, limit, offset, sort,
                                     CF_CLASS_MODPACK, results, max_results);
         if (cf > 0) return cf;
@@ -348,11 +350,27 @@ static const char *cf_class_name(int classId) {
     return "mod";
 }
 
+// CF search is reachable without a user-supplied key when the request is
+// routed through the mcimirror relay (which proxies CurseForge on the
+// server side). With a key, the official API is reachable too.
+static int cf_search_available(void) {
+    if (g_cf_api_key[0]) return 1;
+    // No key: only reachable when the mirror explicitly resolves to the
+    // mcimirror relay. Check the configured mirror first (explicit choice),
+    // then the background-warmed auto-decision.
+    if (g_mirror[0] && strcmp(g_mirror, "auto") != 0)
+        return strcmp(g_mirror, "mcimirror") == 0;
+    {
+        std::lock_guard<std::mutex> lk(g_mod_auto_mutex);
+        return g_mod_auto_mirror[0] && strcmp(g_mod_auto_mirror, "mcimirror") == 0;
+    }
+}
+
 static int search_curseforge(const char *query, const char *mc_version, const char *loader,
                              int limit, int offset, int sort, int class_id,
                              McModProject *results, int max_results) {
-    if (!g_cf_api_key[0]) {
-        mc_warn("CurseForge requires --cfapi <key>; skipping");
+    if (!cf_search_available()) {
+        mc_warn("CurseForge unavailable without --cfapi <key> (or --mirror mcimirror); skipping");
         return 0;
     }
     QString url = QString("%1/mods/search?gameId=%2&classId=%3&pageSize=%4&index=%5")
@@ -480,7 +498,7 @@ int mc_mod_get_project(const char *project_id, int source,
 }
 
 int mc_mod_get_project_cf(const char *project_id, McModProject *project) {
-    if (!project_id || !project || !g_cf_api_key[0]) return 0;
+    if (!project_id || !project || !cf_search_available()) return 0;
     mc_mod_project_init(project);
 
     QString url = QString("%1/mods/%2").arg(CF_BASE).arg(project_id);
@@ -522,7 +540,9 @@ int mc_mod_get_versions(const char *project_id, int source,
     (void)source;
     if (!project_id || !files || max_files <= 0) return 0;
 
-    if (source == MC_MOD_CURSEFORGE || (source == MC_MOD_ANY && g_cf_api_key[0] && isdigit(project_id[0]))) {
+    // CurseForge numeric project IDs route to the CF version endpoint when
+    // reachable (key present, or the mcimirror relay proxies the CF API).
+    if (source == MC_MOD_CURSEFORGE || (source == MC_MOD_ANY && cf_search_available() && isdigit(project_id[0]))) {
         return get_versions_cf(project_id, mc_version, loader, files, max_files);
     }
 
@@ -619,7 +639,7 @@ int mc_mod_get_versions(const char *project_id, int source,
 
 static int get_versions_cf(const char *project_id, const char *mc_version, const char *loader,
                            McModFile *files, int max_files) {
-    if (!g_cf_api_key[0]) return 0;
+    if (!cf_search_available()) return 0;
     QString url = QString("%1/mods/%2/files?pageSize=100").arg(CF_BASE).arg(project_id);
     if (mc_version && mc_version[0])
         url += "&gameVersion=" + QUrl::toPercentEncoding(QString::fromUtf8(mc_version));

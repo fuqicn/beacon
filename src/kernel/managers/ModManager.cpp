@@ -166,7 +166,9 @@ public slots:
             m["downloadUrl"] = QString::fromUtf8(files[i].download_url);
             m["sha1"] = QString::fromUtf8(files[i].sha1);
             m["size"] = (qlonglong)files[i].size;
-m["releaseType"] = QString::fromUtf8(files[i].release_type);
+            m["source"] = (sourceFromName(source) == MC_MOD_CURSEFORGE)
+                          ? QString("curseforge") : QString("modrinth");
+            m["releaseType"] = QString::fromUtf8(files[i].release_type);
             m["releaseDate"] = QString::fromUtf8(files[i].release_date);
             m["downloadCount"] = files[i].download_count;
             m["gameVersions"] = QString::fromUtf8(files[i].game_versions ? files[i].game_versions : "");

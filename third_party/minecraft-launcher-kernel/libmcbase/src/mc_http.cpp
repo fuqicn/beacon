@@ -26,6 +26,13 @@ static char g_qt_argv0[256] = "opencode-launcher";
 static char *g_qt_argv[] = { g_qt_argv0, nullptr };
 static int g_qt_argc = 1;
 
+// Global user-agent override: set via mc_http_set_global_user_agent().
+// Default is "" (no UA declared). The kernel also ships a built-in browser UA
+// as a last-resort fallback; a non-empty global value overrides it, and an
+// empty global value suppresses it.
+static char g_global_ua[256] = "";
+static char g_global_ua_active_flag = 0;
+
 // Shared storage for the thread-local NAM, so both get_nam() and
 // mc_http_release_thread_resources() reach the SAME per-thread slot.
 static std::unique_ptr<QNetworkAccessManager> &nam_slot(void) {
@@ -47,6 +54,24 @@ static QNetworkAccessManager *get_nam(void) {
 // firing, which pins CPU after the optimization ends.
 extern "C" void mc_http_release_thread_resources(void) {
     nam_slot().reset();
+}
+
+extern "C" void mc_http_set_global_user_agent(const char *user_agent) {
+    if (user_agent) {
+        strncpy(g_global_ua, user_agent, sizeof(g_global_ua) - 1);
+        g_global_ua[sizeof(g_global_ua) - 1] = '\0';
+        g_global_ua_active_flag = 1;
+    } else {
+        g_global_ua[0] = '\0';
+        g_global_ua_active_flag = 0;
+    }
+}
+
+// Resolve the user agent to apply: the global override when set (may be ""
+// to suppress the header), else the per-client value.
+static const char *resolve_ua(const HttpClient *client) {
+    if (g_global_ua_active_flag) return g_global_ua;
+    return client->user_agent;
 }
 
 static void ensure_qt(void) {
@@ -75,6 +100,17 @@ extern "C" void mc_http_set_timeout(HttpClient *client, int timeout_ms) {
     if (client) client->timeout_ms = timeout_ms > 0 ? timeout_ms : 30000;
 }
 
+extern "C" void mc_http_set_user_agent(HttpClient *client, const char *user_agent) {
+    if (!client || !user_agent) return;
+    strncpy(client->user_agent, user_agent, sizeof(client->user_agent) - 1);
+    client->user_agent[sizeof(client->user_agent) - 1] = '\0';
+}
+
+extern "C" const char *mc_http_default_user_agent(void) {
+    if (g_global_ua_active_flag) return g_global_ua;
+    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+}
+
 static McHttpResponse *do_request(HttpClient *client, const char *url,
     const char *method, const char *content_type, const unsigned char *body, size_t body_len,
     const char **extra_headers, int header_count)
@@ -91,7 +127,9 @@ static McHttpResponse *do_request(HttpClient *client, const char *url,
     }
 
     QNetworkRequest req(qurl);
-    req.setRawHeader("User-Agent", QByteArray::fromStdString(client->user_agent));
+    const char *ua = resolve_ua(client);
+    if (ua && ua[0])
+        req.setRawHeader("User-Agent", QByteArray(ua));
     req.setRawHeader("Accept", "*/*");
     req.setTransferTimeout(client->timeout_ms);
 

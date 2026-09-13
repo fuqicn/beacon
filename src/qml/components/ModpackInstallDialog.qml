@@ -26,6 +26,7 @@ Popup {
     property var file: ({})
     property string projectName: ""
     property string logoUrl: ""
+    property string source: "modrinth"
     property bool loading: true
     property string targetDir: ""
 
@@ -129,6 +130,7 @@ Popup {
                         if (root.targetDir.length > 0) {
                             var f = root.file
                             f.iconUrl = root.logoUrl || ""
+                            f.source = root.source
                             kernel.modpackManager.installFromProject(f, root.targetDir)
                             root.installed(I18n.tr("modpackInstall.started"))
                         }

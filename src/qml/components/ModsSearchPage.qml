@@ -382,6 +382,7 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                                 projectId: modelData.id,
                                 mcVersion: root.mcVersion,
                                 loader: root.loader,
+                                source: root.source,
                                 downloadDialog: root.downloadDialog
                             })
                     }

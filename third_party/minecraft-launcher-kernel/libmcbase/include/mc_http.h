@@ -33,6 +33,16 @@ typedef struct {
 void mc_http_init(HttpClient *client);
 void mc_http_set_proxy(HttpClient *client, const char *host, int port);
 void mc_http_set_timeout(HttpClient *client, int timeout_ms);
+void mc_http_set_user_agent(HttpClient *client, const char *user_agent);
+
+// Global user-agent override: when set, new QNetworkAccessManager
+// instances created by the kernel use this UA. Intended for launchers that
+// link libmcbase and want a consistent app UA (or none: pass "" to suppress).
+void mc_http_set_global_user_agent(const char *user_agent);
+
+// The user agent applied to download requests (global override when set,
+// else the built-in browser UA). Used by the Qt download pool.
+const char *mc_http_default_user_agent(void);
 
 McHttpResponse *mc_http_get(HttpClient *client, const char *url);
 McHttpResponse *mc_http_get_with_headers(HttpClient *client, const char *url, const char **headers, int header_count);

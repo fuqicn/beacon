@@ -426,13 +426,15 @@ Rectangle {
         ScrollBar.vertical: OverlayScrollBar { }
     }
 
-function openInstallDialog() {
+ function openInstallDialog() {
         if (!root.installDialog)
             return
         root.installDialog.file = root.selectedFile
         root.installDialog.loading = false
         root.installDialog.projectName = root.project.name
         root.installDialog.logoUrl = root.project.logoUrl || ""
+        root.installDialog.source = (root.selectedFile && root.selectedFile.source)
+                                   || root.source || "modrinth"
         root.installDialog.targetDir = kernel.instanceManager.currentRootDir || kernel.mcDir
         root.installDialog.open()
     }

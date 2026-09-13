@@ -71,9 +71,10 @@ void mc_mod_file_free(McModFile *f);
 
 void mc_mod_set_mirror(const char *mirror);
 
-// Set the CurseForge API key (x-api-key header). CurseForge requires a key
-// for all read endpoints; without one, CurseForge search/download is
-// disabled and only Modrinth is used. The key is not persisted to disk.
+// Set the CurseForge API key (x-api-key header). When the request is routed
+// through the mcimirror relay, the key is optional (the relay proxies CF
+// server-side). With no key and no relay, CurseForge is disabled and only
+// Modrinth is used. The key is not persisted to disk.
 void mc_mod_set_curseforge_api_key(const char *api_key);
 
 // Warm the Modrinth mirror decision in the background (non-blocking for callers).

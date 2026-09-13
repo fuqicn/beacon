@@ -141,6 +141,179 @@ static bool downloadFile(const QString &url, const QString &dest,
 
 // ─── Core installer (runs on worker thread) ────────────────────────────────
 
+// Detect whether an already-extracted pack folder holds a Modrinth index
+// (modrinth.index.json) or a CurseForge loader manifest (manifest.json). The
+// same helper is used for local files (after extraction) and downloaded packs.
+enum class PackFormat { None, Modrinth, CurseForge };
+
+static PackFormat detectPackFormat(const QString &extractDir)
+{
+    if (QFileInfo::exists(extractDir + "/modrinth.index.json"))
+        return PackFormat::Modrinth;
+    if (QFileInfo::exists(extractDir + "/manifest.json"))
+        return PackFormat::CurseForge;
+    return PackFormat::None;
+}
+
+// CurseForge modpack installer. A CF pack zip contains a loader
+// `manifest.json` (Minecraft version + mod list) and an `overrides/` folder.
+// Runs on the worker thread.
+static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
+                             const QString &iconUrl, QString *errorOut,
+                             const std::function<void(qreal, const QString &)> &progress)
+{
+    QString tmp = QDir(rootDir).filePath("versions/.cfsack_tmp");
+    QString verDir;
+    auto fail = [errorOut, &tmp, &verDir](const QString &msg) -> QString {
+        mc_error("[CfPack] ERROR: %s", msg.toUtf8().constData());
+        if (errorOut) *errorOut = msg;
+        removeDirRecursively(tmp);
+        if (!verDir.isEmpty())
+            removeDirRecursively(verDir);
+        return QString();
+    };
+
+    mc_info("[CfPack] === START zip=%s root=%s", cfZipPath.toUtf8().constData(),
+            rootDir.toUtf8().constData());
+
+    removeDirRecursively(tmp);
+    QDir().mkpath(tmp);
+
+    progress(0.02, "解压整合包");
+    if (!QFileInfo::exists(cfZipPath))
+        return fail("整合包文件不存在: " + cfZipPath);
+    if (mc_zip_extract(cfZipPath.toUtf8().constData(), tmp.toUtf8().constData()) != 1)
+        return fail("整合包解压失败");
+
+    QFile mfFile(tmp + "/manifest.json");
+    QJsonObject mf;
+    if (!mfFile.open(QIODevice::ReadOnly))
+        return fail("整合包缺少 manifest.json (不是 CurseForge 整合包?)");
+    QJsonDocument mfDoc = QJsonDocument::fromJson(mfFile.readAll());
+    if (!mfDoc.isObject())
+        return fail("manifest.json 解析失败");
+    mf = mfDoc.object();
+
+    QString packName = mf["name"].toString();
+    if (packName.isEmpty())
+        packName = QFileInfo(cfZipPath).completeBaseName();
+
+    QString mcVersion = mf["minecraftVersion"].toString();
+    if (mcVersion.isEmpty())
+        return fail("manifest.json 未包含 minecraftVersion");
+
+    // Loader version: a loader is implied only when one is present in the
+    // mod list. CurseForge loader mods use modId 231710 (Forge), 241545
+    // (NeoForge/Forge-1.20.4+), 256858 (Fabric). Anything else is a normal
+    // dependency or override.
+    QString loader, loaderVer;
+    QJsonArray mods = mf["files"].toArray();
+    for (auto mv : mods) {
+        QJsonObject mo = mv.toObject();
+        QString type = mo["type"].toString();
+        if (type == "required" && mo["modId"].toInt() == 231710) {
+            loader = "forge";
+            loaderVer = mo["version"].toString();
+            break;
+        }
+        if (type == "required" && (mo["modId"].toInt() == 241545 || mo["modId"].toInt() == 256858)) {
+            loader = "neoforge";
+            loaderVer = mo["version"].toString();
+            break;
+        }
+    }
+
+    // The loader must be installed BEFORE the instance json is written, so the
+    // instance can inherit from the loader version id that installLoaderSync
+    // returns.
+    progress(0.08, "安装加载器 " + (loader.isEmpty() ? "vanilla" : loader) + " " + mcVersion);
+    QString loaderVerId;
+    QString err;
+    if (loader.isEmpty()) {
+        loaderVerId = mcVersion;
+    } else if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir,
+                                  &err, &loaderVerId,
+                                  [progress](qreal p, const QString &s) {
+                                      progress(0.08 + 0.20 * p, "安装加载器 " + s);
+                                  })) {
+        return fail("加载器安装失败: " + err);
+    }
+    if (loaderVerId.isEmpty())
+        loaderVerId = mcVersion;
+
+    QString instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
+    verDir = QDir(rootDir).filePath("versions/" + instanceId);
+    QDir().mkpath(verDir);
+
+    // Collect mod files that must be downloaded from CurseForge.
+    struct CfFile {
+        QByteArray urlBuf, sha1Buf, pathBuf;
+        long size = 0;
+    };
+    QVector<CfFile> cfFiles;
+    for (auto mv : mods) {
+        QJsonObject mo = mv.toObject();
+        QString type = mo["type"].toString();
+        QString fileUrl = mo["url"].toString();
+        if (fileUrl.isEmpty() || type == "included" || type == "optional")
+            continue;
+
+        QString fileName = mo["fileName"].toString();
+        if (fileName.isEmpty())
+            fileName = QFileInfo(QString::fromLatin1(fileUrl.toUtf8().constData())).fileName();
+        CfFile cf;
+        cf.urlBuf = fileUrl.toUtf8();
+        QString hashStr = mo["fileHash"].toString();
+        if (!hashStr.isEmpty())
+            cf.sha1Buf = hashStr.toUtf8();
+        cf.pathBuf = QDir(verDir).filePath("mods/" + fileName).toUtf8();
+        QDir().mkpath(QFileInfo(cf.pathBuf).absolutePath());
+        cfFiles.append(cf);
+    }
+
+    progress(0.45, "下载 CurseForge 文件");
+    for (int i = 0; i < cfFiles.size(); ++i) {
+        CfFile &cf = cfFiles[i];
+        if (!downloadFile(QString::fromUtf8(cf.urlBuf), QString::fromUtf8(cf.pathBuf),
+                          QString::fromUtf8(cf.sha1Buf), cf.size,
+                          [progress, i](qreal) {
+                              (void)progress; (void)i;
+                          }))
+            mc_info("[CfPack] file %d download failed, continuing", i);
+        progress(0.45 + 0.35 * (qreal)(i + 1) / qMax(1, cfFiles.size()),
+                 QString("下载 CurseForge 文件 (%1/%2)").arg(i + 1).arg(cfFiles.size()));
+    }
+
+    // Instance JSON inheriting from the loader / base version.
+    progress(0.88, "写入实例配置");
+    {
+        QJsonObject v;
+        v["id"] = instanceId;
+        v["inheritsFrom"] = loaderVerId;
+        v["type"] = "release";
+        v["mainClass"] = "";
+        QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        v["time"] = now;
+        v["releaseTime"] = now;
+        QFile vf(verDir + "/" + instanceId + ".json");
+        if (vf.open(QIODevice::WriteOnly))
+            vf.write(QJsonDocument(v).toJson(QJsonDocument::Indented));
+    }
+
+    // Apply overrides into the game dir.
+    progress(0.94, "应用覆盖文件");
+    copyDirRecursively(tmp + "/overrides", verDir);
+    if (!iconUrl.isEmpty())
+        downloadFile(iconUrl, verDir + "/icon.png", QString(), 0, [](qreal) {});
+
+    removeDirRecursively(tmp);
+
+    mc_info("[CfPack] === COMPLETE id=%s files=%d", instanceId.toUtf8().constData(),
+            cfFiles.size());
+    progress(1.0, "CurseForge 整合包安装完成");
+    return instanceId;
+}
+
 static QString installPack(const QString &mrpackPath, const QString &rootDir,
                            const QString &iconUrl, QString *errorOut,
                            const std::function<void(qreal, const QString &)> &progress)
@@ -423,11 +596,35 @@ public slots:
         // inside Qt6Core, see mc_download_qt.cpp). The download APIs block on
         // the global pool's futures; the pool threads own their event loops.
         mc_qt_download_thread_no_pump(1);
+
+        // Peek at the zip contents to pick the installer. Both a local Modrinth
+        // .mrpack and a local CurseForge .zip share the same "open the zip,
+        // look for an index file, branch" pattern.
+        QString tmpProbe = QDir(rootDir).filePath("versions/.fmt_probe");
+        removeDirRecursively(tmpProbe);
+        QDir().mkpath(tmpProbe);
+        PackFormat fmt = PackFormat::None;
+        if (QFileInfo::exists(filePath) &&
+            mc_zip_extract(filePath.toUtf8().constData(), tmpProbe.toUtf8().constData()) == 1)
+            fmt = detectPackFormat(tmpProbe);
+        removeDirRecursively(tmpProbe);
+
         QString error;
-        QString id = installPack(filePath, rootDir, QString(), &error,
-                                 [this](qreal p, const QString &s) {
-                                     emit progressReported(p, s);
-                                 });
+        QString id;
+        if (fmt == PackFormat::CurseForge) {
+            id = installCfPack(filePath, rootDir, QString(), &error,
+                               [this](qreal p, const QString &s) {
+                                   emit progressReported(p, s);
+                               });
+        } else {
+            // modrinth.index.json present, or unknown: fall through to the
+            // existing Modrinth path (which fails with a clear error if the
+            // zip is truly unknown).
+            id = installPack(filePath, rootDir, QString(), &error,
+                             [this](qreal p, const QString &s) {
+                                 emit progressReported(p, s);
+                             });
+        }
         if (id.isEmpty())
             emit errorOccurred(error);
         else
@@ -475,14 +672,39 @@ public slots:
         QString error;
         QString id;
         if (ok) {
-            mc_info("[Pack] mrpack downloaded, starting install: %s",
-                    mrpackPath.toUtf8().constData());
-            // installPack reports 0..1; shift it into the 0.45..1.0 window so
-            // the overall bar keeps rising after the download phase.
-            id = installPack(mrpackPath, rootDir, iconUrl, &error,
-                             [this](qreal p, const QString &s) {
-                                 emit progressReported(0.45 + 0.55 * p, s);
-                             });
+            // Peek at the downloaded archive to pick the installer. A CF
+            // modpack file (the "client" zip from a CF modpack project) has a
+            // top-level manifest.json + overrides/; a Modrinth .mrpack has
+            // modrinth.index.json. The source field is passed through from the
+            // ModManager variant map, so prefer it when present; otherwise
+            // detect by content.
+            QString src = file.value("source").toString().trimmed().toLower();
+            PackFormat fmt = PackFormat::None;
+            if (src == "curseforge")
+                fmt = PackFormat::CurseForge;
+            if (fmt == PackFormat::None) {
+                QString probeDir = QDir(rootDir).filePath("versions/.fmt_probe2");
+                removeDirRecursively(probeDir);
+                QDir().mkpath(probeDir);
+                if (mc_zip_extract(mrpackPath.toUtf8().constData(),
+                                   probeDir.toUtf8().constData()) == 1)
+                    fmt = detectPackFormat(probeDir);
+                removeDirRecursively(probeDir);
+            }
+
+            mc_info("[Pack] downloaded, starting install: %s fmt=%d",
+                    mrpackPath.toUtf8().constData(), (int)fmt);
+            if (fmt == PackFormat::CurseForge) {
+                id = installCfPack(mrpackPath, rootDir, iconUrl, &error,
+                                   [this](qreal p, const QString &s) {
+                                       emit progressReported(0.45 + 0.55 * p, s);
+                                   });
+            } else {
+                id = installPack(mrpackPath, rootDir, iconUrl, &error,
+                                 [this](qreal p, const QString &s) {
+                                     emit progressReported(0.45 + 0.55 * p, s);
+                                 });
+            }
         }
         else
             error = "整合包下载失败: " + url;

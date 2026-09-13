@@ -353,7 +353,7 @@ property var stackView: null
                                 projectId: modelData.id,
                                 mcVersion: root.mcVersion,
                                 loader: root.loader,
-                                source: root.source,
+                                source: modelData.source || root.source,
                                 installDialog: root.installDialog
                             })
                     }

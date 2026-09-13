@@ -10,6 +10,7 @@
 #include "mc_path.h"
 #include "mc_str.h"
 #include "mc_log.h"
+#include "mc_http.h"
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -178,7 +179,7 @@ static void pool_shutdown() {
         doomed.swap(g_pool_threads);
     }
     g_pool_cv.notify_all();
-    // Do NOT join â€?Qt TLS cleanup in worker threads requires a running event
+    // Do NOT join ï¿½?Qt TLS cleanup in worker threads requires a running event
     // loop and blocks for many seconds when join is called. Detach and let the
     // OS reclaim thread resources when the process exits.
     for (auto &t : doomed)
@@ -350,7 +351,7 @@ static int merge_file(const char *out, long long expect_size, const char *expect
 
 static void setup_req(QNetworkRequest &req, long timeout_ms) {
     req.setTransferTimeout((int)timeout_ms);
-    req.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    req.setRawHeader("User-Agent", QByteArray(mc_http_default_user_agent()));
     req.setRawHeader("Accept", "*/*");
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     QHttp1Configuration h1;
@@ -386,7 +387,7 @@ static void bmclapi_throttle(const char *url) {
     auto last = g_throttle_last.load(std::memory_order_relaxed);
     auto gap = std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count();
     if (gap < 50) {
-        // Brief non-blocking sleep â€?avoids holding the CPU in a tight spin
+        // Brief non-blocking sleep ï¿½?avoids holding the CPU in a tight spin
         std::this_thread::sleep_for(std::chrono::milliseconds(50 - (int)gap));
         now = std::chrono::steady_clock::now();
     }
@@ -868,7 +869,7 @@ static int download_one_file(const McQtBatchItem *it, long timeout_ms, ProgressR
             }
             mc_info("[DL-Q] file %s: %d pieces x %ldB", it->path, npieces, piece_len);
 
-            // NOTE: no clean_temp() here â€?valid chunks are reused across
+            // NOTE: no clean_temp() here ï¿½?valid chunks are reused across
             // sources so a stalling mirror never costs already-fetched bytes.
             bool range_hostile = false;
             int got = download_ranges(url, it->path, it->size, npieces, piece_len, eff_timeout,

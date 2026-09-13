@@ -177,6 +177,11 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     QString cfKey = s_instance->m_settingsManager->value("mod/curseforgeApiKey", QString()).toString();
     mc_mod_set_curseforge_api_key(cfKey.toUtf8().constData());
 
+    // Apply the global User-Agent for all kernel HTTP requests.
+    QString ua = s_instance->m_settingsManager->value("mod/userAgent", QString()).toString();
+    if (!ua.isEmpty())
+        mc_http_set_global_user_agent(ua.toUtf8().constData());
+
     // Apply the selected mod source (modrinth / curseforge).
     s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "modrinth").toString();
     s_instance->emit modSourceChanged();
@@ -795,6 +800,21 @@ void KernelBridge::setModSource(const QString &source)
     m_modSource = s;
     mc_info("[Bridge] mod source -> %s", s.toUtf8().constData());
     emit modSourceChanged();
+}
+
+// Set the global User-Agent header used by every kernel HTTP request.
+// An empty string restores the kernel's built-in browser fallback.
+void KernelBridge::setGlobalUserAgent(const QString &userAgent)
+{
+    QString ua = userAgent.trimmed();
+    m_settingsManager->setValue("mod/userAgent", ua);
+    if (ua.isEmpty()) {
+        mc_http_set_global_user_agent(nullptr);
+        mc_info("[Bridge] global User-Agent cleared (using kernel default)");
+    } else {
+        mc_http_set_global_user_agent(ua.toUtf8().constData());
+        mc_info("[Bridge] global User-Agent -> %s", ua.toUtf8().constData());
+    }
 }
 
 void KernelBridge::setColorScheme(bool dark)

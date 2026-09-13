@@ -9,6 +9,7 @@
 #define MC_DOWNLOAD_QT_H
 
 #include <stddef.h>
+#include "mc_http.h"
 
 typedef void (*McDownloadProgressFn)(long long received, long long total, void *userdata);
 

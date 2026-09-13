@@ -46,7 +46,7 @@ ApplicationWindow {
     palette.highlight: Theme.primary
     palette.highlightedText: kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
 
-    onClosing: {
+    onClosing: function(close) {
         // Cancel every in-flight download and sweep temp files before quitting.
         kernel.prepareShutdown()
         close.accepted = true

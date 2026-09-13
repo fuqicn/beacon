@@ -194,24 +194,22 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     // IMPORTANT: the callback uses SendMessageTimeout(SMTO_ABORTIFHUNG, 200ms)
     // so a hung window never blocks the poller (and therefore the whole process).
     {
-        QThread *pollThread = new QThread(s_instance);
+        auto *pollThread = new QThread(s_instance);
         pollThread->setObjectName("mcRunningPoller");
-        QObject::connect(pollThread, &QThread::started, [pollThread]() {
+        QObject::connect(pollThread, &QThread::started, []() {
             bool prev = false;
-            QTimer *timer = new QTimer(pollThread);
-            timer->setInterval(15000);  // 15 s is plenty for this low-frequency check
-            QObject::connect(timer, &QTimer::timeout, [pollThread, &prev]() {
+            std::function<void()> loop;
+            loop = [&prev, &loop]() {
                 bool running = pollMinecraftRunning();
                 if (running != prev) {
                     prev = running;
-                    // Emit the signal on the main thread (kernel instance lives
-                    // there), not on this background poll thread.
                     QMetaObject::invokeMethod(KernelBridge::instance(), [bridge = KernelBridge::instance(), running]() {
                         bridge->setMinecraftRunning(running);
                     }, Qt::QueuedConnection);
                 }
-            });
-            timer->start();
+                QTimer::singleShot(15000, loop);
+            };
+            loop();
         });
         QObject::connect(pollThread, &QThread::finished, pollThread, &QObject::deleteLater);
         pollThread->start();

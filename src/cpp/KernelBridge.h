@@ -108,20 +108,20 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     Q_PROPERTY(QColor light       READ lightColor      NOTIFY paletteChanged)
     Q_PROPERTY(QColor dark        READ darkColor       NOTIFY paletteChanged)
     Q_PROPERTY(QColor shadow      READ shadowColor     NOTIFY paletteChanged)
-    QColor windowColor() const;
-    QColor windowText() const;
-    QColor baseColor() const;
-    QColor textColor() const;
-    QColor buttonColor() const;
-    QColor buttonText() const;
-    QColor highlightColor() const;
-    QColor highlightedTextColor() const;
-    QColor placeholderTextColor() const;
-    QColor midColor() const;
-    QColor midlightColor() const;
-    QColor lightColor() const;
-    QColor darkColor() const;
-    QColor shadowColor() const;
+    Q_INVOKABLE QColor windowColor() const;
+    Q_INVOKABLE QColor windowText() const;
+    Q_INVOKABLE QColor baseColor() const;
+    Q_INVOKABLE QColor textColor() const;
+    Q_INVOKABLE QColor buttonColor() const;
+    Q_INVOKABLE QColor buttonText() const;
+    Q_INVOKABLE QColor highlightColor() const;
+    Q_INVOKABLE QColor highlightedTextColor() const;
+    Q_INVOKABLE QColor placeholderTextColor() const;
+    Q_INVOKABLE QColor midColor() const;
+    Q_INVOKABLE QColor midlightColor() const;
+    Q_INVOKABLE QColor lightColor() const;
+    Q_INVOKABLE QColor darkColor() const;
+    Q_INVOKABLE QColor shadowColor() const;
     // Version management (used by auto-update)
     Q_INVOKABLE QString readVersion() const;
     Q_INVOKABLE void writeVersion(const QString &version);
@@ -178,7 +178,10 @@ public:
     Q_INVOKABLE bool isLoaderVersion(const QString &versionId) const;
 
     Q_INVOKABLE int getRequiredJavaVersion() const;
-    // Returns the cached Minecraft-running flag (updated by the background poller).
+    // Cached Minecraft-running flag: updated by the background poller,
+    // exposed as a QML-accessible property so the main-thread Timer
+    // can check it without blocking the event loop.
+    Q_PROPERTY(bool minecraftRunning READ minecraftRunning NOTIFY minecraftRunningChanged)
     bool minecraftRunning() const { return m_minecraftRunning; }
     void setMinecraftRunning(bool v);
     Q_INVOKABLE void killAllMinecraft();

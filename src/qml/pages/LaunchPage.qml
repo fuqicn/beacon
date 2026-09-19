@@ -358,23 +358,36 @@ Image {
                 }
             }
 
-            Column {
-                Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
-                spacing: 4
-                Text {
-                    text: I18n.tr("currentInstance")
-                    font.pixelSize: 13; color: palette.placeholderText
-                }
-Text {
-                    id: instanceName
-                    text: selectedVersion
-                          || (kernel.instanceManager.instances.length === 0
-                              ? I18n.tr("noInstances")
-                              : I18n.tr("noInstance"))
-                    font.pixelSize: 16; font.weight: Font.Medium
-                    color: palette.text
-                }
-            }
+             Column {
+                 Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter
+                 spacing: 4
+                 Text {
+                     text: I18n.tr("currentInstance")
+                     font.pixelSize: 13; color: palette.placeholderText
+                 }
+                 Text {
+                     id: instanceName
+                     text: selectedVersion
+                           || (kernel.instanceManager.instances.length === 0
+                               ? I18n.tr("noInstances")
+                               : I18n.tr("noInstance"))
+                     font.pixelSize: 16; font.weight: Font.Medium
+                     color: palette.text
+                 }
+                 // Show latest available versions (stable + snapshot) for quick reference.
+                 Text {
+                     text: {
+                         if (!kernel.versionManager.latestRelease) return ""
+                         var parts = [I18n.tr("download.latestRelease") + ": " + kernel.versionManager.latestRelease]
+                         if (kernel.versionManager.latestSnapshot)
+                             parts.push(I18n.tr("download.latestSnapshot") + ": " + kernel.versionManager.latestSnapshot)
+                         return parts.join("  ·  ")
+                     }
+                     font.pixelSize: 11
+                     color: palette.placeholderText
+                     visible: text !== ""
+                 }
+             }
 
             Button {
                 text: I18n.tr("selectInstance")

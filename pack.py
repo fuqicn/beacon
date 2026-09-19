@@ -611,6 +611,57 @@ def _copy_vc_runtime_dlls(dest_dir, is_arm64=False):
             % arch_dir)
 
 
+def _copy_qt_arm64_manual(dest_dir, qt_root):
+    """Fallback: manually copy Qt DLLs and plugins for ARM64 when windeployqt fails.
+
+    windeployqt has limited or no support for ARM64 Qt installations.
+    This function copies the bare minimum: Qt core DLLs, platform plugin,
+    and image format plugins needed for a Windows application.
+    """
+    dest = Path(dest_dir)
+    if not qt_root or not qt_root.is_dir():
+        log("WARNING: _copy_qt_arm64_manual: qt_root not set; skipping manual Qt deploy")
+        return
+    copied = 0
+    # Copy Qt6 core/framework DLLs
+    qt_bin = qt_root / "bin"
+    qt_dlls = [
+        "Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll",
+        "Qt6Quick.dll", "Qt6Qml.dll", "Qt6Network.dll",
+        "Qt6Svg.dll", "Qt6OpenGL.dll",
+    ]
+    for name in qt_dlls:
+        src = qt_bin / name
+        if src.is_file():
+            shutil.copy2(src, dest / name)
+            copied += 1
+    # Copy platforms plugin (qwindows.dll)
+    platforms_plugin = qt_root / "plugins" / "platforms" / "qwindows.dll"
+    if platforms_plugin.is_file():
+        dst_platforms = dest / "platforms"
+        dst_platforms.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(platforms_plugin, dst_platforms / "qwindows.dll")
+        copied += 1
+    # Copy image format plugins
+    image_plugins = qt_root / "plugins" / "imageformats"
+    if image_plugins.is_dir():
+        dst_images = dest / "imageformats"
+        dst_images.mkdir(parents=True, exist_ok=True)
+        for p in image_plugins.glob("*.dll"):
+            shutil.copy2(p, dst_images / p.name)
+            copied += 1
+    # Copy quick templates/control styles
+    for sub in ("quicktemplates2", "quickcontrols2", "quickdialogs2"):
+        src_plugin = qt_root / "plugins" / sub
+        if src_plugin.is_dir():
+            dst_plugin = dest / sub
+            dst_plugin.mkdir(parents=True, exist_ok=True)
+            for p in src_plugin.glob("*.dll"):
+                shutil.copy2(p, dst_plugin / p.name)
+                copied += 1
+    log("copied %d Qt ARM64 DLLs/plugins -> %s" % (copied, dest))
+
+
 def _copy_z_dll(dest_dir, args):
     """复制 z.dll (zlib) 到输出目录。
 
@@ -721,6 +772,12 @@ def build_windows(args, version, build_dir, qt_dir):
     # 清理 MinGW 运行时 DLL（MSVC 构建不需要这些）
     # windeployqt 可能会从 Qt 安装目录复制 mingw 版本的 DLL
     _remove_mingw_dlls(beacon_dir)
+
+    # ARM64: windeployqt may not properly deploy Qt DLLs on ARM64 Qt installs
+    # (it's a known limitation — windeployqt is primarily designed for x64).
+    # Fallback: manually copy Qt DLLs and plugins from the ARM64 Qt tree.
+    if arch_tag == "arm64" and not windeployqt:
+        _copy_qt_arm64_manual(beacon_dir, qt_root)
 
     # 手动复制 z.dll（zlib），windeployqt 不会自动部署第三方 DLL
     # ARM64 和 x64 都需要正确处理

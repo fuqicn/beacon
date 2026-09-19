@@ -216,13 +216,19 @@ target_compile_definitions(Beacon PRIVATE
     QT6_QML_INSTALL_DIR="${QT6_QML_INSTALL_DIR}"
 )
 
-# Copy mirrors.json to build directory
-add_custom_command(TARGET Beacon POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json"
-        "$<TARGET_FILE_DIR:Beacon>/mirrors.json"
-    COMMENT "Copying mirrors.json to build directory"
-)
+# Copy mirrors.json to build directory (only when present; CI runners may not have it)
+set(_MIRRORS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json")
+if(EXISTS "${_MIRRORS}")
+    add_custom_command(TARGET Beacon POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_MIRRORS}"
+            "$<TARGET_FILE_DIR:Beacon>/mirrors.json"
+        COMMENT "Copying mirrors.json to build directory"
+    )
+    install(FILES "${_MIRRORS}"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/beacon
+    )
+endif()
 
 # ---- Install rules (Linux/macOS packaging) ----
 install(TARGETS Beacon
@@ -231,8 +237,7 @@ install(TARGETS Beacon
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-install(FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/minecraft-launcher-kernel/mirrors.json"
+install(FILES "${_MIRRORS}"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/beacon
 )
 

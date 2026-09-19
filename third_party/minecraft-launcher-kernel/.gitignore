@@ -12,7 +12,7 @@ cmake-build-*/
 Debug/
 Release/
 x64/
-x86/
+x84/
 Win32/
 
 # Build artifacts
@@ -36,3 +36,6 @@ mcver_help_out.txt
 
 # Generated profiles
 fabric_profile.json
+
+# Keep mirrors.json tracked (used by CI builds)
+!mirrors.json

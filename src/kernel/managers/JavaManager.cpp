@@ -95,10 +95,12 @@ void JavaManager::doFindJavaOnThread()
 
     // Write back on the GUI thread so signals are emitted from the main thread
     // (as required by Qt's signal-slot rules).
-    m_runtimes = list;
-    m_searching = false;
-    emit runtimesChanged();
-    emit searchingChanged();
+    QMetaObject::invokeMethod(this, [this, list]() {
+        m_runtimes = list;
+        m_searching = false;
+        emit runtimesChanged();
+        emit searchingChanged();
+    }, Qt::QueuedConnection);
 }
 
 void JavaManager::findJava()

@@ -244,8 +244,11 @@ ApplicationWindow {
                                 unloaded = true
                             }
                         }
-                        if (unloaded)
-                            Qt.callLater(function() { kernel.qmlCollectGarbage() })
+                        // Do NOT call qmlCollectGarbage() here: trimComponentCache()
+                        // + collectGarbage() blocks the main event loop for tens of
+                        // milliseconds every 20 s, causing a perceptible periodic
+                        // stutter. QML's own reference counting reclaims memory
+                        // once unload sets all active=false bindings to inactive.
                     }
                 }
 

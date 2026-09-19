@@ -426,11 +426,6 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                 color: palette.placeholderText
             }
 
-            Button {
-                text: I18n.tr("modSearch.curseforge")
-                font.weight: Font.Normal
-                flat: true
-                onClicked: Qt.openUrlExternally("https://www.curseforge.com/minecraft/mc-mods")
             }
         }
     }

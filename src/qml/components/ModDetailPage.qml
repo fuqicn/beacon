@@ -159,19 +159,13 @@ function onVersionsLoaded(versions) {
                 }
 
                 Button {
-                    text: root.source === "curseforge"
-                         ? I18n.tr("modDetail.openInCurseForge")
-                         : I18n.tr("modDetail.openInModrinth")
+                    text: I18n.tr("modDetail.openInModrinth")
                     flat: true
                     font.weight: Font.Normal
                     onClicked: {
                         var url = root.project.websiteUrl
-                        if (!url) {
-                            if (root.source === "curseforge")
-                                url = "https://www.curseforge.com/minecraft/mc-mods/" + (root.project.slug || root.projectId)
-                            else
-                                url = "https://modrinth.com/mod/" + (root.project.slug || root.projectId)
-                        }
+                        if (!url)
+                            url = "https://modrinth.com/mod/" + (root.project.slug || root.projectId)
                         Qt.openUrlExternally(url)
                     }
                 }

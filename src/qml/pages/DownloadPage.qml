@@ -30,6 +30,9 @@ Item {
     property bool loading: false
 
     property int modeIndex: 0
+    // Track which list-item is currently hovered so the highlight can be
+    // explicitly cleared when a modal dialog steals mouse focus.
+    property int _hoveredItemIndex: -1
 
 function selectCategory(index) {
         currentCategory = index
@@ -308,7 +311,7 @@ Item {
                                 width: versionListView.width
                                 height: 48
                                 radius: Theme.shapeSmall
-                                color: mouseArea.containsMouse
+                                color: index === root._hoveredItemIndex
                                        ? Qt.alpha(Theme.primary, 0.08)
                                        : "transparent"
 
@@ -355,6 +358,8 @@ Item {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
+                                    onEntered: root._hoveredItemIndex = index
+                                    onExited: root._hoveredItemIndex = -1
                                     onClicked: {
                                         downloadDialog.versionId = modelData.id
                                         downloadDialog.versionType = modelData.type
@@ -458,6 +463,8 @@ Item {
 
 DownloadDialog {
         id: downloadDialog
+        onRejected: root._hoveredItemIndex = -1
+        onAccepted: root._hoveredItemIndex = -1
     }
 
     // Mod / modpack install dialogs are declared here (outside the StackView

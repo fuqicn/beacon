@@ -51,7 +51,7 @@ Item {
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
         langCombo.currentIndex = kernel.settingsManager.value("language/index", -1) + 1
-        cfKeyInput.text = kernel.settingsManager.value("mod/curseforgeApiKey", "")
+         cfKeyInput.text = ""
         var dlSource = kernel.settingsManager.value("download/source", "auto")
         for (var i = 0; i < dlSourceCombo.model.length; ++i) {
             if (dlSourceCombo.model[i].key === dlSource) {
@@ -219,9 +219,7 @@ Item {
                         model: [
                             { text: I18n.tr("download.source.auto"), key: "auto" },
                             { text: I18n.tr("download.source.official"), key: "mojang" },
-                            { text: I18n.tr("download.source.bmclapi"), key: "bmclapi" },
-                            { text: I18n.tr("download.source.mcimirror"), key: "mcimirror" },
-                            { text: I18n.tr("download.source.mcbbs"), key: "mcbbs" }
+                            { text: I18n.tr("download.source.mirror"), key: "mirror" }
                         ]
                         textRole: "text"
                         valueRole: "key"
@@ -237,117 +235,7 @@ Item {
                 }
             }
 
-            // Version isolation (global default)
-            Text {
-                text: I18n.tr("settings.modSource")
-                font.pixelSize: 18; font.weight: Font.Medium
-                color: palette.text
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: modSourceInner.implicitHeight + 32
-                radius: Theme.shapeMedium
-                color: Theme.surfaceContainer
-                ColumnLayout {
-                    id: modSourceInner
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-                        Text { text: I18n.tr("settings.modSource"); color: palette.placeholderText; font.pixelSize: 14 }
-                        Item { Layout.fillWidth: true }
-                        ComboBox {
-                            id: modSourceCombo
-                            model: [
-                                { text: I18n.tr("settings.modSourceModrinth"), key: "modrinth" },
-                                { text: I18n.tr("settings.modSourceCurseForge"), key: "curseforge" }
-                            ]
-                            textRole: "text"
-                            valueRole: "key"
-                            Component.onCompleted: {
-                                var cur = kernel.modSource
-                                for (var i = 0; i < model.length; ++i)
-                                    if (model[i].key === cur) { currentIndex = i; break }
-                            }
-                            onActivated: {
-                                kernel.setModSource(currentValue)
-                            }
-                            HoverHandler { id: modSourceHover }
-                            ToolTip.visible: modSourceHover.hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: I18n.tr("settings.modSourceHint")
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-                        Text { text: I18n.tr("settings.curseforgeApiKey"); color: palette.placeholderText; font.pixelSize: 14 }
-                        Item { Layout.fillWidth: true }
-                        TextField {
-                            id: cfKeyInput
-                            Layout.preferredWidth: 280
-                            placeholderText: I18n.tr("settings.curseforgeKeyPlaceholder")
-                            font.pixelSize: 13
-                            onTextEdited: kernel.setCurseForgeApiKey(text.trim())
-                            HoverHandler { id: cfKeyHover }
-                            ToolTip.visible: cfKeyHover.hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: I18n.tr("settings.curseforgeKeyHint")
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: I18n.tr("settings.curseforgeNoKey")
-                        font.pixelSize: 11
-                        color: palette.placeholderText
-                        wrapMode: Text.Wrap
-                        lineHeight: 1.35
-                    }
-                }
-            }
-
-            // MCIM API mirror
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: mcimInner.implicitHeight + 32
-                radius: Theme.shapeMedium
-                color: Theme.surfaceContainer
-                RowLayout {
-                    id: mcimInner
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 12
-                    Text {
-                        text: I18n.tr("settings.mcimirror")
-                        color: palette.placeholderText; font.pixelSize: 14
-                    }
-                    Item { Layout.fillWidth: true }
-                    Switch {
-                        checked: dlSourceCombo.currentValue === "mcimirror"
-                        onToggled: {
-                            if (checked) {
-                                kernel.settingsManager.setValue("download/source", "mcimirror")
-                                kernel.setDownloadSource("mcimirror")
-                            } else {
-                                kernel.settingsManager.setValue("download/source", "auto")
-                                kernel.setDownloadSource("auto")
-                            }
-                        }
-                        HoverHandler { id: mcimHover }
-                        ToolTip.visible: mcimHover.hovered
-                        ToolTip.delay: 500
-                        ToolTip.text: I18n.tr("settings.mcimirrorHint")
-                    }
-                }
-            }
-
-            // Custom User-Agent (MCIM / CF prerequisite)
+            // Mod source / MCIMirror / CF API key have been moved to the search pages.
 
             // Version isolation (global default)
             Text {
@@ -360,8 +248,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: isoInner.implicitHeight + 32
                 radius: Theme.shapeMedium
-                color: isoHover.hovered ? Qt.alpha(Theme.primary, 0.08) : Theme.surfaceContainer
-                HoverHandler { id: isoHover }
+                color: Theme.surfaceContainer
 
                 RowLayout {
                     id: isoInner

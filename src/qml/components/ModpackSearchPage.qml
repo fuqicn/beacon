@@ -192,6 +192,7 @@ property var stackView: null
                 id: packSourceCombo
                 font.weight: Font.Medium
                 model: [
+                    { text: I18n.tr("modpackSearch.sourceAll"), key: "all" },
                     { text: I18n.tr("modpackSearch.sourceModrinth"), key: "modrinth" },
                     { text: I18n.tr("modpackSearch.sourceCurseForge"), key: "curseforge" }
                 ]

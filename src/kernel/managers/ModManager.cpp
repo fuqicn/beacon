@@ -46,7 +46,10 @@ static int sortFromString(const QString &s)
 
 static int sourceFromName(const QString &s)
 {
-    return s.trimmed().toLower() == "curseforge" ? MC_MOD_CURSEFORGE : MC_MOD_MODRINTH;
+    QString key = s.trimmed().toLower();
+    if (key == "curseforge") return MC_MOD_CURSEFORGE;
+    if (key == "all")        return MC_MOD_ANY;
+    return MC_MOD_MODRINTH;
 }
 
 static QVariantMap projectToVariant(const McModProject &p)

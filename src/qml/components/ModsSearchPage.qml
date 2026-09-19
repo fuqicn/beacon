@@ -188,6 +188,7 @@ property var stackView: null
                 id: sourceCombo
                 font.weight: Font.Medium
                 model: [
+                    { text: I18n.tr("modSearch.sourceAll"), key: "all" },
                     { text: I18n.tr("modSearch.sourceModrinth"), key: "modrinth" },
                     { text: I18n.tr("modSearch.sourceCurseForge"), key: "curseforge" }
                 ]

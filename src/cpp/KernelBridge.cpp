@@ -225,8 +225,9 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
         mc_info("[Bridge] Minecraft-running background poller started");
     }
 
-    // Apply the selected mod source (modrinth / curseforge).
-    s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "modrinth").toString();
+    // Apply the selected mod source (modrinth / curseforge / all).
+    // Default to "all" so search pages show results from both sources by default.
+    s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "all").toString();
     s_instance->emit modSourceChanged();
     mc_info("[Bridge] mod source=%s cfKey=%s",
             s_instance->m_modSource.toUtf8().constData(),

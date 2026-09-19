@@ -410,7 +410,7 @@ ApplicationWindow {
             iconSize: 20
             // Reversed tint vs. other icons: light mode -> black icon,
             // dark mode -> white icon.
-            tint: Theme.darkMode ? Qt.white : Qt.black
+            tint: Theme.darkMode ? "#ffffff" : "#000000"
         }
     }
 

@@ -1639,21 +1639,6 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
             Qt::SingleShotConnection);
     }
 
-    // Periodically reclaim transient JS allocations and unused compiled caches.
-    // Run GC on a separate idle-event loop iteration so the current timer
-    // callback finishes first.  Use a small helper object + QueuedConnection
-    // to avoid calling collectGarbage() synchronously in the timer handler.
-    {
-        QTimer gcTimer;
-        gcTimer.setInterval(60000);
-        QObject *gcSink = new QObject;
-        QObject::connect(&gcTimer, &QTimer::timeout, gcSink, [&engine]() {
-            engine.collectGarbage();
-            engine.trimComponentCache();
-        }, Qt::QueuedConnection);
-        gcTimer.start();
-    }
-
     int ret = app.exec();
     KernelBridge::shutdown();
     // The QML engine / QApplication teardown that runs after exec() can

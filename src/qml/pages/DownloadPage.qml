@@ -33,6 +33,8 @@ Item {
     // Track which list-item is currently hovered so the highlight can be
     // explicitly cleared when a modal dialog steals mouse focus.
     property int _hoveredItemIndex: -1
+    // Same for category tabs.
+    property int _hoveredCategoryIndex: -1
 
 function selectCategory(index) {
         currentCategory = index
@@ -224,7 +226,9 @@ Item {
                                         Rectangle {
                                             anchors.fill: parent
                                             radius: parent.radius
-                                            color: catMouse.containsMouse ? Qt.alpha(palette.placeholderText, 0.15) : "transparent"
+                                            color: index === root._hoveredCategoryIndex
+                                                ? Qt.alpha(palette.placeholderText, 0.15)
+                                                : "transparent"
                                             Behavior on color {
                                                 enabled: Theme.animationsEnabled
                                                 ColorAnimation { duration: 150 }
@@ -240,13 +244,15 @@ Item {
                                             color: index === root.currentCategory ? Theme.primary : palette.placeholderText
                                         }
 
-                                        MouseArea {
-                                            id: catMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.selectCategory(index)
-                                        }
+                                         MouseArea {
+                                             id: catMouse
+                                             anchors.fill: parent
+                                             hoverEnabled: true
+                                             cursorShape: Qt.PointingHandCursor
+                                             onEntered: root._hoveredCategoryIndex = index
+                                             onExited: root._hoveredCategoryIndex = -1
+                                             onClicked: root.selectCategory(index)
+                                         }
                                     }
                                 }
                             }

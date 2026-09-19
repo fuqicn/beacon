@@ -425,8 +425,6 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                 font.pixelSize: 11
                 color: palette.placeholderText
             }
-
-            }
         }
     }
 }

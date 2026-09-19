@@ -114,8 +114,12 @@ property var stackView: null
             if (appending) {
                 Qt.callLater(function() {
                     resultList.contentY = keepY
-                    // Drop stale JS wrappers / trimmed caches after a page load
-                    kernel.qmlCollectGarbage()
+                    // Note: qmlCollectGarbage() intentionally omitted here —
+                    // trimComponentCache() + collectGarbage() blocks the main
+                    // thread for tens of milliseconds and causes a perceptible
+                    // stutter each time a new page of results is appended.
+                    // QML's own reference counting reclaims JS wrappers once
+                    // the old results are no longer referenced.
                 })
             }
         }

@@ -23,7 +23,9 @@ Item {
     property string iconName: ""
     property int iconSize: 20
     // Tint override. Empty = follow the current text color (auto light/dark).
+    // Pass window._cachedTextColor from main.qml for zero-palette-bindings.
     property string tint: ""
+    property color textColor: window._cachedTextColor || palette.text
 
     width: iconSize
     height: iconSize
@@ -32,7 +34,7 @@ Item {
         anchors.fill: parent
         source: {
             if (!iconName) return ""
-            var c = (tint !== "" && tint !== undefined && typeof tint === 'string') ? Qt.color(tint) : palette.text
+            var c = (tint !== "" && tint !== undefined && typeof tint === 'string') ? Qt.color(tint) : root.textColor
             return "image://tinted/" + iconName + "/"
                 + Math.round(c.r * 255) + "/"
                 + Math.round(c.g * 255) + "/"

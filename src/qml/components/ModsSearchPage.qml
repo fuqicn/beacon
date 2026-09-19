@@ -114,8 +114,8 @@ property var stackView: null
             if (appending) {
                 Qt.callLater(function() {
                     resultList.contentY = keepY
-                    // Drop stale JS wrappers / trimmed caches after a page load
-                    kernel.qmlCollectGarbage()
+                    // Note: qmlCollectGarbage() intentionally omitted — same
+                    // reason as ModpackSearchPage; blocks the main thread.
                 })
             }
         }

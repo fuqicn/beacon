@@ -41,10 +41,15 @@ ApplicationWindow {
     // Quick Controls (Button/ComboBox/TabButton hover & selection, Fusion and
     // Windows styles) follow Theme.primary on platforms whose style palette
     // defaults to a wrong/white Highlight (Windows 10, GNOME/Linux).
-    // Force correct highlight colors: black text on primary background in light mode,
-    // white text on primary background in dark mode.
+    // Note: DO NOT bind palette.highlightedText to kernel.windowColor() here —
+    // that would call QGuiApplication::palette() every frame on the main thread,
+    // causing periodic stutter even when idle. Instead compute once and store.
     palette.highlight: Theme.primary
-    palette.highlightedText: kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
+
+    // Cache the text color for tinted icons so AppIcon.qml doesn't trigger
+    // palette access on every binding evaluation cycle. Update only on theme change.
+    property color _cachedTextColor: kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
+    property color _cachedPaletteText: Qt.rgba(0.8, 0.8, 0.8, 1)  // light-gray fallback
 
     onClosing: function(close) {
         // Cancel every in-flight download and sweep temp files before quitting.
@@ -55,6 +60,8 @@ ApplicationWindow {
 
     Component.onCompleted: {
         kernel.applyThemeMode(Theme.themeMode)
+        // Initialize cached palette colors once (avoids per-frame palette access)
+        _cachedTextColor = kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
         refreshMcRunning()
         // Auto update check honours the user's setting (default: on).
         if (kernel.settingsManager.value("update/auto", true))
@@ -444,6 +451,12 @@ ApplicationWindow {
         target: kernel
         function onMinecraftRunningChanged() {
             refreshMcRunning()
+        }
+        function onPaletteChanged() {
+            // Palette changed (theme switch): update the cached text color
+            // so AppIcon.qml can use the cached value without calling
+            // palette.text every binding cycle.
+            _cachedTextColor = kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
         }
     }
 }

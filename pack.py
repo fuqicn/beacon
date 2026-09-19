@@ -546,6 +546,71 @@ def _remove_mingw_dlls(dest_dir):
         log("removed %d mingw runtime dll(s)" % removed)
 
 
+def _copy_vc_runtime_dlls(dest_dir, is_arm64=False):
+    """复制 MSVC C++ 运行时 DLL 到输出目录。
+
+    windeployqt 不部署 vcruntime/msvcp/concrt 等 C++ 运行时 DLL，
+    需要在目标机器上单独安装 VC Redistributable，
+    或者将 DLL 随启动器一起打包（ARM64 尤其需要，因为目标机器不太可能有 ARM64 VC Redist）。
+
+    搜索路径:
+      - VS 2022 红istributable: VC/Redist/MSVC/<version>/<arch>/microsoft.vc143.crt/
+      - Windows SDK: Windows Kits/10/Redist/*/ucrt/dlls/arm64/
+    """
+    dest = Path(dest_dir)
+    arch_dir = "arm64" if is_arm64 else "x64"
+    # DLLs needed for MSVC builds (VS 2022 = v143, VS 2019 = v142)
+    dll_names = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "concrt140.dll"]
+
+    found = []
+    # 1. VS 2022 Redist
+    for base in [
+        r"C:\Program Files\Microsoft Visual Studio\2022",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022",
+    ]:
+        for edition in ("Enterprise", "BuildTools", "Community"):
+            redist = Path(base) / edition / "VC" / "Redist" / "MSVC"
+            if not redist.is_dir():
+                continue
+            for ver_dir in sorted(redist.iterdir(), reverse=True):
+                crt_dir = ver_dir / arch_dir / "microsoft.vc143.crt"
+                if not crt_dir.is_dir():
+                    continue
+                for name in dll_names:
+                    src = crt_dir / name
+                    if src.is_file() and (dest / name).is_file() is False:
+                        shutil.copy2(src, dest / name)
+                        found.append(name)
+                        log("copied %s (%s) -> %s" % (name, arch_dir, dest))
+                if found:
+                    break
+            if found:
+                break
+        if found:
+            break
+
+    # 2. Windows SDK (fallback for newer VS or when Redist is not installed)
+    if not found:
+        sdk_base = Path(r"C:\Program Files (x86)\Windows Kits\10\Redist")
+        if sdk_base.is_dir():
+            for ucrt_ver in sorted(sdk_base.iterdir(), reverse=True):
+                sdk_crt = ucrt_ver / "ucrt" / "dlls" / arch_dir
+                if not sdk_crt.is_dir():
+                    continue
+                for name in dll_names:
+                    src = sdk_crt / name
+                    if src.is_file() and (dest / name).is_file() is False:
+                        shutil.copy2(src, dest / name)
+                        found.append(name)
+                        log("copied %s (SDK %s) -> %s" % (name, arch_dir, dest))
+                if found:
+                    break
+
+    if not found:
+        log("WARNING: MSVC runtime DLLs (%s) not found; target machine must have VC Redistributable installed"
+            % arch_dir)
+
+
 def _copy_z_dll(dest_dir, args):
     """复制 z.dll (zlib) 到输出目录。
 
@@ -660,6 +725,10 @@ def build_windows(args, version, build_dir, qt_dir):
     # 手动复制 z.dll（zlib），windeployqt 不会自动部署第三方 DLL
     # ARM64 和 x64 都需要正确处理
     _copy_z_dll(beacon_dir, args)
+
+    # 手动复制 MSVC C++ 运行时 DLL（windeployqt 不部署这些）
+    # ARM64 尤其需要，因为目标机器不太可能有 ARM64 VC Redistributable
+    _copy_vc_runtime_dlls(beacon_dir, is_arm64=(arch_tag == "arm64"))
 
     copy_mirrors_json(beacon_dir / "mirrors.json")
     write_version_file(beacon_dir / "version.txt", version)

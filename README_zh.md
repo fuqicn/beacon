@@ -19,7 +19,7 @@
 
 | 平台 | 最低版本 | 最高测试版本 | 架构 | 备注 |
 |----------|----------------|----------------|--------------|-------|
-| Windows | 10 (1809) | 11 | x86_64 (amd64)、ARM64 | **不支持** Windows 7/8/8.1 — Qt 6 要求 Windows 10+ |
+| Windows | 10 (1809) | 11 | x86_64 (amd64)、**ARM64** ✅ | **不支持** Windows 7/8/8.1 — Qt 6 要求 Windows 10+ |
 | Linux (deb) | Debian 13 / Ubuntu 25.10 / Ubuntu 26.04 LTS | — | x86_64、ARM64 | **仅** Debian 13、Ubuntu 25.10 和 Ubuntu 26.04 LTS（或更新版本）内置 Qt 6.8+。**不支持**更旧的发行版。**不支持**最新的 Linux Mint。 |
 | Linux (rpm) | Fedora 40 | — | x86_64、aarch64 | **不支持** Fedora 39 及以下版本（缺少 Qt 6.8）。RHEL / CentOS 需要手动编译。 |
 | Linux (arch) | Arch Linux | — | x86_64、aarch64 | 滚动更新；始终拥有 Qt 6.x |
@@ -93,6 +93,26 @@ python pack.py --build-dir build-arch
 | RPM (.rpm) | `BeaconLauncher-redhat-x86_64.rpm` | `sudo dnf install BeaconLauncher-redhat-x86_64.rpm` |
 | Arch (.pkg.tar.zst) | `BeaconLauncher-arch-x86_64.pkg.tar.zst` | `sudo pacman -U BeaconLauncher-arch-x86_64.pkg.tar.zst` |
 | 通用压缩包 | `beacon-1.0.2-linux-x86_64.tar.gz` | 解压后运行 `./Beacon` |
+
+### Windows 打包（一条命令）
+
+```powershell
+# x86_64（默认）
+python pack.py --msvc
+
+# ARM64（Surface Pro X、Snapdragon 笔记本）
+python pack.py --msvc --arch arm64 --build-dir build-arm
+```
+
+输出包：
+
+| 架构 | 自解压启动器 | 数据压缩包 | 说明 |
+|-----|------------|----------|-----|
+| x86_64 | `BeaconLauncher-windows-amd64.exe` | `beacon.zip` | 适用于所有 Windows 10/11 电脑 |
+| **ARM64** | `BeaconLauncher-windows-arm64.exe` | `beacon.zip` | 适用于 Surface Pro X、Snapdragon 笔记本；包含所有 Qt 和 MSVC 运行时 DLL |
+
+自解压启动器将数据压缩包嵌入其中，并解压到持久化的安装目录。
+ARM64 版本附带自己的 MSVC C++ 运行时（vcruntime、msvcp），无需单独安装 VC Redistributable。
 
 ## 数据目录
 

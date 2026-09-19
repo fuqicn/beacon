@@ -20,7 +20,7 @@ A cross-platform Minecraft launcher built with Qt 6 Quick/QML, powered by the
 
 | Platform | Minimum Version | Maximum Tested | Architecture | Notes |
 |----------|----------------|----------------|--------------|-------|
-| Windows | 10 (1809) | 11 | x86_64 (amd64), ARM64 | Windows 7/8/8.1 **not supported** — Qt 6 requires Windows 10+ |
+| Windows | 10 (1809) | 11 | x86_64 (amd64), **ARM64** ✅ | Windows 7/8/8.1 **not supported** — Qt 6 requires Windows 10+ |
 | Linux (deb) | Debian 13 / Ubuntu 25.10 / Ubuntu 26.04 LTS | — | x86_64, ARM64 | **Only** Debian 13, Ubuntu 25.10 and Ubuntu 26.04 LTS (or newer) ship Qt 6.8+. Older releases are **not supported**. Linux Mint latest is **not supported**. |
 | Linux (rpm) | Fedora 40 | — | x86_64, aarch64 | Fedora 39 and below are **not supported** (lack Qt 6.8). RHEL / CentOS require manual compilation. |
 | Linux (arch) | Arch Linux | — | x86_64, aarch64 | Rolling release; always has Qt 6.x |
@@ -97,6 +97,27 @@ Output packages:
 | RPM (.rpm) | `BeaconLauncher-redhat-x86_64.rpm` | `sudo dnf install BeaconLauncher-redhat-x86_64.rpm` |
 | Arch (.pkg.tar.zst) | `BeaconLauncher-arch-x86_64.pkg.tar.zst` | `sudo pacman -U BeaconLauncher-arch-x86_64.pkg.tar.zst` |
 | Generic tarball | `beacon-1.0.2-linux-x86_64.tar.gz` | Extract and run `./Beacon` |
+
+### Windows packaging (one command)
+
+```powershell
+# x86_64 (default)
+python pack.py --msvc
+
+# ARM64 (Surface Pro X, Snapdragon laptops)
+python pack.py --msvc --arch arm64 --build-dir build-arm
+```
+
+Output packages:
+
+| Architecture | Self-extractor | Data archive | Notes |
+|-------------|---------------|-------------|-------|
+| x86_64 | `BeaconLauncher-windows-amd64.exe` | `beacon.zip` | Runs on all Windows 10/11 PCs |
+| **ARM64** | `BeaconLauncher-windows-arm64.exe` | `beacon.zip` | Runs on Surface Pro X, Snapdragon laptops; includes all Qt + MSVC runtime DLLs |
+
+The self-extractor embeds the data archive and extracts to a persistent install directory.
+ARM64 builds ship with their own copy of the MSVC C++ runtime (vcruntime, msvcp) so
+no separate VC Redistributable install is needed.
 
 ## Data directories
 

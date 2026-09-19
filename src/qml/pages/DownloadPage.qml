@@ -461,19 +461,20 @@ Item {
         }
     }
 
-DownloadDialog {
+    DownloadDialog {
         id: downloadDialog
-        onRejected: root._hoveredItemIndex = -1
-        onAccepted: root._hoveredItemIndex = -1
+        onClosed: root._hoveredItemIndex = -1
     }
 
     // Mod / modpack install dialogs are declared here (outside the StackView
     // pages) so they render like DownloadDialog instead of inside a page.
     ModDownloadDialog {
         id: modDownloadDialog
+        onClosed: root._hoveredItemIndex = -1
     }
 
     ModpackInstallDialog {
         id: modpackInstallDialog
+        onClosed: root._hoveredItemIndex = -1
     }
 }

@@ -153,7 +153,9 @@ property var stackView: null
         }
 
         Text {
-            text: I18n.tr("modpackSearch.source")
+            text: I18n.tr("modpackSearch.source").replace("Modrinth",
+                root.source === "curseforge" ? I18n.tr("modpackSearch.sourceCurseForge")
+                : (root.source === "all" ? I18n.tr("modpackSearch.sourceAll") : I18n.tr("modpackSearch.sourceModrinth")))
             font.pixelSize: 11
             color: palette.placeholderText
         }

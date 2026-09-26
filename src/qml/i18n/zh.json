@@ -84,7 +84,7 @@
   "theme.followSystem": "跟随系统",
   "tools": "百宝箱",
   "tools.modSearch": "Mod 搜索",
-  "tools.modSearchDesc": "在 Modrinth 上搜索 Mod",
+  "tools.modSearchDesc": "在 Modrinth / CurseForge 上搜索 Mod",
   "tools.javaManage": "Java 管理",
   "tools.javaManageDesc": "扫描并下载 Java 运行时",
   "tools.logView": "日志查看",

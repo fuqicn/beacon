@@ -84,7 +84,7 @@
   "theme.followSystem": "Follow system",
   "tools": "Toolkit",
   "tools.modSearch": "Mod search",
-  "tools.modSearchDesc": "Search Modrinth for mods",
+  "tools.modSearchDesc": "Search Modrinth / CurseForge for mods",
   "tools.javaManage": "Java manager",
   "tools.javaManageDesc": "Scan and download Java runtimes",
   "tools.logView": "Log viewer",

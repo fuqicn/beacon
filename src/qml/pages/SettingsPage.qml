@@ -28,6 +28,11 @@ Item {
     // Set once a user-triggered check finishes so result text can show.
     property bool manualChecked: false
 
+    // Children (combos/inputs) are created before this runs, so every saved
+    // value can be restored in one place. Without this the page always shows
+    // the combo defaults no matter what settings.ini contains.
+    Component.onCompleted: _initSettings()
+
     function styleOptions() {
         var opts = []
         var os = Qt.platform.os
@@ -56,7 +61,6 @@ Item {
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
         langCombo.currentIndex = kernel.settingsManager.value("language/index", -1) + 1
-        cfKeyInput.text = ""
 
         var dlSource = kernel.settingsManager.value("download/source", "auto")
         for (var i = 0; i < dlSourceCombo.model.length; ++i) {
@@ -124,7 +128,10 @@ Item {
                             Layout.fillWidth: true
                             placeholderText: I18n.tr("settings.javaPlaceholder")
                             font.pixelSize: 13
-                            onTextChanged: kernel.settingsManager.setValue("java/path", text)
+                            onTextChanged: {
+                                kernel.settingsManager.endInstance()
+                                kernel.settingsManager.setValue("java/path", text)
+                            }
                         }
                         Button {
                             text: I18n.tr("settings.scan")
@@ -163,7 +170,10 @@ Item {
                             id: memorySetting
                             from: 512; to: 65536; stepSize: 512
                             value: 4096
-                            onValueChanged: kernel.settingsManager.setValue("java/memory", value)
+                            onValueChanged: {
+                                kernel.settingsManager.endInstance()
+                                kernel.settingsManager.setValue("java/memory", value)
+                            }
                             HoverHandler { id: memHintHover }
                             ToolTip.visible: memHintHover.hovered
                             ToolTip.delay: 500
@@ -196,6 +206,7 @@ Item {
                         from: 1; to: 64; stepSize: 1
                         value: 64
                         onValueChanged: {
+                            kernel.settingsManager.endInstance()
                             kernel.settingsManager.setValue("download/threads", value)
                             kernel.setDownloadThreads(value)
                         }
@@ -299,8 +310,10 @@ Item {
                         textRole: "text"
                         valueRole: "key"
                         Layout.preferredWidth: 170
-                            onActivated: kernel.settingsManager.endInstance()
-                                       , kernel.settingsManager.setValue("launch/isolationPolicy", currentValue)
+                        onActivated: {
+                            kernel.settingsManager.endInstance()
+                            kernel.settingsManager.setValue("launch/isolationPolicy", currentValue)
+                        }
                         HoverHandler { id: isoPolicyHover }
                         ToolTip.visible: isoPolicyHover.hovered
                         ToolTip.delay: 500
@@ -515,7 +528,10 @@ Item {
                         Item { Layout.fillWidth: true }
                         Switch {
                             checked: kernel.settingsManager.value("update/auto", true)
-                            onToggled: kernel.settingsManager.setValue("update/auto", checked)
+                            onToggled: {
+                                kernel.settingsManager.endInstance()
+                                kernel.settingsManager.setValue("update/auto", checked)
+                            }
                         }
                     }
 
@@ -583,7 +599,12 @@ Item {
                         id: langCombo
                         model: [I18n.tr("settings.language.followSystem"), I18n.tr("settings.chinese"), "English", I18n.tr("settings.japanese"), "Français"]
                         Layout.preferredWidth: 130
-                        onCurrentIndexChanged: {
+                        // NOTE: onActivated, not onCurrentIndexChanged. The
+                        // page gets unloaded/recreated by the idle timer, and a
+                        // currentIndex reset during construction would otherwise
+                        // write -1 (follow system) and wipe the saved language.
+                        onActivated: {
+                            kernel.settingsManager.endInstance()
                             kernel.settingsManager.setValue("language/index", currentIndex - 1)
                         }
                         HoverHandler { id: langHover }

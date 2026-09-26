@@ -794,6 +794,11 @@ def build_windows(args, version, build_dir, qt_dir):
     zip_path = pack_tmp / "beacon.zip"
     zip_dir(beacon_dir, zip_path)
     shutil.copy2(zip_path, packaging / "beacon.zip")
+    # beacon.rc embeds beacon.zip as RCDATA, but the build graph only tracks
+    # beacon.rc's own mtime. Without this the freshly built zip never triggers
+    # a relink and the self-extracting installer silently ships the previous
+    # payload (stale Beacon.exe behind a fresh-looking launcher).
+    os.utime(packaging / "beacon.rc", None)
 
     log("--- Building self-extracting launcher via cmake ---")
     sync_c_version(version)

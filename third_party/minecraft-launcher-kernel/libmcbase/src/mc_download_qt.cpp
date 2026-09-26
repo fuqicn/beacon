@@ -218,10 +218,21 @@ static void pump_events() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         return;
     }
-    if (QCoreApplication::instance())
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
-    else
+    QCoreApplication *app = QCoreApplication::instance();
+    if (!app) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return;
+    }
+    // Only the GUI thread may run QCoreApplication::processEvents(). Worker
+    // threads used to pump as well, which races the GUI thread's own event
+    // processing (documented above as a Qt6Core crash/hang) and stalls the
+    // whole UI for as long as a download is in flight. Workers just wait; the
+    // pool threads that actually do the transfer own their own event loops.
+    if (QThread::currentThread() != app->thread()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return;
+    }
+    app->processEvents(QEventLoop::AllEvents, 100);
 }
 
 static void pool_wait(std::future<int> &fut) {

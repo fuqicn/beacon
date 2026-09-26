@@ -237,7 +237,11 @@ ApplicationWindow {
                 // (the timer callback) finishes first, then GC runs on the idle path.
                 Timer {
                     id: unloadTimer
-                    interval: 20000
+                    // 20 s was short enough that most page switches had to
+                    // re-create the whole page (visible hitch on every
+                    // navigation). Two minutes still reclaims the memory while
+                    // keeping page reloads off the common path.
+                    interval: 120000
                     repeat: true
                     onTriggered: {
                         var unloaded = false

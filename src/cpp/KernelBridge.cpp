@@ -197,20 +197,19 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     {
         // Capture pollThread BY VALUE so the singleShot callback always
         // holds a valid pointer even after this lambda exits.
-        // Use a heap-allocated std::function so the recursive call outlives
-        // the local lambda scope (avoiding the dangling-reference crash).
         auto *pollThread = new QThread(s_instance);
         pollThread->setObjectName("mcRunningPoller");
         QObject::connect(pollThread, &QThread::started, [pollThread]() {
-            bool prev = false;
-            // Store the recursive lambda on the heap (via std::shared_ptr)
-            // so that QTimer::singleShot's copy of it always refers to
-            // valid memory even after this lambda returns.
+            // `prev` must outlive the function scope: QTimer::singleShot copies
+            // the callable and invokes it from a later stack frame, so a plain
+            // local captured by reference was a use-after-free on every 15 s
+            // tick (undefined behaviour that can surface as random hangs).
+            auto prev = std::make_shared<bool>(false);
             auto rec = std::make_shared<std::function<void()>>();
-            *rec = [pollThread, &prev, rec]() {
+            *rec = [pollThread, prev, rec]() {
                 bool running = pollMinecraftRunning();
-                if (running != prev) {
-                    prev = running;
+                if (running != *prev) {
+                    *prev = running;
                     QMetaObject::invokeMethod(KernelBridge::instance(), [bridge = KernelBridge::instance(), running]() {
                         bridge->setMinecraftRunning(running);
                     }, Qt::QueuedConnection);
@@ -219,8 +218,6 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
             };
             QTimer::singleShot(0, pollThread, *rec);
         });
-        QObject::connect(pollThread, &QThread::finished, pollThread, &QObject::deleteLater);
-        pollThread->start();
         QObject::connect(pollThread, &QThread::finished, pollThread, &QObject::deleteLater);
         pollThread->start();
         mc_info("[Bridge] Minecraft-running background poller started");

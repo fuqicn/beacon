@@ -307,20 +307,15 @@ public:
                 return r;
             }
 
-            QString cacheKey = QString::fromLatin1(
-                QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
-            QString cachePath = m_iconsDir + QLatin1String("/") + cacheKey + QLatin1String(".png");
+            // Disk-cache hit must NOT be decoded here: requestImageResponse
+            // runs on the GUI thread, and the cache stores full-resolution
+            // covers, so decoding + scaling one per list row froze the UI for
+            // hundreds of ms whenever a mod/modpack list came on screen.
+            const QString cachePath = cachePathFor(url);
             if (QFile::exists(cachePath)) {
-                QImage img(cachePath);
-                if (!img.isNull()) {
-                    QImage scaled = fitThumbnail(img, requestedSize);
-                    if (scaled.sizeInBytes() > 0)
-                        m_memCache.insert(url, new QImage(scaled),
-                                          qMax(1, scaled.sizeInBytes() / 1024));
-                    ModIconResponse *r = new ModIconResponse(url);
-                    QTimer::singleShot(0, r, [r, scaled]() { r->deliver(scaled); });
-                    return r;
-                }
+                ModIconResponse *r = new ModIconResponse(url);
+                loadCached(r, url, cachePath, requestedSize);
+                return r;
             }
         }
 
@@ -351,6 +346,32 @@ private:
                     guard->deliver(image);
                 }, Qt::QueuedConnection);
             }
+        });
+    }
+
+    // Decode a cached cover off the GUI thread. The image response is already
+    // asynchronous, so nothing here has to happen on the UI thread.
+    void loadCached(ModIconResponse *resp, const QString &url,
+                    const QString &cachePath, const QSize &requested)
+    {
+        QPointer<ModIconResponse> guard(resp);
+        m_pool.start([guard, url, cachePath, requested, this]() {
+            QImage img(cachePath);
+            QImage scaled = img.isNull() ? QImage() : fitThumbnail(img, requested);
+            if (guard.isNull()) return;
+            QMetaObject::invokeMethod(guard.data(), [guard, url, cachePath, scaled, requested, this]() {
+                if (guard.isNull()) return;
+                if (scaled.isNull()) {
+                    // Corrupt/partial cache entry: drop it and refetch.
+                    QFile::remove(cachePath);
+                    startDownload(guard.data(), url, cachePath, requested);
+                    return;
+                }
+                if (scaled.sizeInBytes() > 0)
+                    m_memCache.insert(url, new QImage(scaled),
+                                      qMax(1, scaled.sizeInBytes() / 1024));
+                guard->deliver(scaled);
+            }, Qt::QueuedConnection);
         });
     }
 
@@ -1649,6 +1670,23 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
             },
             Qt::SingleShotConnection);
     }
+
+    // GUI stall watchdog. It fires every 200 ms; a late tick means the event
+    // loop was blocked for that long. Logging the actual block duration lets a
+    // reported "UI freezes" be correlated with the surrounding log lines
+    // (mirror probes, icon decodes, downloads, page loads).
+    QTimer stallWatchdog;
+    stallWatchdog.setInterval(200);
+    qint64 lastStallTickMs = QDateTime::currentMSecsSinceEpoch();
+    QObject::connect(&stallWatchdog, &QTimer::timeout, &stallWatchdog,
+                     [&lastStallTickMs]() {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 drift = now - lastStallTickMs - 200;
+        if (drift >= 300)
+            mc_info("[Stall] GUI event loop blocked for %lldms", (long long)drift);
+        lastStallTickMs = now;
+    });
+    stallWatchdog.start();
 
     int ret = app.exec();
     KernelBridge::shutdown();

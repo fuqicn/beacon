@@ -399,12 +399,11 @@ Item {
                             model: styleOptions()
                             textRole: "text"
                             valueRole: "key"
-                            // Bind to saved style so display matches setting
-                            property string _savedStyle: kernel.settingsManager.value("ui/style", "auto")
-                            onModelChanged: {
-                                // Find index matching saved style
+                            // Explicitly bind to saved style on completion
+                            Component.onCompleted: {
+                                var saved = kernel.settingsManager.value("ui/style", "auto")
                                 for (var i = 0; i < model.length; ++i)
-                                    if (model[i].key === _savedStyle) { currentIndex = i; break }
+                                    if (model[i].key === saved) { currentIndex = i; break }
                             }
                             onActivated: {
                                 kernel.settingsManager.setValue("ui/style", currentValue)

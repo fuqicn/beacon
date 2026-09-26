@@ -131,6 +131,8 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void installPendingUpdate();   // Linux: pkexec install; macOS: spawn sidecar
     Q_INVOKABLE void cancelUpdate();          // dismiss the prompt
     Q_INVOKABLE void cancelUpdateDownload();  // abort transfer + delete temp file
+    Q_INVOKABLE void addChangeLogEntry(const QString &entry);
+    Q_INVOKABLE QStringList getChangeLog() const;
     // Window-close hook: cancel every in-flight task and sweep temp files.
     Q_INVOKABLE void prepareShutdown();
 
@@ -216,6 +218,7 @@ signals:
     void updateAvailableChanged();
     void checkingUpdateChanged();
     void latestVersionChanged();
+    void changeLogChanged();
     void updateStatsChanged();
 
 private:
@@ -256,6 +259,7 @@ private:
     bool m_updateAvailable = false;
     bool m_checkingUpdate = false;
     QString m_latestVersion;
+    QStringList m_changeLog;
     // Update transfer state (rendered by the download status panel)
     bool m_updateDownloading = false;
     qreal m_updateProgress = 0.0;

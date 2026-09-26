@@ -1638,7 +1638,7 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
             int y = (geo.height() - mainWindow->height()) / 2;
             if (x < geo.x()) x = geo.x();
             if (y < geo.y()) y = geo.y();
-            mainWindow->move(x, y);
+            mainWindow->setPosition(x, y);
         }
         QObject::connect(mainWindow, &QQuickWindow::frameSwapped, mainWindow,
             [tStart, &splash]() {

@@ -32,7 +32,6 @@ Popup {
     width: 340
 
     parent: Overlay.overlay
-    x: parent.width - width - 24
     property real bottomGap: 24
     y: parent.height - height - bottomGap
 
@@ -40,27 +39,13 @@ Popup {
     property bool dismissed: false
 
     // Animation: slide in from bottom-right with fade
-    opacity: 0
-    scale: 0.95
-    x: parent.width - width - 24 + 20
+    property real animX: parent.width - width - 24
+    x: dismissed ? animX : animX + 20
+    opacity: dismissed ? 0 : 1
+    scale: dismissed ? 0.95 : 1
     Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
     Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
     Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-
-    Connections {
-        target: root
-        function onVisibleChanged() {
-            if (root.visible && !root.dismissed) {
-                root.opacity = 1
-                root.scale = 1
-                root.x = parent.width - width - 24
-            } else {
-                root.opacity = 0
-                root.scale = 0.95
-                root.x = parent.width - width - 24 + 20
-            }
-        }
-    }
 
     background: Rectangle {
         radius: Theme.shapeExtraLarge

@@ -33,14 +33,34 @@ Popup {
 
     parent: Overlay.overlay
     x: parent.width - width - 24
-    // Bottom offset is bound from main.qml so the prompt stacks above the
-    // download status panel / compact nav bar instead of overlapping them.
-    // (Named bottomGap: Popup itself declares a FINAL bottomMargin.)
     property real bottomGap: 24
     y: parent.height - height - bottomGap
 
     visible: kernel.updateAvailable && !kernel.updateDownloading && !dismissed
     property bool dismissed: false
+
+    // Animation: slide in from bottom-right with fade
+    opacity: 0
+    scale: 0.95
+    x: parent.width - width - 24 + 20
+    Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+    Behavior on scale { enabled: Theme.animationsEnabled; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+    Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+
+    Connections {
+        target: root
+        function onVisibleChanged() {
+            if (root.visible && !root.dismissed) {
+                root.opacity = 1
+                root.scale = 1
+                root.x = parent.width - width - 24
+            } else {
+                root.opacity = 0
+                root.scale = 0.95
+                root.x = parent.width - width - 24 + 20
+            }
+        }
+    }
 
     background: Rectangle {
         radius: Theme.shapeExtraLarge
@@ -52,11 +72,11 @@ Popup {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
-        spacing: 8
+        spacing: 10
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 10
 
             AppIcon {
                 iconName: "download"
@@ -96,6 +116,13 @@ Popup {
             color: palette.placeholderText
             wrapMode: Text.WordWrap
             lineHeight: 1.3
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: palette.mid
+            opacity: 0.2
         }
 
         RowLayout {

@@ -1630,6 +1630,16 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
         // block on some Windows 11 builds).
         kb->applyWindowTransparency(
             kb->settingsManager()->value("system/transparency", true).toBool());
+        // Center window on screen
+        QScreen *screen = QGuiApplication::primaryScreen();
+        if (screen) {
+            QRect geo = screen->geometry();
+            int x = (geo.width() - mainWindow->width()) / 2;
+            int y = (geo.height() - mainWindow->height()) / 2;
+            if (x < geo.x()) x = geo.x();
+            if (y < geo.y()) y = geo.y();
+            mainWindow->move(x, y);
+        }
         QObject::connect(mainWindow, &QQuickWindow::frameSwapped, mainWindow,
             [tStart, &splash]() {
                 mc_info("[Startup] first frame rendered in %lldms",

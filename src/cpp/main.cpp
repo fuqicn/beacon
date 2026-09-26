@@ -668,12 +668,19 @@ public:
         // Pointer + int only: no allocation, safe on the per-event hot path.
         const char *cls = receiver ? receiver->metaObject()->className() : "(null)";
         const int type = int(event->type());
+        // Read the object name BEFORE dispatch. It tells two QThread receivers
+        // apart (modMirrorWarmup vs manifestFetch vs the download pools), and a
+        // DeferredDelete removes the receiver during dispatch, so asking
+        // afterwards would be a use-after-free.
+        const QByteArray objName =
+            receiver ? receiver->objectName().toLatin1() : QByteArray();
         QElapsedTimer timer;
         timer.start();
         const bool ok = QApplication::notify(receiver, event);
         const qint64 ms = timer.elapsed();
         if (ms >= kSlowEventMs)
-            mc_info("[SlowEvent] %lldms receiver=%s type=%d", (long long)ms, cls, type);
+            mc_info("[SlowEvent] %lldms receiver=%s%s%s type=%d", (long long)ms, cls,
+                    objName.isEmpty() ? "" : " name=", objName.constData(), type);
         return ok;
     }
 };

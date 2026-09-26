@@ -116,7 +116,12 @@ void VersionManager::doFetchManifest(const QString &mirror)
         }, Qt::QueuedConnection);
     });
     thread->setObjectName("manifestFetch");
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    // Same pattern as modMirrorWarmup: log when the queued deletion actually
+    // reaches the GUI thread so a stall around it is attributable.
+    connect(thread, &QThread::finished, thread, [thread]() {
+        mc_info("[QThread] manifestFetch finished -> deleteLater");
+        thread->deleteLater();
+    });
     m_fetchThread = thread;
     thread->start();
 }

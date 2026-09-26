@@ -832,7 +832,13 @@ void KernelBridge::setDownloadSource(const QString &source)
         mc_mod_warmup_mirror();
     });
     warmup->setObjectName("modMirrorWarmup");
-    QObject::connect(warmup, &QThread::finished, warmup, &QObject::deleteLater);
+    // Log on the GUI thread right before the deleteLater runs: the gap between
+    // this line and any following [SlowEvent] ... name=modMirrorWarmup is the
+    // time ~QThread() spent in wait() holding up the event loop.
+    QObject::connect(warmup, &QThread::finished, warmup, [warmup]() {
+        mc_info("[QThread] modMirrorWarmup finished -> deleteLater");
+        warmup->deleteLater();
+    });
     warmup->start();
 }
 

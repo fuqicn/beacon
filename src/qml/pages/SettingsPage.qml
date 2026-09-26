@@ -59,10 +59,22 @@ Item {
         kernel.settingsManager.endInstance()
         // Language first, and logged: it is the field users notice being wrong,
         // so the resolved index must be visible in qtdebug.log.
-        var langIndex = kernel.settingsManager.value("language/index", -1)
-        langCombo.currentIndex = langIndex + 1
+        //
+        // Read `count` BEFORE assigning currentIndex. The `model` binding below
+        // is lazy: it only evaluates the first time something reads it, and
+        // when that happened after this assignment ComboBox discarded the
+        // currentIndex we had just set - leaving the collapsed field blank
+        // until the user picked an entry (and blank again after every
+        // restart). The other combos avoid this by looping over `model.length`
+        // first; this one assigned directly.
+        var langIndex = parseInt(kernel.settingsManager.value("language/index", -1), 10)
+        if (isNaN(langIndex)) langIndex = -1
+        var langCurrent = langIndex + 1
+        if (langCurrent < 0 || langCurrent >= langCombo.count) langCurrent = 0
+        langCombo.currentIndex = langCurrent
         console.log("_initSettings: language/index=" + langIndex
                     + " -> langCombo.currentIndex=" + langCombo.currentIndex
+                    + " count=" + langCombo.count
                     + " text=" + langCombo.currentText)
 
         javaPathInput.text = kernel.settingsManager.value("java/path", "")

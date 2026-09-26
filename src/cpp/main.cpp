@@ -57,6 +57,9 @@
 #include <QMessageBox>
 #include <cstdlib>
 #include <ctime>
+#include <atomic>
+#include <thread>
+#include <chrono>
 #include <exception>
 #include <QElapsedTimer>
 #include <mc_log.h>
@@ -658,6 +661,55 @@ private:
 //    socket or disk" (CPU ~= 0).
 static constexpr qint64 kSlowEventMs = 150;
 
+// Live view of the event the GUI thread is dispatching right now, plus a tick
+// stamped by a GUI-side timer. The stall watchdog runs on its own thread, so
+// when the event loop freezes it can still read these and report what the GUI
+// thread was in the middle of - a GUI-side QTimer cannot, because it stops
+// firing precisely when the loop blocks, which is when the evidence matters.
+static std::atomic<const char *> g_guiEventClass{nullptr};
+static std::atomic<int> g_guiEventType{-1};
+static std::atomic<qint64> g_guiEventStartMs{0};
+static std::atomic<qint64> g_guiTickMs{0};
+static std::atomic<bool> g_stallWatcherRun{true};
+// Opened once on the GUI thread so the watchdog thread can sample that
+// thread's CPU time with GetThreadTimes. void* keeps this declaration usable
+// on non-Windows builds.
+static void *g_guiThreadHandle = nullptr;
+
+// CPU time in ms. clock() is not reliable for this on Windows, and the whole
+// point of the sample is to tell "the GUI thread is computing" (its own CPU
+// climbs) from "it is stuck waiting" (only other threads burn CPU).
+static qint64 processCpuMs()
+{
+#ifdef Q_OS_WIN
+    FILETIME c, e, k, u;
+    if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u)) return -1;
+    ULARGE_INTEGER kr, ur;
+    kr.LowPart = k.dwLowDateTime; kr.HighPart = k.dwHighDateTime;
+    ur.LowPart = u.dwLowDateTime; ur.HighPart = u.dwHighDateTime;
+    return qint64((kr.QuadPart + ur.QuadPart) / 10000);
+#else
+    return qint64(double(clock()) / CLOCKS_PER_SEC * 1000.0);
+#endif
+}
+
+static qint64 threadCpuMs(void *handle)
+{
+#ifdef Q_OS_WIN
+    HANDLE h = static_cast<HANDLE>(handle);
+    if (!h) return -1;
+    FILETIME c, e, k, u;
+    if (!GetThreadTimes(h, &c, &e, &k, &u)) return -1;
+    ULARGE_INTEGER kr, ur;
+    kr.LowPart = k.dwLowDateTime; kr.HighPart = k.dwHighDateTime;
+    ur.LowPart = u.dwLowDateTime; ur.HighPart = u.dwHighDateTime;
+    return qint64((kr.QuadPart + ur.QuadPart) / 10000);
+#else
+    (void)handle;
+    return -1;
+#endif
+}
+
 class InstrumentedApplication : public QApplication
 {
 public:
@@ -674,12 +726,38 @@ public:
         // afterwards would be a use-after-free.
         const QByteArray objName =
             receiver ? receiver->objectName().toLatin1() : QByteArray();
+
+        // Only the GUI thread's dispatch is interesting here: worker event
+        // loops route through this same override, and publishing those would
+        // point the watchdog at a thread that is not the one that stalled.
+        const bool onGui =
+            receiver && QThread::currentThread() == QCoreApplication::instance()->thread();
+        const char *prevCls = nullptr;
+        int prevType = -1;
+        qint64 prevStart = 0;
+        if (onGui) {
+            // Save/restore: this can nest, and clearing on the way out would
+            // make the outer event look idle to the watchdog.
+            prevCls = g_guiEventClass.exchange(cls, std::memory_order_relaxed);
+            prevType = g_guiEventType.exchange(type, std::memory_order_relaxed);
+            prevStart = g_guiEventStartMs.exchange(QDateTime::currentMSecsSinceEpoch(),
+                                                   std::memory_order_relaxed);
+        }
+
         QElapsedTimer timer;
         timer.start();
         const bool ok = QApplication::notify(receiver, event);
         const qint64 ms = timer.elapsed();
+
+        if (onGui) {
+            g_guiEventClass.store(prevCls, std::memory_order_relaxed);
+            g_guiEventType.store(prevType, std::memory_order_relaxed);
+            g_guiEventStartMs.store(prevStart, std::memory_order_relaxed);
+        }
+
         if (ms >= kSlowEventMs)
-            mc_info("[SlowEvent] %lldms receiver=%s%s%s type=%d", (long long)ms, cls,
+            mc_info("[SlowEvent] %lldms thread=%p receiver=%s%s%s type=%d", (long long)ms,
+                    QThread::currentThreadId(), cls,
                     objName.isEmpty() ? "" : " name=", objName.constData(), type);
         return ok;
     }
@@ -1716,33 +1794,75 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
             Qt::SingleShotConnection);
     }
 
-    // GUI stall watchdog. It fires every 200 ms; a late tick means the event
-    // loop was blocked for that long. Two numbers make the log actionable:
-    //   - process CPU time consumed during the stall: ~wall time means the GUI
-    //     thread was busy computing (find it with [SlowEvent]); ~0 means it was
-    //     blocked on a lock, socket or disk.
-    //   - [SlowEvent] lines from InstrumentedApplication::notify() name the
-    //     receiver/event that took the time.
+    // Stall watchdog.
+    //
+    // A GUI-side QTimer cannot report its own stall: it stops firing the moment
+    // the loop blocks, which is exactly when the evidence is needed. So the GUI
+    // only stamps a tick and a dedicated thread watches it. While the GUI is
+    // frozen that thread keeps running and can log:
+    //   - how long the loop has been unresponsive,
+    //   - how much CPU the process burned in that window,
+    //   - how much the GUI THREAD itself burned - the real question, since
+    //     "process CPU ~= wall" previously looked like the GUI was computing
+    //     when it was just other threads saturating the machine,
+    //   - and the event notify() recorded it as being in the middle of.
+#ifdef Q_OS_WIN
+    g_guiThreadHandle = OpenThread(THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
+#endif
+
     QTimer stallWatchdog;
-    stallWatchdog.setInterval(200);
-    qint64 lastStallTickMs = QDateTime::currentMSecsSinceEpoch();
-    clock_t lastStallClock = clock();
-    QObject::connect(&stallWatchdog, &QTimer::timeout, &stallWatchdog,
-                     [&lastStallTickMs, &lastStallClock]() {
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
-        const qint64 drift = now - lastStallTickMs - 200;
-        if (drift >= 300) {
-            const clock_t nowClock = clock();
-            const double cpuMs = (double(nowClock - lastStallClock) / CLOCKS_PER_SEC) * 1000.0;
-            mc_info("[Stall] GUI event loop blocked for %lldms (process CPU %lldms during stall)",
-                    (long long)drift, (long long)cpuMs);
-        }
-        lastStallTickMs = now;
-        lastStallClock = clock();
+    stallWatchdog.setInterval(150);
+    QObject::connect(&stallWatchdog, &QTimer::timeout, &stallWatchdog, []() {
+        g_guiTickMs.store(QDateTime::currentMSecsSinceEpoch(), std::memory_order_relaxed);
     });
     stallWatchdog.start();
 
+    std::thread stallWatcher([]() {
+        qint64 lastTick = g_guiTickMs.load(std::memory_order_relaxed);
+        qint64 lastProc = processCpuMs();
+        qint64 lastGui = threadCpuMs(g_guiThreadHandle);
+        qint64 lastReport = 0;
+        const char *lastCls = nullptr;
+        int lastType = -1;
+        while (g_stallWatcherRun.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            const qint64 tick = g_guiTickMs.load(std::memory_order_relaxed);
+            if (tick != lastTick) {
+                lastTick = tick;
+                lastProc = processCpuMs();
+                lastGui = threadCpuMs(g_guiThreadHandle);
+                lastCls = nullptr;
+                continue;
+            }
+            const qint64 frozen = now - lastTick;
+            if (frozen < 300) continue;
+
+            const qint64 proc = processCpuMs();
+            const qint64 gui = threadCpuMs(g_guiThreadHandle);
+            const char *cls = g_guiEventClass.load(std::memory_order_relaxed);
+            const int type = g_guiEventType.load(std::memory_order_relaxed);
+            const qint64 started = g_guiEventStartMs.load(std::memory_order_relaxed);
+            // Report when the receiver changes, then at most once a second while
+            // the same one persists - otherwise a frozen loop floods the log.
+            if (cls != lastCls || type != lastType || now - lastReport >= 1000) {
+                mc_info("[Stall] GUI frozen %lldms (proc cpu +%lldms, gui thread cpu +%lldms) "
+                        "in %s type=%d for %lldms",
+                        (long long)frozen, (long long)(proc - lastProc),
+                        (long long)(gui - lastGui), cls ? cls : "(idle)", type,
+                        (long long)(started ? now - started : -1));
+                lastReport = now;
+                lastCls = cls;
+                lastType = type;
+            }
+            lastProc = proc;
+            lastGui = gui;
+        }
+    });
+    stallWatcher.detach();
+
     int ret = app.exec();
+    g_stallWatcherRun.store(false, std::memory_order_relaxed);
     KernelBridge::shutdown();
     // The QML engine / QApplication teardown that runs after exec() can
     // deadlock with the (detached) download-pool threads' Qt-network cleanup

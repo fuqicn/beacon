@@ -806,12 +806,11 @@ static void captureGuiStack(char *buf, int bufSize)
     buf[0] = '\0';
 #ifdef Q_OS_WIN
     if (g_stackCaptured.exchange(true))
-        return;                       // already captured for this stall
+        return;                       // one attempt per stall, success or not
     HANDLE h = static_cast<HANDLE>(g_guiThreadHandle);
     if (!h) {
         snprintf(buf, bufSize, "(no gui thread handle)");
-        g_stackCaptured.store(false);
-        return;
+        return;                       // keep the flag set: retrying won't help
     }
 
     static uintptr_t frames[48];      // preallocated: no malloc while suspended
@@ -819,7 +818,6 @@ static void captureGuiStack(char *buf, int bufSize)
 
     if (SuspendThread(h) == (DWORD)-1) {
         snprintf(buf, bufSize, "(suspend failed %lu)", (unsigned long)GetLastError());
-        g_stackCaptured.store(false);
         return;
     }
 
@@ -1995,7 +1993,13 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
     //     when it was just other threads saturating the machine,
     //   - and the event notify() recorded it as being in the middle of.
 #ifdef Q_OS_WIN
-    g_guiThreadHandle = OpenThread(THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
+    // All three rights are required: SUSPEND_RESUME for SuspendThread,
+    // GET_CONTEXT for GetThreadContext, QUERY_INFORMATION for GetThreadTimes.
+    // Omitting the first two is what made every capture fail with
+    // ERROR_ACCESS_DENIED (5).
+    g_guiThreadHandle = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT |
+                                       THREAD_QUERY_INFORMATION,
+                                   FALSE, GetCurrentThreadId());
     buildStackModuleTable();
 #endif
     mc_info("[Diag] gui thread id=%p", QThread::currentThreadId());

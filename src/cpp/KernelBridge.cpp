@@ -327,7 +327,9 @@ void KernelBridge::shutdown()
 
 void KernelBridge::writeVersion(const QString &version)
 {
-    QString path = s_launcherDir + "/version.txt";
+    // Mirror readVersion(): keep it beside the executable so the next launch
+    // reads back what we just wrote.
+    QString path = QCoreApplication::applicationDirPath() + "/version.txt";
     QFile f(path);
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         f.write((version + "\n").toUtf8());
@@ -336,18 +338,27 @@ void KernelBridge::writeVersion(const QString &version)
 
 QString KernelBridge::readVersion() const
 {
-    QString path = s_launcherDir + "/version.txt";
-    QFile f(path);
+    // version.txt ships next to the executable. s_launcherDir is the
+    // persistent data dir (on Windows <app>/../game, on Linux the XDG data
+    // dir) which deliberately holds user data only and never gets one, so
+    // asking it alone yielded an empty version and "Beacon/" as the UA.
+    const QStringList candidates{
+        QCoreApplication::applicationDirPath() + QStringLiteral("/version.txt"),
+        s_launcherDir + QStringLiteral("/version.txt"),
 #ifdef Q_OS_LINUX
-    // Packaged installs keep the version under the system data dir.
-    if (!f.exists())
-        path = QStringLiteral("/usr/share/beacon/version.txt");
+        QStringLiteral("/usr/share/beacon/version.txt"),
 #endif
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
-        return QString();
-    QByteArray raw = f.readAll().trimmed();
-    f.close();
-    return QString::fromUtf8(raw);
+    };
+    for (const QString &path : candidates) {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        const QByteArray raw = f.readAll().trimmed();
+        f.close();
+        if (!raw.isEmpty())
+            return QString::fromUtf8(raw);
+    }
+    return QString();
 }
 
 QString KernelBridge::detectLinuxPackageType() const

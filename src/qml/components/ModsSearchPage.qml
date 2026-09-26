@@ -430,17 +430,5 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                 }
             }
         }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            Text {
-                Layout.fillWidth: true
-                text: I18n.tr("modSearch.supportModrinth")
-                font.pixelSize: 11
-                color: palette.placeholderText
-            }
-        }
     }
 }

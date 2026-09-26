@@ -276,9 +276,9 @@ static HWND create_dialog(HINSTANCE hInst) {
             s_registered = 1;
     }
 
-    const wchar_t *wTitle = L"Beacon Launcher";
-    HWND hWnd = CreateWindowExW(0, L"BeaconProgress", wTitle,
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+    /* Use a proper overlapped window with standard title bar. */
+    HWND hWnd = CreateWindowExW(0, L"BeaconProgress", L"Beacon Launcher",
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
         (scrW - dlgW) / 2, (scrH - dlgH) / 2, dlgW, dlgH,
         NULL, NULL, hInst, NULL);
     if (!hWnd) return NULL;

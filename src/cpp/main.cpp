@@ -48,6 +48,7 @@
 #include <QPixmapCache>
 #include <QCache>
 #include <QTimer>
+#include <QAbstractEventDispatcher>
 #include <QLocale>
 #include <QSemaphore>
 #include <QCryptographicHash>
@@ -188,6 +189,16 @@ static std::atomic<qint64> g_lastBeforeRenderingMs{0};
 static std::atomic<qint64> g_lastAfterRenderingMs{0};
 static std::atomic<qint64> g_lastIconDeliverMs{0};
 static std::atomic<int> g_iconDeliverCount{0};
+
+// Event-loop state. A stall that reports "in (idle)" is NOT inside notify() -
+// it sits either in the dispatcher's native wait or in code that runs between
+// dispatches (window procedure, a DirectConnection slot, a system call).
+// aboutToBlock/awake tell those apart: a fresh aboutToBlock with no awake means
+// the loop is parked in its wait; both stale means the thread is stuck in code.
+static std::atomic<qint64> g_lastAboutToBlockMs{0};
+static std::atomic<qint64> g_lastAwakeMs{0};
+static std::atomic<qint64> g_lastNotifyEnterMs{0};
+static std::atomic<qint64> g_lastNotifyExitMs{0};
 
 class ModIconResponse : public QQuickImageResponse
 {
@@ -753,6 +764,8 @@ public:
         int prevType = -1;
         qint64 prevStart = 0;
         if (onGui) {
+            g_lastNotifyEnterMs.store(QDateTime::currentMSecsSinceEpoch(),
+                                      std::memory_order_relaxed);
             // Save/restore: this can nest, and clearing on the way out would
             // make the outer event look idle to the watchdog.
             prevCls = g_guiEventClass.exchange(cls, std::memory_order_relaxed);
@@ -770,6 +783,8 @@ public:
             g_guiEventClass.store(prevCls, std::memory_order_relaxed);
             g_guiEventType.store(prevType, std::memory_order_relaxed);
             g_guiEventStartMs.store(prevStart, std::memory_order_relaxed);
+            g_lastNotifyExitMs.store(QDateTime::currentMSecsSinceEpoch(),
+                                     std::memory_order_relaxed);
         }
 
         if (ms >= kSlowEventMs)
@@ -1844,6 +1859,18 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
     g_guiThreadHandle = OpenThread(THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
 #endif
 
+    // Event-loop liveness for the "in (idle)" case: tells a dispatcher parked
+    // in its native wait from a thread stuck in code between dispatches.
+    if (auto *disp = QAbstractEventDispatcher::instance(QThread::currentThread())) {
+        auto stampLoop = [](std::atomic<qint64> &slot) {
+            slot.store(QDateTime::currentMSecsSinceEpoch(), std::memory_order_relaxed);
+        };
+        QObject::connect(disp, &QAbstractEventDispatcher::aboutToBlock, disp,
+                         [stampLoop]() { stampLoop(g_lastAboutToBlockMs); });
+        QObject::connect(disp, &QAbstractEventDispatcher::awake, disp,
+                         [stampLoop]() { stampLoop(g_lastAwakeMs); });
+    }
+
     QTimer stallWatchdog;
     stallWatchdog.setInterval(150);
     QObject::connect(&stallWatchdog, &QTimer::timeout, &stallWatchdog, []() {
@@ -1886,16 +1913,26 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
                     (qint64)g_lastBeforeRenderingMs.load(std::memory_order_relaxed);
                 const qint64 iconAge =
                     (qint64)g_lastIconDeliverMs.load(std::memory_order_relaxed);
+                const qint64 blockAge =
+                    (qint64)g_lastAboutToBlockMs.load(std::memory_order_relaxed);
+                const qint64 awakeAge =
+                    (qint64)g_lastAwakeMs.load(std::memory_order_relaxed);
+                const qint64 exitAge =
+                    (qint64)g_lastNotifyExitMs.load(std::memory_order_relaxed);
                 mc_info("[Stall] GUI frozen %lldms (proc cpu +%lldms, gui thread cpu +%lldms) "
                         "in %s type=%d for %lldms | render beforeRender %lldms ago, "
-                        "frameSwapped %lldms ago | icons %d last %lldms ago",
+                        "frameSwapped %lldms ago | icons %d last %lldms ago | "
+                        "loop aboutToBlock %lldms ago, awake %lldms ago, notifyExit %lldms ago",
                         (long long)frozen, (long long)(proc - lastProc),
                         (long long)(gui - lastGui), cls ? cls : "(idle)", type,
                         (long long)(started ? now - started : -1),
                         (long long)(renderAge ? now - renderAge : -1),
                         (long long)(swapAge ? now - swapAge : -1),
                         g_iconDeliverCount.load(std::memory_order_relaxed),
-                        (long long)(iconAge ? now - iconAge : -1));
+                        (long long)(iconAge ? now - iconAge : -1),
+                        (long long)(blockAge ? now - blockAge : -1),
+                        (long long)(awakeAge ? now - awakeAge : -1),
+                        (long long)(exitAge ? now - exitAge : -1));
                 lastReport = now;
                 lastCls = cls;
                 lastType = type;

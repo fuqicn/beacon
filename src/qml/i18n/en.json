@@ -211,6 +211,7 @@
   "settings.animation": "Animations",
   "settings.languageLabel": "Language",
   "settings.chinese": "Chinese",
+  "settings.japanese": "Japanese",
   "settings.version": "Launcher v1.0.2\nMinecraft launcher based on Qt 6",
   "tools.logSub": "Log viewer",
   "launch.manageInstances": "Instance management",

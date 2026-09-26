@@ -57,10 +57,17 @@ Item {
     function _initSettings() {
         // Ensure we're reading from global launcher settings (not instance settings)
         kernel.settingsManager.endInstance()
+        // Language first, and logged: it is the field users notice being wrong,
+        // so the resolved index must be visible in qtdebug.log.
+        var langIndex = kernel.settingsManager.value("language/index", -1)
+        langCombo.currentIndex = langIndex + 1
+        console.log("_initSettings: language/index=" + langIndex
+                    + " -> langCombo.currentIndex=" + langCombo.currentIndex
+                    + " text=" + langCombo.currentText)
+
         javaPathInput.text = kernel.settingsManager.value("java/path", "")
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
-        langCombo.currentIndex = kernel.settingsManager.value("language/index", -1) + 1
 
         var dlSource = kernel.settingsManager.value("download/source", "auto")
         for (var i = 0; i < dlSourceCombo.model.length; ++i) {

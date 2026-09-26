@@ -333,21 +333,24 @@ private:
         QPointer<ModIconResponse> guard(resp);
         const bool noCache = cachePath.isEmpty();
         m_pool.start([guard, url, cachePath, requested, noCache, this]() {
-            QImage image = fetch(url, cachePath, noCache);
-            if (!guard.isNull()) {
-                QMetaObject::invokeMethod(guard.data(), [guard, image, requested, noCache, this]() {
-                    if (guard.isNull()) return;
-                    if (!image.isNull()) {
-                        QImage scaled = fitThumbnail(image, requested);
-                        if (!noCache && scaled.sizeInBytes() > 0)
-                            m_memCache.insert(guard->url(), new QImage(scaled),
-                                              qMax(1, scaled.sizeInBytes() / 1024));
-                        guard->deliver(scaled);
-                        return;
-                    }
-                    guard->deliver(image);
-                }, Qt::QueuedConnection);
-            }
+            QImage image = fetch(url);
+            // Scale HERE, on the worker thread. Qt::SmoothTransformation on a
+            // full-resolution cover costs tens of ms each; running it in the
+            // queued reply below put ~20 of them back-to-back on the GUI thread
+            // and logged as a 4.2s stall at 100% CPU whenever a mod list came
+            // in. Persisting the thumbnail instead of the original also keeps
+            // the on-disk cache small and cheap to decode later.
+            QImage scaled = image.isNull() ? QImage() : fitThumbnail(image, requested);
+            if (!noCache)
+                saveCache(scaled, cachePath);
+            if (guard.isNull()) return;
+            QMetaObject::invokeMethod(guard.data(), [guard, url, scaled, this]() {
+                if (guard.isNull()) return;
+                if (!scaled.isNull() && scaled.sizeInBytes() > 0)
+                    m_memCache.insert(url, new QImage(scaled),
+                                      qMax(1, scaled.sizeInBytes() / 1024));
+                guard->deliver(scaled);
+            }, Qt::QueuedConnection);
         });
     }
 
@@ -407,7 +410,7 @@ private:
         }
     }
 
-    static QImage fetch(const QString &url, const QString &cachePath, bool noCache)
+    static QImage fetch(const QString &url)
     {
         QByteArray urlBytes = url.toUtf8();
         char mirrored[1024];
@@ -419,8 +422,6 @@ private:
         QImage image = tryFetch(target);
         if (image.isNull() && target != direct)
             image = tryFetch(direct);
-        if (!noCache)
-            saveCache(image, cachePath);
         return image;
     }
 

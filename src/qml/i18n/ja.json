@@ -66,6 +66,8 @@
   "settings.language": "表示言語",
   "settings.language.followSystem": "システムに追従",
   "settings.languageNote": "再起動後に反映",
+  "settings.chinese": "中国語",
+  "settings.japanese": "日本語",
   "settings.style": "コントロールのスタイル",
   "settings.styleHint": "再起動後に反映",
   "settings.styleAuto": "システムに追従",

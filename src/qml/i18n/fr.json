@@ -66,6 +66,8 @@
   "settings.language": "Langue",
   "settings.language.followSystem": "Suivre le système",
   "settings.languageNote": "Appliqué après redémarrage",
+  "settings.chinese": "Chinois",
+  "settings.japanese": "Japonais",
   "settings.style": "Style des contrôles",
   "settings.styleHint": "Appliqué après redémarrage",
   "settings.styleAuto": "Suivre le système",

@@ -110,10 +110,13 @@ function onProjectLoaded(project) {
 
 function onVersionsLoaded(versions) {
             root.versions = versions
-            root.groupedModel.setVersions(versions)
-            root.containerHeight = root.groupedModel.listHeight
-            root.versionsLoading = false
-            refreshDeps()
+            // Defer model update to avoid blocking the event loop
+            Qt.callLater(function() {
+                root.groupedModel.setVersions(versions)
+                root.containerHeight = root.groupedModel.listHeight
+                root.versionsLoading = false
+                refreshDeps()
+            })
         }
         function onProjectsLoaded(projects) {
             var map = {}

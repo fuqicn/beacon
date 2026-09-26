@@ -69,13 +69,16 @@ Item {
                 break
             }
         }
-        var uiStyle = kernel.settingsManager.value("ui/style", "auto")
-        for (var s = 0; s < styleCombo.model.length; ++s) {
-            if (styleCombo.model[s].key === uiStyle) {
-                styleCombo.currentIndex = s
-                break
+        // Defer style combo init until model is ready
+        Qt.callLater(function() {
+            var uiStyle = kernel.settingsManager.value("ui/style", "auto")
+            for (var s = 0; s < styleCombo.model.length; ++s) {
+                if (styleCombo.model[s].key === uiStyle) {
+                    styleCombo.currentIndex = s
+                    break
+                }
             }
-        }
+        })
     }
 
     Flickable {

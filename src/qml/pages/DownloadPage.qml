@@ -74,10 +74,13 @@ function selectCategory(index) {
     Component.onCompleted: {
         loading = true
         if (kernel.versionManager.versionCount > 0) {
-            root.categories = kernel.versionManager.classifyVersions()
-            categoryTabs.model = root.categories
-            selectCategory(0)
-            loading = false
+            // Defer to avoid blocking the event loop during page activation
+            Qt.callLater(function() {
+                root.categories = kernel.versionManager.classifyVersions()
+                categoryTabs.model = root.categories
+                selectCategory(0)
+                loading = false
+            })
         } else {
             kernel.versionManager.fetchManifest()
         }

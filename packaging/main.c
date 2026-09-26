@@ -278,7 +278,7 @@ static HWND create_dialog(HINSTANCE hInst) {
 
     const wchar_t *wTitle = L"Beacon Launcher";
     HWND hWnd = CreateWindowExW(0, L"BeaconProgress", wTitle,
-        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
         (scrW - dlgW) / 2, (scrH - dlgH) / 2, dlgW, dlgH,
         NULL, NULL, hInst, NULL);
     if (!hWnd) return NULL;

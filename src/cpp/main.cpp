@@ -1305,9 +1305,10 @@ return 0;
 
     // TEMP DEBUG: capture all Qt messages (incl. QML console.log / Image errors)
     static FILE *qtDbgFile = nullptr;
+    static QString qtDebugPath = resolveLauncherDir() + "/qtdebug.log";
     qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
         if (!qtDbgFile)
-            qtDbgFile = fopen("qtdebug.log", "w");
+            qtDbgFile = fopen(qtDebugPath.toUtf8().constData(), "a");
         if (qtDbgFile) {
             fprintf(qtDbgFile, "[%d] %s (%s:%d)\n", (int)type, qPrintable(msg),
                     ctx.file ? ctx.file : "?", ctx.line);

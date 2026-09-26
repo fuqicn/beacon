@@ -140,7 +140,7 @@ private:
     void finishUpdateDownload(bool ok, const QString &error, bool silent = false);
 
 public:
-    Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
+    Q_PROPERTY(QStringList changeLog READ getChangeLog NOTIFY changeLogChanged)
     Q_PROPERTY(bool checkingUpdate READ checkingUpdate NOTIFY checkingUpdateChanged)
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
     Q_PROPERTY(bool updateDownloading READ updateDownloading NOTIFY updateStatsChanged)

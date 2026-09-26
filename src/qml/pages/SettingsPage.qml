@@ -29,16 +29,19 @@ Item {
     property bool manualChecked: false
 
     function styleOptions() {
-        var opts = [{ text: I18n.tr("settings.styleAuto"), key: "auto" }]
+        var opts = []
         var os = Qt.platform.os
         if (os === "windows") {
+            opts.push({ text: I18n.tr("settings.styleAuto"), key: "auto" })
             opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
             opts.push({ text: I18n.tr("settings.styleWindows"), key: "windows" })
         } else if (os === "osx") {
+            opts.push({ text: I18n.tr("settings.styleAuto"), key: "auto" })
             opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
             opts.push({ text: I18n.tr("settings.styleMacOS"), key: "macos" })
         } else {
-            // Linux/macOS: Windows style is not available; use Fusion and Imagine
+            // Linux: Windows style is not available; use Fusion and Imagine
+            opts.push({ text: I18n.tr("settings.styleAuto"), key: "auto" })
             opts.push({ text: I18n.tr("settings.styleWinUI3"), key: "fluentwinui3" })
             opts.push({ text: I18n.tr("settings.styleFusion"), key: "fusion" })
             opts.push({ text: I18n.tr("settings.styleImagine"), key: "imagine" })

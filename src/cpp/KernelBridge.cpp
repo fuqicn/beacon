@@ -730,6 +730,10 @@ void KernelBridge::finishUpdateDownload(bool ok, const QString &error, bool sile
     if (ok) {
         m_updateAvailable = false;
         emit updateAvailableChanged();
+        // Add changelog entry for this update
+        QString ver = m_latestVersion.startsWith("v") ? m_latestVersion.mid(1) : m_latestVersion;
+        m_changeLog.prepend(QString("[%1] %2").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd"), ver));
+        emit changeLogChanged();
         mc_info("[Update] package saved (%s source)", qPrintable(m_updateSource));
     } else if (!silent) {
         mc_error("[Update] download failed: %s", qPrintable(error));
@@ -1271,6 +1275,10 @@ void KernelBridge::qmlCollectGarbage()
 //      DownloadManager signals, it never shows up in the download list.
 void KernelBridge::launcherMemoryOptimize()
 {
+    // Only available on Windows
+    #ifndef Q_OS_WIN
+    return;
+    #endif
     mc_info("[Bridge] launcherMemoryOptimize start");
 
     if (m_engine) {
@@ -1319,6 +1327,17 @@ QString KernelBridge::readFileTail(const QString &path, int maxLines) const
     if (lines.size() > maxLines)
         lines = lines.mid(lines.size() - maxLines);
     return lines.join('\n');
+}
+
+void KernelBridge::addChangeLogEntry(const QString &entry)
+{
+    m_changeLog.prepend(entry);
+    emit changeLogChanged();
+}
+
+QStringList KernelBridge::getChangeLog() const
+{
+    return m_changeLog;
 }
 
 QVariantList KernelBridge::diagnoseCrash(const QString &content) const

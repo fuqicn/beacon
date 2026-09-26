@@ -149,7 +149,9 @@ property var stackView: null
         }
 
         Text {
-            text: I18n.tr("modSearch.source")
+            text: I18n.tr("modSearch.source").replace("Modrinth",
+                root.source === "curseforge" ? I18n.tr("modSearch.sourceCurseForge")
+                : (root.source === "all" ? I18n.tr("modSearch.sourceAll") : I18n.tr("modSearch.sourceModrinth")))
             font.pixelSize: 11
             color: palette.placeholderText
         }
@@ -396,6 +398,18 @@ root.stackView.push(Qt.resolvedUrl("ModDetailPage.qml"), {
                       (root.results.length === 0 ? I18n.tr("modSearch.noResults") : "")
                 font.pixelSize: 13
                 color: palette.placeholderText
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    visible: kernel.modManager.searching
+                    BusyIndicator { running: true; implicitWidth: 18; implicitHeight: 18 }
+                    NumberAnimation on opacity {
+                        running: kernel.modManager.searching
+                        loops: Animation.Infinite
+                        from: 0; to: 1; duration: 600
+                    }
+                }
+                Behavior on opacity { enabled: kernel.modManager.searching; NumberAnimation { duration: 200 } }
             }
         }
 

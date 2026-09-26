@@ -149,6 +149,7 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     s_instance->m_authManager->setLauncherDir(launcherDir);
     s_instance->m_authManager->refresh();
     s_instance->m_settingsManager->setLauncherDir(launcherDir);
+    s_instance->m_instanceManager->setLauncherDir(launcherDir);
 
     // Ensure system preference keys exist, initializing any missing ones from OS settings
     {

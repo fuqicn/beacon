@@ -124,6 +124,15 @@ InstanceManager::InstanceManager(QObject *parent) : QObject(parent)
     loadConfig();
 }
 
+void InstanceManager::setLauncherDir(const QString &dir)
+{
+    m_launcherDir = dir;
+    // Store instance data alongside launcher settings for consistency
+    QDir().mkpath(dir);
+    m_configPath = dir + "/instances.json";
+    loadConfig();
+}
+
 InstanceManager::~InstanceManager() = default;
 
 void InstanceManager::loadConfig()

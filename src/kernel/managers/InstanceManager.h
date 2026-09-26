@@ -66,6 +66,7 @@ public:
     Q_INVOKABLE QString copyInstance(const QString &id, const QString &newId = QString());
     Q_INVOKABLE bool renameInstance(const QString &id, const QString &newId);
     Q_INVOKABLE bool importVersionFolder(const QString &rootDir, const QString &srcPath);
+    void setLauncherDir(const QString &dir);
 
 signals:
     void instancesChanged();
@@ -83,6 +84,7 @@ private:
     QStringList m_rootDirs;
     QString m_currentRootDir;
     QString m_configPath;
+    QString m_launcherDir;
 };
 
 #endif

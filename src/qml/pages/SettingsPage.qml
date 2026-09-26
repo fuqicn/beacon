@@ -49,12 +49,13 @@ Item {
         return opts
     }
 
-    Component.onCompleted: {
+    function _initSettings() {
         javaPathInput.text = kernel.settingsManager.value("java/path", "")
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
         langCombo.currentIndex = kernel.settingsManager.value("language/index", -1) + 1
-         cfKeyInput.text = ""
+        cfKeyInput.text = ""
+
         var dlSource = kernel.settingsManager.value("download/source", "auto")
         for (var i = 0; i < dlSourceCombo.model.length; ++i) {
             if (dlSourceCombo.model[i].key === dlSource) {
@@ -69,16 +70,13 @@ Item {
                 break
             }
         }
-        // Defer style combo init until model is ready
-        Qt.callLater(function() {
-            var uiStyle = kernel.settingsManager.value("ui/style", "auto")
-            for (var s = 0; s < styleCombo.model.length; ++s) {
-                if (styleCombo.model[s].key === uiStyle) {
-                    styleCombo.currentIndex = s
-                    break
-                }
+        var uiStyle = kernel.settingsManager.value("ui/style", "auto")
+        for (var s = 0; s < styleCombo.model.length; ++s) {
+            if (styleCombo.model[s].key === uiStyle) {
+                styleCombo.currentIndex = s
+                break
             }
-        })
+        }
     }
 
     Flickable {

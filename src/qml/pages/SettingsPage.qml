@@ -50,6 +50,8 @@ Item {
     }
 
     function _initSettings() {
+        // Ensure we're reading from global launcher settings (not instance settings)
+        kernel.settingsManager.endInstance()
         javaPathInput.text = kernel.settingsManager.value("java/path", "")
         memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
@@ -228,6 +230,7 @@ Item {
                         textRole: "text"
                         valueRole: "key"
                         onActivated: {
+                            kernel.settingsManager.endInstance()
                             kernel.settingsManager.setValue("download/source", currentValue)
                             kernel.setDownloadSource(currentValue)
                         }
@@ -296,7 +299,8 @@ Item {
                         textRole: "text"
                         valueRole: "key"
                         Layout.preferredWidth: 170
-                        onActivated: kernel.settingsManager.setValue("launch/isolationPolicy", currentValue)
+                            onActivated: kernel.settingsManager.endInstance()
+                                       , kernel.settingsManager.setValue("launch/isolationPolicy", currentValue)
                         HoverHandler { id: isoPolicyHover }
                         ToolTip.visible: isoPolicyHover.hovered
                         ToolTip.delay: 500
@@ -404,6 +408,7 @@ Item {
                                     if (model[i].key === saved) { currentIndex = i; break }
                             }
                             onActivated: {
+                                kernel.settingsManager.endInstance()
                                 kernel.settingsManager.setValue("ui/style", currentValue)
                                 restartNeeded = true
                             }

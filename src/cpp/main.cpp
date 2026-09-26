@@ -200,6 +200,23 @@ static std::atomic<qint64> g_lastAwakeMs{0};
 static std::atomic<qint64> g_lastNotifyEnterMs{0};
 static std::atomic<qint64> g_lastNotifyExitMs{0};
 
+// Snapshot of the GUI thread's stack, taken while the loop is frozen. Every
+// timestamp so far says the thread left its last event, announced aboutToBlock,
+// and never came back - which no signal or slot can explain. Only the stack can.
+//
+// Built once at startup so the capture itself never calls anything that takes
+// the loader lock: suspending a thread that holds it would deadlock this very
+// capture. Frames are gathered by reading the live stack for addresses that
+// fall inside a known module rather than unwinding, so no .pdata, no dbghelp
+// and no allocation happen while the target is suspended.
+struct StackModule { uintptr_t lo; uintptr_t hi; const char *name; };
+static StackModule g_stackModules[512];
+static char g_stackModuleNames[512][64];
+static int g_stackModuleCount = 0;
+static std::atomic<bool> g_stackCaptured{false};
+// buildStackModuleTable()/moduleFor() live next to captureGuiStack() below,
+// after <windows.h> - they are Windows-only and cannot compile up here.
+
 class ModIconResponse : public QQuickImageResponse
 {
 public:
@@ -463,6 +480,7 @@ private:
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <tlhelp32.h>
 #include <signal.h>
 #include <dbghelp.h>
 #include <psapi.h>
@@ -735,6 +753,127 @@ static qint64 threadCpuMs(void *handle)
 #else
     (void)handle;
     return -1;
+#endif
+}
+
+#ifdef Q_OS_WIN
+// Module ranges, resolved once at startup: the capture below runs with another
+// thread suspended and must not call anything that can take the loader lock.
+static void buildStackModuleTable()
+{
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32,
+                                           GetCurrentProcessId());
+    if (snap == INVALID_HANDLE_VALUE) return;
+    MODULEENTRY32W me;
+    me.dwSize = sizeof(me);
+    if (Module32FirstW(snap, &me)) {
+        do {
+            if (g_stackModuleCount >= 512) break;
+            StackModule &m = g_stackModules[g_stackModuleCount];
+            m.lo = reinterpret_cast<uintptr_t>(me.modBaseAddr);
+            m.hi = m.lo + me.modBaseSize;
+            char *dst = g_stackModuleNames[g_stackModuleCount];
+            int i = 0;
+            for (; me.szModule[i] && i < 63; i++)
+                dst[i] = char(me.szModule[i]);   // module names are ASCII
+            dst[i] = '\0';
+            m.name = dst;
+            g_stackModuleCount++;
+        } while (Module32NextW(snap, &me));
+    }
+    CloseHandle(snap);
+    mc_info("[Diag] stack module table: %d modules", g_stackModuleCount);
+}
+
+static const char *moduleFor(uintptr_t addr, uintptr_t *offsetOut)
+{
+    for (int i = 0; i < g_stackModuleCount; i++) {
+        if (addr >= g_stackModules[i].lo && addr < g_stackModules[i].hi) {
+            *offsetOut = addr - g_stackModules[i].lo;
+            return g_stackModules[i].name;
+        }
+    }
+    *offsetOut = addr;
+    return nullptr;   // not a code address in any module
+}
+#endif
+
+// Capture the GUI thread's call stack while it is frozen. Once per stall: the
+// target is suspended for the duration, so keep it short and never allocate
+// while it is down.
+static void captureGuiStack(char *buf, int bufSize)
+{
+    buf[0] = '\0';
+#ifdef Q_OS_WIN
+    if (g_stackCaptured.exchange(true))
+        return;                       // already captured for this stall
+    HANDLE h = static_cast<HANDLE>(g_guiThreadHandle);
+    if (!h) {
+        snprintf(buf, bufSize, "(no gui thread handle)");
+        g_stackCaptured.store(false);
+        return;
+    }
+
+    static uintptr_t frames[48];      // preallocated: no malloc while suspended
+    int n = 0;
+
+    if (SuspendThread(h) == (DWORD)-1) {
+        snprintf(buf, bufSize, "(suspend failed %lu)", (unsigned long)GetLastError());
+        g_stackCaptured.store(false);
+        return;
+    }
+
+    CONTEXT ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.ContextFlags = CONTEXT_FULL;
+    const BOOL gotCtx = GetThreadContext(h, &ctx);
+    if (gotCtx) {
+#if defined(_M_ARM64)
+        const uintptr_t pc = reinterpret_cast<uintptr_t>(ctx.Pc);
+        const uintptr_t sp = reinterpret_cast<uintptr_t>(ctx.Sp);
+#elif defined(_WIN64)
+        const uintptr_t pc = reinterpret_cast<uintptr_t>(ctx.Rip);
+        const uintptr_t sp = reinterpret_cast<uintptr_t>(ctx.Rsp);
+#else
+        const uintptr_t pc = reinterpret_cast<uintptr_t>(ctx.Eip);
+        const uintptr_t sp = reinterpret_cast<uintptr_t>(ctx.Esp);
+#endif
+        frames[n++] = pc;
+        // Sweep the live stack for code addresses belonging to a loaded module.
+        // Proper x64 unwinding needs .pdata plus loader-lock-sensitive calls,
+        // neither of which is safe while holding another thread suspended.
+        for (uintptr_t a = sp & ~uintptr_t(7); a < sp + 8192 && n < 48; a += 8) {
+            uintptr_t v = 0;
+            SIZE_T got = 0;
+            if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void *>(a),
+                                   &v, sizeof(v), &got) || got != sizeof(v))
+                continue;
+            uintptr_t off = 0;
+            if (moduleFor(v, &off))
+                frames[n++] = v;
+        }
+    }
+    const DWORD resumeErr = gotCtx ? 0 : GetLastError();
+    ResumeThread(h);                  // target runs again before we format
+
+    if (!gotCtx) {
+        snprintf(buf, bufSize, "(GetThreadContext failed %lu)", (unsigned long)resumeErr);
+        return;
+    }
+    int len = 0;
+    for (int i = 0; i < n && len < bufSize - 96; i++) {
+        uintptr_t off = 0;
+        const char *mod = moduleFor(frames[i], &off);
+        if (!mod) mod = "?";
+        const int wrote = snprintf(buf + len, bufSize - len, "%s+0x%lx ", mod,
+                                   (unsigned long)off);
+        if (wrote <= 0) break;
+        len += wrote;
+    }
+    if (n == 0)
+        snprintf(buf, bufSize, "(no frames resolved)");
+#else
+    snprintf(buf, bufSize, "(n/a)");
 #endif
 }
 
@@ -1857,7 +1996,9 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
     //   - and the event notify() recorded it as being in the middle of.
 #ifdef Q_OS_WIN
     g_guiThreadHandle = OpenThread(THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
+    buildStackModuleTable();
 #endif
+    mc_info("[Diag] gui thread id=%p", QThread::currentThreadId());
 
     // Event-loop liveness for the "in (idle)" case: tells a dispatcher parked
     // in its native wait from a thread stuck in code between dispatches.
@@ -1894,10 +2035,16 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
                 lastProc = processCpuMs();
                 lastGui = threadCpuMs(g_guiThreadHandle);
                 lastCls = nullptr;
+                g_stackCaptured.store(false, std::memory_order_relaxed);
                 continue;
             }
             const qint64 frozen = now - lastTick;
             if (frozen < 300) continue;
+            if (frozen >= 1000 && !g_stackCaptured.load(std::memory_order_relaxed)) {
+                char stack[768];
+                captureGuiStack(stack, int(sizeof(stack)));
+                mc_info("[Stack] gui thread frozen, stack: %s", stack);
+            }
 
             const qint64 proc = processCpuMs();
             const qint64 gui = threadCpuMs(g_guiThreadHandle);

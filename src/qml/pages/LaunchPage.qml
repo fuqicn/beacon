@@ -350,11 +350,11 @@ Image {
                     anchors.fill: parent
                     source: selectedIcon
                     asynchronous: true
+                    cache: true
                     fillMode: Image.PreserveAspectFit
                     sourceSize.width: 44
                     sourceSize.height: 44
-                    mipmap: true
-                    smooth: true
+                    mipmap: false
                 }
             }
 

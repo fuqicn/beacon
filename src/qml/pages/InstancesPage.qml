@@ -227,11 +227,11 @@ Item {
                                     ? "file:///" + modelData.customIcon.replace(/\\/g, "/")
                                     : "qrc:/icons/instances/" + (modelData.iconKey || "grass") + ".png"
                             asynchronous: true
+                            cache: true
                             fillMode: Image.PreserveAspectFit
                             sourceSize.width: 48
                             sourceSize.height: 48
-                            mipmap: true
-                            smooth: true
+                            mipmap: false
                         }
                     }
 

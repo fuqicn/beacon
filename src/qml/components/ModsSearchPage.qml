@@ -322,9 +322,11 @@ property var stackView: null
                             anchors.fill: parent
                             source: modelData.logoUrl ? "image://modicon/" + Qt.btoa(modelData.logoUrl) : ""
                             asynchronous: true
+                            cache: true
                             fillMode: Image.PreserveAspectFit
                             sourceSize.width: 76
                             sourceSize.height: 76
+                            mipmap: false
                             visible: modelData.logoUrl !== ""
                         }
                         Text {

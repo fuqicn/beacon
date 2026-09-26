@@ -114,14 +114,8 @@ static bool fixVersionJsonId(const QString &rootDir, const QString &oldId, const
 
 InstanceManager::InstanceManager(QObject *parent) : QObject(parent)
 {
-    char path[1024];
-    mc_path_appdata(path, sizeof(path));
-    mc_path_join(path, "launcher", path, sizeof(path));
-    mc_path_mkdir_p(path);
-    mc_path_join(path, "instances.json", path, sizeof(path));
-    m_configPath = QString::fromUtf8(path);
-
-    loadConfig();
+    // Config path is set by setLauncherDir() which is called before we're used.
+    m_configPath.clear();
 }
 
 void InstanceManager::setLauncherDir(const QString &dir)

@@ -42,7 +42,7 @@ Item {
         sourceSize.height: iconSize
         fillMode: Image.PreserveAspectFit
         smooth: true
-        mipmap: true
-        asynchronous: true
+            mipmap: false
+            asynchronous: true
     }
 }

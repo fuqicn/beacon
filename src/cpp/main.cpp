@@ -178,6 +178,17 @@ private:
     QCache<QString, QImage> m_cache;
 };
 
+// Rendering-side liveness. beforeRendering/afterRendering fire on the render
+// thread, frameSwapped on the GUI thread; icons are delivered from the image
+// pool. If the GUI freezes while these are stale the stall is not in QML/JS at
+// all - it is the render thread stuck uploading cover textures or waiting on
+// the GPU, with the GUI parked on the render synchronization point.
+static std::atomic<qint64> g_lastFrameSwappedMs{0};
+static std::atomic<qint64> g_lastBeforeRenderingMs{0};
+static std::atomic<qint64> g_lastAfterRenderingMs{0};
+static std::atomic<qint64> g_lastIconDeliverMs{0};
+static std::atomic<int> g_iconDeliverCount{0};
+
 class ModIconResponse : public QQuickImageResponse
 {
 public:
@@ -201,6 +212,12 @@ public:
         if (m_cancelled)
             return;
         m_image = image;
+        // Marked so a stall report can say whether covers were landing right
+        // before the freeze (texture upload is the prime suspect for a
+        // zero-CPU stall that starts when a list paints).
+        g_lastIconDeliverMs.store(QDateTime::currentMSecsSinceEpoch(),
+                                  std::memory_order_relaxed);
+        g_iconDeliverCount.fetch_add(1, std::memory_order_relaxed);
         emit finished();
     }
 
@@ -1792,6 +1809,23 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
                 splash.close();
             },
             Qt::SingleShotConnection);
+
+        // Render-thread liveness for the stall watchdog. DirectConnection so
+        // the stamps are written ON the render thread: a queued connection
+        // would need the GUI loop to run, and the GUI loop is exactly what
+        // stalls.
+        auto stamp = [](std::atomic<qint64> &slot) {
+            slot.store(QDateTime::currentMSecsSinceEpoch(), std::memory_order_relaxed);
+        };
+        QObject::connect(mainWindow, &QQuickWindow::frameSwapped, mainWindow,
+                         [stamp]() { stamp(g_lastFrameSwappedMs); },
+                         Qt::DirectConnection);
+        QObject::connect(mainWindow, &QQuickWindow::beforeRendering, mainWindow,
+                         [stamp]() { stamp(g_lastBeforeRenderingMs); },
+                         Qt::DirectConnection);
+        QObject::connect(mainWindow, &QQuickWindow::afterRendering, mainWindow,
+                         [stamp]() { stamp(g_lastAfterRenderingMs); },
+                         Qt::DirectConnection);
     }
 
     // Stall watchdog.
@@ -1846,11 +1880,22 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
             // Report when the receiver changes, then at most once a second while
             // the same one persists - otherwise a frozen loop floods the log.
             if (cls != lastCls || type != lastType || now - lastReport >= 1000) {
+                const qint64 swapAge =
+                    (qint64)g_lastFrameSwappedMs.load(std::memory_order_relaxed);
+                const qint64 renderAge =
+                    (qint64)g_lastBeforeRenderingMs.load(std::memory_order_relaxed);
+                const qint64 iconAge =
+                    (qint64)g_lastIconDeliverMs.load(std::memory_order_relaxed);
                 mc_info("[Stall] GUI frozen %lldms (proc cpu +%lldms, gui thread cpu +%lldms) "
-                        "in %s type=%d for %lldms",
+                        "in %s type=%d for %lldms | render beforeRender %lldms ago, "
+                        "frameSwapped %lldms ago | icons %d last %lldms ago",
                         (long long)frozen, (long long)(proc - lastProc),
                         (long long)(gui - lastGui), cls ? cls : "(idle)", type,
-                        (long long)(started ? now - started : -1));
+                        (long long)(started ? now - started : -1),
+                        (long long)(renderAge ? now - renderAge : -1),
+                        (long long)(swapAge ? now - swapAge : -1),
+                        g_iconDeliverCount.load(std::memory_order_relaxed),
+                        (long long)(iconAge ? now - iconAge : -1));
                 lastReport = now;
                 lastCls = cls;
                 lastType = type;

@@ -56,7 +56,9 @@
 #include <QLocalSocket>
 #include <QMessageBox>
 #include <cstdlib>
+#include <ctime>
 #include <exception>
+#include <QElapsedTimer>
 #include <mc_log.h>
 #include <mc_mod.h>
 #include <mc_download_qt.h>
@@ -640,6 +642,41 @@ private:
     long m_size;
 };
 
+// ─── UI stall instrumentation ─────────────────────────────────────────────
+// A blocked GUI event loop leaves no trace on its own: the watchdog only knows
+// *that* the loop stalled, never what it was doing. Two cheap probes close that
+// gap so the next "the UI froze" report answers itself from launcher.log:
+//
+//  * InstrumentedApplication::notify() times every event dispatched on the GUI
+//    thread and logs the receiver/event type of anything over kSlowEventMs.
+//    That names the exact call that blocked, e.g. "[SlowEvent] 9247ms
+//    receiver=QQuickWindow type=2" tells us whether the stall was rendering,
+//    input handling or a QML/JS callback.
+//  * The watchdog samples process CPU time across the stall, separating "the
+//    GUI thread is computing" (CPU ~= wall time) from "it is stuck on a lock,
+//    socket or disk" (CPU ~= 0).
+static constexpr qint64 kSlowEventMs = 150;
+
+class InstrumentedApplication : public QApplication
+{
+public:
+    using QApplication::QApplication;
+
+    bool notify(QObject *receiver, QEvent *event) override
+    {
+        // Pointer + int only: no allocation, safe on the per-event hot path.
+        const char *cls = receiver ? receiver->metaObject()->className() : "(null)";
+        const int type = int(event->type());
+        QElapsedTimer timer;
+        timer.start();
+        const bool ok = QApplication::notify(receiver, event);
+        const qint64 ms = timer.elapsed();
+        if (ms >= kSlowEventMs)
+            mc_info("[SlowEvent] %lldms receiver=%s type=%d", (long long)ms, cls, type);
+        return ok;
+    }
+};
+
 // Resolve the persistent launcher data directory.
 // In AppImage mode BEACON_LAUNCHER_DIR is set by the GTK launcher (beacon_gtk.c)
 // to the directory containing the .AppImage file; data lives in <that>/beacon/.
@@ -1190,7 +1227,7 @@ return 0;
         qputenv("QT_QPA_PLATFORM", "xcb");
 #endif
 
-    QApplication app(argc, argv);
+    InstrumentedApplication app(argc, argv);
     app.setApplicationName("Beacon");
 
     // Required for any translucent QQuickWindow: without the alpha buffer,
@@ -1672,19 +1709,28 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
     }
 
     // GUI stall watchdog. It fires every 200 ms; a late tick means the event
-    // loop was blocked for that long. Logging the actual block duration lets a
-    // reported "UI freezes" be correlated with the surrounding log lines
-    // (mirror probes, icon decodes, downloads, page loads).
+    // loop was blocked for that long. Two numbers make the log actionable:
+    //   - process CPU time consumed during the stall: ~wall time means the GUI
+    //     thread was busy computing (find it with [SlowEvent]); ~0 means it was
+    //     blocked on a lock, socket or disk.
+    //   - [SlowEvent] lines from InstrumentedApplication::notify() name the
+    //     receiver/event that took the time.
     QTimer stallWatchdog;
     stallWatchdog.setInterval(200);
     qint64 lastStallTickMs = QDateTime::currentMSecsSinceEpoch();
+    clock_t lastStallClock = clock();
     QObject::connect(&stallWatchdog, &QTimer::timeout, &stallWatchdog,
-                     [&lastStallTickMs]() {
+                     [&lastStallTickMs, &lastStallClock]() {
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         const qint64 drift = now - lastStallTickMs - 200;
-        if (drift >= 300)
-            mc_info("[Stall] GUI event loop blocked for %lldms", (long long)drift);
+        if (drift >= 300) {
+            const clock_t nowClock = clock();
+            const double cpuMs = (double(nowClock - lastStallClock) / CLOCKS_PER_SEC) * 1000.0;
+            mc_info("[Stall] GUI event loop blocked for %lldms (process CPU %lldms during stall)",
+                    (long long)drift, (long long)cpuMs);
+        }
         lastStallTickMs = now;
+        lastStallClock = clock();
     });
     stallWatchdog.start();
 

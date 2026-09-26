@@ -98,12 +98,16 @@ public slots:
         std::vector<McModProject> results(maxResults);
         for (auto &r : results) mc_mod_project_init(&r);
 
+        mc_info("[Mod] search begin q='%s' source=%s offset=%d (thread=%p)",
+                qPrintable(query), qPrintable(source), offset,
+                (void *)QThread::currentThread());
         int count = mc_mod_search(
             query.isEmpty() ? nullptr : query.toUtf8().constData(),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
             loader.isEmpty() ? nullptr : loader.toUtf8().constData(),
             sourceFromName(source), maxResults, qMax(offset, 0), sortFromString(sort),
             results.data(), maxResults);
+        mc_info("[Mod] search done: %d results", count);
 
         emit searchCompleted(projectsToVariant(results, count));
     }
@@ -118,12 +122,15 @@ public slots:
 
         // CurseForge modpacks (classId=4471) are searched inside the kernel when
         // a CF API key is configured; otherwise only Modrinth modpacks.
+        mc_info("[Mod] pack search begin q='%s' source=%s offset=%d",
+                qPrintable(query), qPrintable(source), offset);
         int count = mc_mod_search_pack(
             query.isEmpty() ? nullptr : query.toUtf8().constData(),
             mcVersion.isEmpty() ? nullptr : mcVersion.toUtf8().constData(),
             loader.isEmpty() ? nullptr : loader.toUtf8().constData(),
             maxResults, qMax(offset, 0), sortFromString(sort),
             results.data(), maxResults);
+        mc_info("[Mod] pack search done: %d results", count);
 
         // If the caller explicitly wanted CurseForge packs but got a Modrinth
         // result set instead (no key / no CF hits), keep the merged result.

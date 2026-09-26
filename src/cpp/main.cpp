@@ -870,6 +870,75 @@ static void captureGuiStack(char *buf, int bufSize)
     }
     if (n == 0)
         snprintf(buf, bufSize, "(no frames resolved)");
+
+    // Then the other threads: the GUI stack only proves the GUI is waiting on
+    // something, not what that something is doing. One suspend per thread, kept
+    // short, same no-allocation rule as above.
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE)
+        return;
+    const DWORD selfTid = GetCurrentThreadId();
+    const DWORD guiTid =
+        g_guiThreadHandle ? GetThreadId(static_cast<HANDLE>(g_guiThreadHandle)) : 0;
+    THREADENTRY32 te;
+    te.dwSize = sizeof(te);
+    int printed = 0;
+    int off = strlen(buf);
+    if (Thread32First(snap, &te)) {
+        do {
+            if (te.th32OwnerProcessID != GetCurrentProcessId()) continue;
+            if (te.th32ThreadID == selfTid || te.th32ThreadID == guiTid) continue;
+            if (printed >= 10 || off > bufSize - 160) break;
+            HANDLE th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT |
+                                       THREAD_QUERY_INFORMATION,
+                                   FALSE, te.th32ThreadID);
+            if (!th) continue;
+            if (SuspendThread(th) == (DWORD)-1) { CloseHandle(th); continue; }
+            CONTEXT tctx;
+            memset(&tctx, 0, sizeof(tctx));
+            tctx.ContextFlags = CONTEXT_FULL;
+            const BOOL okCtx = GetThreadContext(th, &tctx);
+            if (okCtx) {
+#if defined(_M_ARM64)
+                const uintptr_t tpc = reinterpret_cast<uintptr_t>(tctx.Pc);
+                const uintptr_t tsp = reinterpret_cast<uintptr_t>(tctx.Sp);
+#elif defined(_WIN64)
+                const uintptr_t tpc = reinterpret_cast<uintptr_t>(tctx.Rip);
+                const uintptr_t tsp = reinterpret_cast<uintptr_t>(tctx.Rsp);
+#else
+                const uintptr_t tpc = reinterpret_cast<uintptr_t>(tctx.Eip);
+                const uintptr_t tsp = reinterpret_cast<uintptr_t>(tctx.Esp);
+#endif
+                uintptr_t addrs[6];
+                int an = 0;
+                addrs[an++] = tpc;
+                for (uintptr_t a = tsp & ~uintptr_t(7); a < tsp + 4096 && an < 6; a += 8) {
+                    uintptr_t v = 0;
+                    SIZE_T got = 0;
+                    if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void *>(a),
+                                           &v, sizeof(v), &got) || got != sizeof(v))
+                        continue;
+                    uintptr_t o = 0;
+                    if (moduleFor(v, &o)) addrs[an++] = v;
+                }
+                int w = snprintf(buf + off, bufSize - off, "%s tid=%lu:", printed ? " | " : "",
+                                 (unsigned long)te.th32ThreadID);
+                if (w > 0) off += w;
+                for (int i = 0; i < an && off < bufSize - 64; i++) {
+                    uintptr_t o = 0;
+                    const char *m = moduleFor(addrs[i], &o);
+                    if (!m) m = "?";
+                    w = snprintf(buf + off, bufSize - off, " %s+0x%lx", m, (unsigned long)o);
+                    if (w <= 0) break;
+                    off += w;
+                }
+                printed++;
+            }
+            ResumeThread(th);
+            CloseHandle(th);
+        } while (Thread32Next(snap, &te));
+    }
+    CloseHandle(snap);
 #else
     snprintf(buf, bufSize, "(n/a)");
 #endif
@@ -2018,6 +2087,9 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
 
     QTimer stallWatchdog;
     stallWatchdog.setInterval(150);
+    // Seed the tick immediately: an uninitialised 0 makes the first report
+    // claim a stall of now-minus-epoch.
+    g_guiTickMs.store(QDateTime::currentMSecsSinceEpoch(), std::memory_order_relaxed);
     QObject::connect(&stallWatchdog, &QTimer::timeout, &stallWatchdog, []() {
         g_guiTickMs.store(QDateTime::currentMSecsSinceEpoch(), std::memory_order_relaxed);
     });
@@ -2045,7 +2117,7 @@ QDateTime::currentMSecsSinceEpoch() - tStart);
             const qint64 frozen = now - lastTick;
             if (frozen < 300) continue;
             if (frozen >= 1000 && !g_stackCaptured.load(std::memory_order_relaxed)) {
-                char stack[768];
+                char stack[3000];
                 captureGuiStack(stack, int(sizeof(stack)));
                 mc_info("[Stack] gui thread frozen, stack: %s", stack);
             }

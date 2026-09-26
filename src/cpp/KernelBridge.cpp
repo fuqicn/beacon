@@ -76,6 +76,7 @@
 #include <mc_path.h>
 #include <mc_java.h>
 #include <mc_download.h>
+#include <mc_http.h>
 #include <mc_mod.h>
 #include <mc_download_qt.h>
 
@@ -830,6 +831,12 @@ void KernelBridge::setDownloadSource(const QString &source)
     // background so the first mod search / cover load never blocks on it.
     QThread *warmup = QThread::create([]() {
         mc_mod_warmup_mirror();
+        // Release the thread-local QNAM while this thread still has somewhere to
+        // turn: after the lambda returns, QThread's TLS teardown destroys it with
+        // no event loop left, ~QNetworkAccessManager blocks on its pool/pending
+        // replies, and the GUI eats that whole wait inside ~QThread()::wait().
+        // Measured at 8.4s of frozen UI with zero CPU.
+        mc_http_release_thread_resources();
     });
     warmup->setObjectName("modMirrorWarmup");
     // Log on the GUI thread right before the deleteLater runs: the gap between

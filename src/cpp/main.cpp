@@ -770,7 +770,7 @@ static void buildStackModuleTable()
         do {
             if (g_stackModuleCount >= 512) break;
             StackModule &m = g_stackModules[g_stackModuleCount];
-            m.lo = static_cast<uintptr_t>(me.modBaseAddr);
+            m.lo = reinterpret_cast<uintptr_t>(me.modBaseAddr);
             m.hi = m.lo + me.modBaseSize;
             char *dst = g_stackModuleNames[g_stackModuleCount];
             int i = 0;

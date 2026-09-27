@@ -19,6 +19,7 @@
 #include "LauncherMemoryOptimizer.h"
 
 #include <mc_log.h>
+#include <mc_download.h>
 #include "LegacyJavaManifestFetcher.h"
 
 #include <QThread>

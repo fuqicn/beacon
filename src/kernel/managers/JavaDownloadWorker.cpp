@@ -41,11 +41,12 @@ JavaDownloadWorker::JavaDownloadWorker(int majorVersion, const QString &targetDi
 
 void JavaDownloadWorker::run()
 {
-    // Keep the normal Qt event-pump path (same as the Minecraft DownloadWorker,
-    // which never touches the no_pump flag): the kernel's manifest fetch now runs
-    // sequential mc_http_get calls on this worker thread (no bare std::threads),
-    // so a plain QThread event-pump is safe and matches the non-freezing MC path.
-    mc_qt_download_thread_no_pump(0);
+    // Block on the global download pool futures without pumping the Qt event
+    // loop. Concurrent processEvents from this thread and the GUI main thread
+    // is undefined behaviour in Qt6Core (crashes inside QEventDispatcher).
+    // Block on futures instead; the pool threads own their event loops and
+    // perform the actual network work.
+    mc_qt_download_thread_no_pump(1);
 
     mc_info("[DL-J] Worker started: ver=%d dir=%s",
             m_majorVersion, m_targetDir.toUtf8().constData());

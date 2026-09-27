@@ -770,7 +770,7 @@ static void buildStackModuleTable()
         do {
             if (g_stackModuleCount >= 512) break;
             StackModule &m = g_stackModules[g_stackModuleCount];
-            m.lo = reinterpret_cast<uintptr_t>(me.modBaseAddr);
+            m.lo = static_cast<uintptr_t>(me.modBaseAddr);
             m.hi = m.lo + me.modBaseSize;
             char *dst = g_stackModuleNames[g_stackModuleCount];
             int i = 0;
@@ -827,14 +827,14 @@ static void captureGuiStack(char *buf, int bufSize)
     const BOOL gotCtx = GetThreadContext(h, &ctx);
     if (gotCtx) {
 #if defined(_M_ARM64)
-        const uintptr_t pc = reinterpret_cast<uintptr_t>(ctx.Pc);
-        const uintptr_t sp = reinterpret_cast<uintptr_t>(ctx.Sp);
+        const uintptr_t pc = static_cast<uintptr_t>(ctx.Pc);
+        const uintptr_t sp = static_cast<uintptr_t>(ctx.Sp);
 #elif defined(_WIN64)
-        const uintptr_t pc = reinterpret_cast<uintptr_t>(ctx.Rip);
-        const uintptr_t sp = reinterpret_cast<uintptr_t>(ctx.Rsp);
+        const uintptr_t pc = static_cast<uintptr_t>(ctx.Rip);
+        const uintptr_t sp = static_cast<uintptr_t>(ctx.Rsp);
 #else
-        const uintptr_t pc = reinterpret_cast<uintptr_t>(ctx.Eip);
-        const uintptr_t sp = reinterpret_cast<uintptr_t>(ctx.Esp);
+        const uintptr_t pc = static_cast<uintptr_t>(ctx.Eip);
+        const uintptr_t sp = static_cast<uintptr_t>(ctx.Esp);
 #endif
         frames[n++] = pc;
         // Sweep the live stack for code addresses belonging to a loaded module.
@@ -900,14 +900,14 @@ static void captureGuiStack(char *buf, int bufSize)
             const BOOL okCtx = GetThreadContext(th, &tctx);
             if (okCtx) {
 #if defined(_M_ARM64)
-                const uintptr_t tpc = reinterpret_cast<uintptr_t>(tctx.Pc);
-                const uintptr_t tsp = reinterpret_cast<uintptr_t>(tctx.Sp);
+                const uintptr_t tpc = static_cast<uintptr_t>(tctx.Pc);
+                const uintptr_t tsp = static_cast<uintptr_t>(tctx.Sp);
 #elif defined(_WIN64)
-                const uintptr_t tpc = reinterpret_cast<uintptr_t>(tctx.Rip);
-                const uintptr_t tsp = reinterpret_cast<uintptr_t>(tctx.Rsp);
+                const uintptr_t tpc = static_cast<uintptr_t>(tctx.Rip);
+                const uintptr_t tsp = static_cast<uintptr_t>(tctx.Rsp);
 #else
-                const uintptr_t tpc = reinterpret_cast<uintptr_t>(tctx.Eip);
-                const uintptr_t tsp = reinterpret_cast<uintptr_t>(tctx.Esp);
+                const uintptr_t tpc = static_cast<uintptr_t>(tctx.Eip);
+                const uintptr_t tsp = static_cast<uintptr_t>(tctx.Esp);
 #endif
                 uintptr_t addrs[6];
                 int an = 0;

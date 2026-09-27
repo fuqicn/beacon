@@ -178,10 +178,14 @@ static void pool_shutdown() {
         g_cancel = true;
         doomed.swap(g_pool_threads);
     }
-    g_pool_cv.notify_all();
-    // Do NOT join �?Qt TLS cleanup in worker threads requires a running event
-    // loop and blocks for many seconds when join is called. Detach and let the
-    // OS reclaim thread resources when the process exits.
+    // Deliberately NO g_pool_cv.notify_all() here. Waking every worker to run
+    // its teardown concurrently with process exit races the Windows loader
+    // lock (ExitProcess waits for thread teardown while workers tear down at
+    // the same time) and hangs exit intermittently. Idle workers simply stay
+    // parked on the CV; a worker that happens to be finishing a job may see
+    // the stop flag and exit on its own — either way ExitProcess reclaims the
+    // threads without the wake-up storm. This is the same leak-by-design the
+    // detach path already relied on.
     for (auto &t : doomed)
         if (t.joinable()) t.detach();
     std::lock_guard<std::mutex> lk(g_pool_mtx);
@@ -218,21 +222,10 @@ static void pump_events() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         return;
     }
-    QCoreApplication *app = QCoreApplication::instance();
-    if (!app) {
+    if (QCoreApplication::instance())
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    else
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        return;
-    }
-    // Only the GUI thread may run QCoreApplication::processEvents(). Worker
-    // threads used to pump as well, which races the GUI thread's own event
-    // processing (documented above as a Qt6Core crash/hang) and stalls the
-    // whole UI for as long as a download is in flight. Workers just wait; the
-    // pool threads that actually do the transfer own their own event loops.
-    if (QThread::currentThread() != app->thread()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        return;
-    }
-    app->processEvents(QEventLoop::AllEvents, 100);
 }
 
 static void pool_wait(std::future<int> &fut) {
@@ -245,31 +238,56 @@ static void pool_wait(std::future<int> &fut) {
 // from the calling thread" contract.
 struct ProgressRelay {
     std::mutex mtx;
+    std::condition_variable cv;
     bool done = false;
     int result = 0;
     std::vector<std::pair<long long, long long>> samples;
 
     void report(long long received, long long total) {
-        std::lock_guard<std::mutex> lk(mtx);
-        samples.emplace_back(received, total);
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            samples.emplace_back(received, total);
+        }
+        cv.notify_one();
     }
     void finish(int res) {
-        std::lock_guard<std::mutex> lk(mtx);
-        result = res;
-        done = true;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            result = res;
+            done = true;
+        }
+        cv.notify_one();
     }
 };
 
+// How long relay_wait sleeps when no progress samples are arriving. Waking
+// every 50ms to pump the event loop keeps the caller responsive while the
+// network is quiet (handshake/stall phases).
+#define RELAY_POLL_MS 50
+
+// Block on the relay instead of spinning. The previous loop was
+// for(;;) { drain; pump_events(); } with no blocking primitive at all, and
+// QCoreApplication::processEvents() returns immediately when the queue is
+// empty — so this burned 100% of a core for the whole duration of every
+// handshake or stalled transfer.
 static int relay_wait(ProgressRelay &relay, McQtDownloadProgressFn fn, void *user) {
     for (;;) {
+        std::vector<std::pair<long long, long long>> batch;
+        bool done;
+        int res;
         {
-            std::lock_guard<std::mutex> lk(relay.mtx);
-            for (auto &s : relay.samples) {
-                if (fn) fn("", s.first, s.second, user);
-            }
-            relay.samples.clear();
-            if (relay.done) return relay.result;
+            std::unique_lock<std::mutex> lk(relay.mtx);
+            relay.cv.wait_for(lk, std::chrono::milliseconds(RELAY_POLL_MS),
+                              [&] { return relay.done || !relay.samples.empty(); });
+            batch.swap(relay.samples);
+            done = relay.done;
+            res = relay.result;
         }
+        // Invoke the callback outside the lock so pool threads reporting
+        // progress never stall behind a slow consumer.
+        for (auto &s : batch)
+            if (fn) fn("", s.first, s.second, user);
+        if (done) return res;
         pump_events();
     }
 }
@@ -301,8 +319,15 @@ void mc_qt_dns_prefetch(void) {
 
 // ---- Temp file helpers ----
 
+// Chunk files are named "<path>.chunk.<n>". npieces is bounded by
+// mc_qt_download_set_max_pieces() (capped at 64), so scanning past 64 names
+// is wasted syscalls: clean_temp runs before every whole-file download, and
+// the old 200-iteration scan performed ~195 failed QFile::remove calls per
+// file — millions of failed syscalls over a large asset batch.
+#define MAX_CHUNKS 64
+
 static void clean_temp(const char *path) {
-    for (int i = 0; i < 200; i++) {
+    for (int i = 0; i < MAX_CHUNKS; i++) {
         char p[2048]; snprintf(p,sizeof(p),"%s.chunk.%d",path,i);
         QFile::remove(QString::fromUtf8(p));
     }
@@ -312,7 +337,7 @@ static void clean_temp(const char *path) {
 
 static int merge_file(const char *out, long long expect_size, const char *expect_sha1) {
     int n = 0;
-    for (int i = 0; i < 200; i++) {
+    for (int i = 0; i < MAX_CHUNKS; i++) {
         char p[2048]; snprintf(p,sizeof(p),"%s.chunk.%d",out,i);
         if (mc_path_exists(p)) n++; else break;
     }
@@ -410,6 +435,12 @@ struct DlStream {
     long long written{0};
 };
 
+// Minimum interval between progress samples pushed into the ProgressRelay.
+// readyRead fires once per network chunk (~4-64KB); sampling every chunk made
+// the relay lock+notify thousands of times a second during fast transfers for
+// no visible benefit (UI progress bars refresh far slower than 20Hz).
+#define PROGRESS_SAMPLE_MIN_MS 50
+
 // GET one byte range (or the whole file when off < 0) on a pool thread,
 // streaming to sink_path. Expects exactly 'len' bytes when len > 0.
 // Returns 0 on success. When allow_slow_abort is set and the source stalls
@@ -458,13 +489,22 @@ static int download_piece(const char *url, const char *sink_path,
     auto t_start = std::chrono::steady_clock::now();
     auto slow_abort = std::make_shared<bool>(false);
     auto last_activity = std::make_shared<std::chrono::steady_clock::time_point>(t_start);
+    auto last_rep = std::make_shared<std::chrono::steady_clock::time_point>(t_start);
 
-    QMetaObject::Connection rc = QObject::connect(reply, &QNetworkReply::readyRead, [reply, stream, len, &timer, timeout_ms, last_activity, pr]() {
+    QMetaObject::Connection rc = QObject::connect(reply, &QNetworkReply::readyRead, [reply, stream, len, &timer, timeout_ms, last_activity, last_rep, pr]() {
         QByteArray data = reply->readAll();
         if (stream->fp) {
             stream->written += (long long)fwrite(data.constData(), 1, (size_t)data.size(), stream->fp);
         }
-        if (pr) pr->report(stream->written, len > 0 ? len : -1);
+        // last_activity must track every chunk (stall detection), but progress
+        // samples are throttled: only report at most every PROGRESS_SAMPLE_MIN_MS.
+        if (pr) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - *last_rep >= std::chrono::milliseconds(PROGRESS_SAMPLE_MIN_MS)) {
+                *last_rep = now;
+                pr->report(stream->written, len > 0 ? len : -1);
+            }
+        }
         *last_activity = std::chrono::steady_clock::now();
         if (timeout_ms > 0) timer.start((int)timeout_ms);
     });
@@ -532,6 +572,10 @@ static int download_piece(const char *url, const char *sink_path,
     QObject::disconnect(rc);
     QObject::disconnect(fc);
     if (timeout_ms > 0) QObject::disconnect(tc);
+
+    // Guaranteed final sample so the caller's progress ends at 100% even when
+    // the transfer finished inside one throttled window.
+    if (pr && *ok_flag) pr->report(stream->written, len > 0 ? len : -1);
 
     fclose(stream->fp); stream->fp = nullptr;
 
@@ -617,6 +661,7 @@ static int download_ranges(const char *url, const char *path, long size,
     auto progress_total = std::make_shared<long long>(0);
     auto t_start = std::chrono::steady_clock::now();
     auto last_activity = std::make_shared<std::chrono::steady_clock::time_point>(t_start);
+    auto last_rep = std::make_shared<std::chrono::steady_clock::time_point>(t_start);
     // Set when a server answers a byte-range request with 200 (whole body)
     // instead of 206: the source ignores Range and its chunks are garbage.
     auto hostile = std::make_shared<bool>(false);
@@ -647,14 +692,22 @@ static int download_ranges(const char *url, const char *path, long size,
         piece->reply = reply;
         (*piece_last)[p] = std::chrono::steady_clock::now();
 
-        conns[p].push_back(QObject::connect(reply, &QNetworkReply::readyRead, [reply, p, piece, piece_last, progress_total, size, &timer, timeout_ms, last_activity, pr]() {
+        conns[p].push_back(QObject::connect(reply, &QNetworkReply::readyRead, [reply, p, piece, piece_last, progress_total, size, &timer, timeout_ms, last_activity, last_rep, pr]() {
             if (reply != piece->reply) return;   // superseded by a reissue
             QByteArray data = piece->reply->readAll();
             if (piece->fp) {
                 piece->written += (long long)fwrite(data.constData(), 1, (size_t)data.size(), piece->fp);
             }
             *progress_total += (long long)data.size();
-            if (pr) pr->report(*progress_total, size);
+            // last_activity/piece_last track every chunk (stall detection);
+            // progress samples are throttled to PROGRESS_SAMPLE_MIN_MS.
+            if (pr) {
+                auto now = std::chrono::steady_clock::now();
+                if (now - *last_rep >= std::chrono::milliseconds(PROGRESS_SAMPLE_MIN_MS)) {
+                    *last_rep = now;
+                    pr->report(*progress_total, size);
+                }
+            }
             *last_activity = std::chrono::steady_clock::now();
             (*piece_last)[p] = std::chrono::steady_clock::now();
             if (timeout_ms > 0) timer.start((int)timeout_ms);
@@ -807,6 +860,9 @@ static int download_ranges(const char *url, const char *path, long size,
         }
         if (piece->reply) piece->reply->deleteLater();
     }
+    // Guaranteed final sample so the caller's progress ends at 100% even when
+    // the transfer finished inside one throttled window.
+    if (pr && ok_count == npieces) pr->report(*progress_total, size);
     return ok_count;
 }
 
@@ -830,15 +886,20 @@ static int download_one_file(const McQtBatchItem *it, long timeout_ms, ProgressR
             long long existing = ftell(ef);
             fclose(ef);
             if (existing > 0) {
-                if (it->sha1 && it->sha1[0]) {
+                // A size mismatch can never pass the SHA-1 check below, so
+                // skip the whole-file hash and go straight to downloading.
+                if (it->size > 0 && existing != it->size) {
+                    mc_debug("[DL-Q] size mismatch (have %lldB, want %ldB) %s",
+                             existing, it->size, it->path);
+                } else if (it->sha1 && it->sha1[0]) {
                     char as[64];
                     if (mc_hash_file_sha1(it->path, as, sizeof(as)) &&
                         mc_stricmp(as, it->sha1) == 0) {
-                        mc_info("[DL-Q] skip existing (sha1 ok) %s", it->path);
+                        mc_debug("[DL-Q] skip existing (sha1 ok) %s", it->path);
                         return 1;
                     }
-                } else if (it->size <= 0 || existing == it->size) {
-                    mc_info("[DL-Q] skip existing (%lldB) %s", existing, it->path);
+                } else {
+                    mc_debug("[DL-Q] skip existing (%lldB) %s", existing, it->path);
                     return 1;
                 }
             }

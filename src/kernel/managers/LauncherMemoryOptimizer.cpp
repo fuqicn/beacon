@@ -95,9 +95,9 @@ void LauncherMemoryOptimizerWorker::probe()
     mc_info("[MemOpt] legacy manifest probe start (ver=%d)", m_majorVersion);
     McJavaFileList list;
     memset(&list, 0, sizeof(list));
-    bool ok = mc_java_download_manifest_legacy(m_majorVersion,
-                                               mc_download_effective_mirror(),
-                                               &list);
+    bool ok = mc_java_download_manifest(m_majorVersion,
+                                        mc_download_effective_mirror(),
+                                        &list);
     const int probeCount = list.count;
     if (list.files)
         mc_java_file_list_free(&list);

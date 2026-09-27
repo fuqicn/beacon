@@ -108,10 +108,9 @@ void VersionManager::doFetchManifest(const QString &mirror)
         if (!ret)
             mc_manifest_load_cache(&m_manifest);
         QVariantList categories = buildCategories();
-        // Same TLS hazard as modMirrorWarmup: the thread-local QNAM would
-        // otherwise be destroyed during thread teardown with no event loop to
-        // service it, and ~QThread() would block the GUI on that wait.
-        mc_http_release_thread_resources();
+        // NOTE: the new kernel switched the TLS NAM from unique_ptr to a raw
+        // pointer, so TLS teardown no longer blocks. The old call to
+        // mc_http_release_thread_resources() has been removed from the API.
         QMetaObject::invokeMethod(this, [this, categories]() {
             m_cachedCategories = categories;
             m_categoriesDirty = false;
@@ -224,9 +223,9 @@ void VersionManager::fetchVersionInfo(const QString &versionId, const QString &m
         else
             ret = mc_version_fetch_by_id_mirror(ver, versionId.toUtf8().constData(),
                                                 mirror.toUtf8().constData());
-        // Drop the thread-local QNAM before this thread dies; TLS teardown would
-        // otherwise block ~QThread() - and with it the GUI - on its cleanup.
-        mc_http_release_thread_resources();
+        // NOTE: TLS NAM is now a raw pointer in the kernel — no blocking
+        // teardown, so the old mc_http_release_thread_resources() call is
+        // no longer needed.
         QMetaObject::invokeMethod(this, [this, ver, ret, versionId]() {
             if (!ret) {
                 emit errorOccurred(QString("Failed to fetch version info for %1").arg(versionId));

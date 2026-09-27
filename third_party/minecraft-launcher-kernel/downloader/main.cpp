@@ -442,13 +442,10 @@ static int download_libraries(McVersion *v, const char *mc_dir, DownloadPool &po
             if (!rel[0]) continue;
             char local_path[MC_PATH_MAX];
             mc_path_join(libraries_dir, rel, local_path, sizeof(local_path));
-            if (mc_path_exists(local_path)) {
-                char actual[64];
-                if (mc_hash_file_sha1(local_path, actual, sizeof(actual)) &&
-                    lib->sha1[0] && mc_stricmp(actual, lib->sha1) == 0)
-                    continue;
-            }
-            // Build the download URL.
+            // No SHA-1 pre-check here: the engine verifies existing files
+            // inside the worker pool, so pre-hashing duplicated every hash
+            // and serialized a full-disk hash pass on the main thread at
+            // startup (CPU burn while zero bytes were moving).
             // lib->url may be a full artifact URL (modern format, ends with .jar)
             // or a Maven base URL (legacy format, no .jar suffix).
             char lib_url[2048];
@@ -532,12 +529,7 @@ static int download_libraries(McVersion *v, const char *mc_dir, DownloadPool &po
                 if (!rel[0]) continue;
                 char local_path[MC_PATH_MAX];
                 mc_path_join(libraries_dir, rel, local_path, sizeof(local_path));
-                if (mc_path_exists(local_path)) {
-                    char actual[64];
-                    if (mc_hash_file_sha1(local_path, actual, sizeof(actual)) &&
-                        lib->sha1[0] && mc_stricmp(actual, lib->sha1) == 0)
-                        continue;
-                }
+                // Verified by the download engine in the worker pool (see above).
                 char lib_url[2048];
                 size_t url_len = strlen(lib->url);
                 if (url_len > 4 && memcmp(lib->url + url_len - 4, ".jar", 4) == 0) {
@@ -605,9 +597,9 @@ static int download_libraries(McVersion *v, const char *mc_dir, DownloadPool &po
     }
 
     run_works(pool, works, mc_i18n("download_libraries"));
-    int ok = 0, fail = 0, skip = static_cast<int>(works.size()) - 0;
+    int ok = 0, fail = 0;
     for (auto &w : works) { if (w.success) ok++; else fail++; }
-    mc_info("Libraries: %d ok, %d skipped, %d failed", ok, skip, fail);
+    mc_info("Libraries: %d ok, %d failed", ok, fail);
 
     if (has_base == 1) { mc_version_free(base_buf); free(base_buf); }
     else if (has_base == 2) { mc_version_free(base_v); free(base_v); }
@@ -716,12 +708,7 @@ static int download_assets(McVersion *v, const char *mc_dir, DownloadPool &pool)
     for (int i = 0; i < total_objects; i++) {
         char obj_path[MC_PATH_MAX];
         mc_asset_object_path(idx.objects[i].hash, mc_dir, obj_path, sizeof(obj_path));
-        if (mc_path_exists(obj_path)) {
-            char actual[64];
-            if (mc_hash_file_sha1(obj_path, actual, sizeof(actual)) &&
-                mc_stricmp(actual, idx.objects[i].hash) == 0)
-                continue;
-        }
+        // Verified by the download engine in the worker pool (see above).
         char asset_url[2048];
         mc_asset_url(idx.objects[i].hash, asset_url, sizeof(asset_url));
         char primary[2048], fallback[2048];
@@ -742,9 +729,9 @@ static int download_assets(McVersion *v, const char *mc_dir, DownloadPool &pool)
     }
 
     run_works(pool, works, mc_i18n("download_assets"));
-    int ok = 0, fail = 0, skip = total_objects - static_cast<int>(works.size());
+    int ok = 0, fail = 0;
     for (auto &w : works) { if (w.success) ok++; else fail++; }
-    mc_info("Assets: %d ok, %d skipped, %d failed", ok, skip, fail);
+    mc_info("Assets: %d ok, %d failed", ok, fail);
     mc_asset_index_free(&idx);
     if (asset_buf) { mc_version_free(asset_buf); free(asset_buf); }
     return fail == 0;
@@ -799,12 +786,7 @@ static int cmd_java_download(int major_version, const char *mc_dir, int threads)
         mc_path_dirname(full_path, parent, sizeof(parent));
         mc_path_mkdir_p(parent);
 
-        if (mc_path_exists(full_path)) {
-            char actual[64];
-            if (mc_hash_file_sha1(full_path, actual, sizeof(actual)) &&
-                mc_stricmp(actual, f->sha1) == 0)
-                continue;
-        }
+        // Verified by the download engine in the worker pool (see above).
 
         char final_url[2048];
         strncpy(final_url, f->url, sizeof(final_url) - 1);
@@ -820,15 +802,13 @@ static int cmd_java_download(int major_version, const char *mc_dir, int threads)
         w.expected_size = f->size;
         works.push_back(std::move(w));
     }
-    int total = files.count;
     mc_java_file_list_free(&files);
 
-    int skip = total - (int)works.size();
     DownloadPool pool(threads);
     run_works(pool, works, mc_i18n("java_runtime"));
     int ok = 0, fail = 0;
     for (auto &w : works) { if (w.success) ok++; else fail++; }
-    mc_info("Java runtime: %d ok, %d skipped, %d failed", ok, skip, fail);
+    mc_info("Java runtime: %d ok, %d failed", ok, fail);
     return fail == 0 ? 0 : 1;
 }
 
@@ -896,6 +876,7 @@ int main(int argc, char **argv) {
     const char *mirror_type = "bmclapi";
     const char *platform_opt = nullptr;
     int thread_count = 16;
+    bool threads_set = false;
 
     const char *cmd = argv[1];
 
@@ -905,12 +886,15 @@ int main(int argc, char **argv) {
             if (strcmp(argv[i], "--dir") == 0 && i + 1 < argc) output_dir = argv[++i];
             else if (strcmp(argv[i], "--mirror") == 0 && i + 1 < argc) mirror_type = argv[++i];
             else if (strcmp(argv[i], "--platform") == 0 && i + 1 < argc) platform_opt = argv[++i];
-            else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc)
+            else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) {
                 thread_count = std::max(1, std::min(128, atoi(argv[++i])));
+                threads_set = true;
+            }
         }
         probe_and_select_mirror(&mirror_type);
         g_mirror = mirror_type;
         if (platform_opt) mc_platform_set(platform_opt);
+        if (threads_set) mc_qt_download_set_thread_limit(thread_count);
         mc_qt_download_init();
         return cmd_java_download(java_ver, output_dir, thread_count);
     }
@@ -922,6 +906,7 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) {
             thread_count = atoi(argv[++i]);
             if (thread_count > 128) thread_count = 128;
+            threads_set = true;
         }
     }
     probe_and_select_mirror(&mirror_type);
@@ -931,6 +916,9 @@ int main(int argc, char **argv) {
     // Initialize download pool only when we're actually going to download.
     // This avoids the hanging bug on early-exit paths (help, no-args) where
     // detached worker threads would prevent the process from exiting.
+    // The pool picks up the thread limit at creation time, so apply --threads
+    // first; when the flag is absent the pool keeps its default of 64.
+    if (threads_set) mc_qt_download_set_thread_limit(thread_count);
     mc_qt_download_init();
 
     // Hard 600s timeout to prevent hanging during actual downloads
@@ -988,6 +976,7 @@ int main(int argc, char **argv) {
             else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) {
                 thread_count = atoi(argv[++i]);
                 if (thread_count > 128) thread_count = 128;
+                mc_qt_download_set_thread_limit(thread_count);
             }
         }
         // Construct output path: <dir>/<filename-from-url>

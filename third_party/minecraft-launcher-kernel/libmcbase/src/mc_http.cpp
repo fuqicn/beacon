@@ -20,7 +20,6 @@ extern "C" {
 #include <QtCore/QByteArray>
 #include <QtNetwork/QNetworkProxy>
 #include "mc_download_qt.h"
-#include <memory>
 
 static char g_qt_argv0[256] = "opencode-launcher";
 static char *g_qt_argv[] = { g_qt_argv0, nullptr };
@@ -33,27 +32,10 @@ static int g_qt_argc = 1;
 static char g_global_ua[256] = "";
 static char g_global_ua_active_flag = 0;
 
-// Shared storage for the thread-local NAM, so both get_nam() and
-// mc_http_release_thread_resources() reach the SAME per-thread slot.
-static std::unique_ptr<QNetworkAccessManager> &nam_slot(void) {
-    thread_local std::unique_ptr<QNetworkAccessManager> slot;
-    return slot;
-}
-
 static QNetworkAccessManager *get_nam(void) {
-    auto &slot = nam_slot();
-    if (!slot) slot.reset(new QNetworkAccessManager());
-    return slot.get();
-}
-
-// Release the caller thread's thread-local NAM (the same storage slot used by
-// get_nam()). The slot resets to null, so a later get_nam() allocates a fresh
-// instance instead of touching a freed one. Call this from a bare std::thread
-// that has finished its mc_http work: leaving a live QNetworkAccessManager in
-// a detached thread leaks it in TLS and keeps Qt's 100ms network timer
-// firing, which pins CPU after the optimization ends.
-extern "C" void mc_http_release_thread_resources(void) {
-    nam_slot().reset();
+    thread_local QNetworkAccessManager *nam = nullptr;
+    if (!nam) nam = new QNetworkAccessManager();
+    return nam;
 }
 
 extern "C" void mc_http_set_global_user_agent(const char *user_agent) {

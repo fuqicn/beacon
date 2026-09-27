@@ -92,7 +92,7 @@ int mc_qt_download_batch_ex(const McQtBatchItem *items, int count,
 void mc_qt_download_set_cancel(int v);
 int  mc_qt_download_cancel(void);
 
-// Global concurrency controls (defaults: 8 worker threads, 4 pieces/file).
+// Global concurrency controls (defaults: 64 worker threads, 4 pieces/file).
 void mc_qt_download_set_thread_limit(int n);
 int  mc_qt_download_thread_limit(void);
 void mc_qt_download_set_max_pieces(int n);

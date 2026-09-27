@@ -847,7 +847,10 @@ void KernelBridge::setDownloadSource(const QString &source)
         // no event loop left, ~QNetworkAccessManager blocks on its pool/pending
         // replies, and the GUI eats that whole wait inside ~QThread()::wait().
         // Measured at 8.4s of frozen UI with zero CPU.
-        mc_http_release_thread_resources();
+        // NOTE: the new kernel uses a raw thread_local pointer instead of
+        // unique_ptr, so TLS teardown no longer blocks — mc_http_release
+        // _thread_resources was removed from the API but we keep this comment
+        // as historical context.
     });
     warmup->setObjectName("modMirrorWarmup");
     // Log on the GUI thread right before the deleteLater runs: the gap between
@@ -1375,7 +1378,7 @@ void KernelBridge::qmlCollectGarbage()
 //
 // The historical Java-download bug froze the GUI while fetching the Java
 // runtime manifest. Its root cause was the kernel's *concurrent* manifest
-// fetch (now preserved as mc_java_download_manifest_legacy): it spawned a
+// fetch (now exposed as mc_java_download_manifest): it spawned a
 // bare std::thread per candidate source, each running mc_http_get - a nested
 // QEventLoop::exec() over a thread-local QNetworkAccessManager. Those bare
 // threads compete with the main GUI event loop over Qt's global

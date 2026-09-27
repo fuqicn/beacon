@@ -76,6 +76,8 @@ set(MANAGER_SRC
   src/kernel/managers/JavaDownloadWorker.cpp
   src/kernel/managers/LauncherMemoryOptimizer.h
   src/kernel/managers/LauncherMemoryOptimizer.cpp
+  src/kernel/managers/LegacyJavaManifestFetcher.h
+  src/kernel/managers/LegacyJavaManifestFetcher.cpp
     src/kernel/managers/AuthManager.h
     src/kernel/managers/AuthManager.cpp
     src/kernel/managers/JavaManager.h

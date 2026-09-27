@@ -24,7 +24,7 @@
 | Linux (rpm) | Fedora 40 | — | x86_64、aarch64 | **不支持** Fedora 39 及以下版本（缺少 Qt 6.8）。RHEL / CentOS 需要手动编译。 |
 | Linux (arch) | Arch Linux | — | x86_64、aarch64 | 滚动更新；始终拥有 Qt 6.x |
 | Linux (tar.gz) | 任意 glibc ≥ 2.31 | — | x86_64、aarch64 | 通用备用方案；直接运行 `./Beacon` |
-| macOS | 12 (Monterey) | 15 | ARM64（原生）、x86_64 | **不支持** macOS 11 及以下版本 — Qt 6.8.3 要求 macOS 12+ |
+| macOS | 14 | — | ARM64（原生）、x86_64 | **不支持** macOS 13 及以下版本 — Qt 6.8.3 要求 macOS 13+ |
 
 ### Qt 6 版本说明
 

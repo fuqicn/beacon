@@ -25,7 +25,7 @@ A cross-platform Minecraft launcher built with Qt 6 Quick/QML, powered by the
 | Linux (rpm) | Fedora 40 | — | x86_64, aarch64 | Fedora 39 and below are **not supported** (lack Qt 6.8). RHEL / CentOS require manual compilation. |
 | Linux (arch) | Arch Linux | — | x86_64, aarch64 | Rolling release; always has Qt 6.x |
 | Linux (tar.gz) | Any glibc ≥ 2.31 | — | x86_64, aarch64 | Universal fallback; run `./Beacon` directly |
-| macOS | 12 (Monterey) | 15 | ARM64 (native), x86_64 | macOS 11 and below **not supported** — Qt 6.8.3 requires macOS 12+ |
+| macOS | 14 | — | ARM64 (native), x86_64 | macOS 11 and below **not supported** — Qt 6.8.3 requires macOS 13+ |
 
 ### Qt 6 version notes
 

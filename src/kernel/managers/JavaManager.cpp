@@ -210,6 +210,12 @@ void JavaManager::downloadJava(int majorVersion)
     m_searching = true;
     emit searchingChanged();
 
+    // Boost download-pool concurrency while Java is downloading so the
+    // runtime bundle (typically 300+ files) doesn't share the pool with
+    // background manifest/version-fetch work. Restore the user's setting
+    // once the worker finishes.
+    mc_qt_download_set_thread_limit(64);
+
     QString targetDir = m_runtimeDir + QString("/java-%1").arg(majorVersion);
 
     m_workerThread = new QThread(this);
@@ -224,6 +230,7 @@ void JavaManager::downloadJava(int majorVersion)
         m_activeJavaWorker = nullptr;
         m_cancelled = false;
         mc_qt_download_set_cancel(false);
+        mc_qt_download_set_thread_limit(16);
         emit searchingChanged();
 
         if (ok && QFile::exists(path)) {
@@ -251,6 +258,7 @@ void JavaManager::cancelDownloadJava()
 {
     if (!m_workerThread) return;
     mc_qt_download_set_cancel(true);
+    mc_qt_download_set_thread_limit(16);
     m_cancelled = true;
     if (m_activeJavaWorker)
         m_activeJavaWorker->cancel();
@@ -261,6 +269,7 @@ void JavaManager::cancelDownloadJava()
 void JavaManager::finishStoppedWorker(bool prevCancelled, const QString &prevDir)
 {
     mc_qt_download_set_cancel(false);
+    mc_qt_download_set_thread_limit(16);
     if (prevCancelled && !prevDir.isEmpty())
         QDir(prevDir).removeRecursively();
 }

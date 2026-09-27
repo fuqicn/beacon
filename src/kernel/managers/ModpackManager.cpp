@@ -158,9 +158,12 @@ static PackFormat detectPackFormat(const QString &extractDir)
 // CurseForge modpack installer. A CF pack zip contains a loader
 // `manifest.json` (Minecraft version + mod list) and an `overrides/` folder.
 // Runs on the worker thread.
+// If `preloadLoaderVerId` is non-empty, the loader has already been installed
+// on the main thread and this function skips that step.
 static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
-                             const QString &iconUrl, QString *errorOut,
-                             const std::function<void(qreal, const QString &)> &progress)
+                              const QString &iconUrl, QString *errorOut,
+                              const std::function<void(qreal, const QString &)> &progress,
+                              const QString &preloadLoaderVerId = QString())
 {
     QString tmp = QDir(rootDir).filePath("versions/.cfsack_tmp");
     QString verDir;
@@ -224,13 +227,16 @@ static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
     }
 
     // The loader must be installed BEFORE the instance json is written, so the
-    // instance can inherit from the loader version id that installLoaderSync
-    // returns.
+    // instance can inherit from the loader version id. If already pre-installed
+    // on the main thread, skip; otherwise install here.
     progress(0.08, "安装加载器 " + (loader.isEmpty() ? "vanilla" : loader) + " " + mcVersion);
     QString loaderVerId;
     QString err;
     if (loader.isEmpty()) {
         loaderVerId = mcVersion;
+    } else if (!preloadLoaderVerId.isEmpty()) {
+        // Loader was installed before entering the worker thread.
+        loaderVerId = preloadLoaderVerId;
     } else if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir,
                                   &err, &loaderVerId,
                                   [progress](qreal p, const QString &s) {
@@ -316,7 +322,8 @@ static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
 
 static QString installPack(const QString &mrpackPath, const QString &rootDir,
                            const QString &iconUrl, QString *errorOut,
-                           const std::function<void(qreal, const QString &)> &progress)
+                           const std::function<void(qreal, const QString &)> &progress,
+                           const QString &preloadLoaderVerId = QString())
 {
     QString tmp = QDir(rootDir).filePath("versions/.mrpack_tmp");
     QString verDir;   // the pack's instance dir; only removed if we created it
@@ -418,7 +425,53 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
     }
     mc_info("[Pack] %d files to download for %s", packFiles.size(), instanceId.toUtf8().constData());
 
-    // ── Parallel: Minecraft base + pack files ─────────────────────────────
+    // ── Step 1: Install loader on main thread (event loop must be active) ────
+    // The Forge installer spawns a QProcess that needs the Qt event loop to
+    // function properly. Running it inside the no-pump pack worker would block
+    // the installer and cause missing libraries / loader files. Install first,
+    // then run the pack-file and base-download phases in parallel.
+    QString loaderVerId;
+    if (preloadLoaderVerId.isEmpty()) {
+        // Not pre-installed: handle here (for backward compatibility)
+        if (loader.isEmpty()) {
+            mc_info("[Pack] Vanilla-only modpack, target=%s", mcVersion.toUtf8().constData());
+            loaderVerId = mcVersion;
+        } else {
+            progress(0.05, "安装加载器 " + loader + " " + mcVersion);
+            {
+                QString err;
+                if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
+                                       [&progress](qreal p, const QString &s) {
+                                           progress(0.05 + 0.35 * p, "安装加载器 " + s);
+                                       })) {
+                    return fail("加载器安装失败: " + err);
+                }
+            }
+            if (loaderVerId.isEmpty())
+                loaderVerId = mcVersion;
+        }
+    } else {
+        // Pre-installed on main thread
+        loaderVerId = preloadLoaderVerId;
+        mc_info("[Pack] Using pre-installed loader: %s", loaderVerId.toUtf8().constData());
+    }
+
+    // Minimal instance JSON inheriting from the loader version
+    {
+        QJsonObject v;
+        v["id"] = instanceId;
+        v["inheritsFrom"] = loaderVerId;
+        v["type"] = "release";
+        v["mainClass"] = "";
+        QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        v["time"] = now;
+        v["releaseTime"] = now;
+        QFile vf(verDir + "/" + instanceId + ".json");
+        if (vf.open(QIODevice::WriteOnly))
+            vf.write(QJsonDocument(v).toJson(QJsonDocument::Indented));
+    }
+
+    // ── Step 2: Parallel pack files + Minecraft base download ────────────────
     // Both halves submit to the global persistent download pool, so they share
     // the same worker threads instead of draining the network serially.
     std::atomic<qreal> baseP{0.0};
@@ -427,7 +480,7 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
 
     auto reportCombined = [&progress, &baseP, &packP](const QString &status) {
         qreal combined = qMin<qreal>(baseP.load(), packP.load());
-        progress(0.50 + 0.35 * combined, status);
+        progress(0.40 + 0.48 * combined, status);
     };
 
     auto packWorker = std::thread([&]() {
@@ -486,48 +539,6 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
         }
     });
 
-    // Loader install. The pack files are already downloading on the global
-    // pool (the packWorker above), so mods fetch while the loader installer is
-    // downloaded and run, overlapping with the Minecraft base download too.
-    QString loaderVerId;
-    if (loader.isEmpty()) {
-        // 纯原版整合包（仅依赖 minecraft）：跳过加载器安装，直接全量下载原版
-        mc_info("[Pack] Vanilla-only modpack, target=%s", mcVersion.toUtf8().constData());
-        loaderVerId = mcVersion;
-    } else {
-        progress(0.05, "安装加载器 " + loader + " " + mcVersion);
-        {
-            QString err;
-            if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
-                                   [&progress](qreal p, const QString &s) {
-                                       progress(0.05 + 0.45 * p, "安装加载器 " + s);
-                                   })) {
-                // Abort the in-flight mod downloads before failing the install.
-                mc_qt_download_set_cancel(1);
-                packWorker.join();
-                mc_qt_download_set_cancel(0);
-                return fail("加载器安装失败: " + err);
-            }
-        }
-        if (loaderVerId.isEmpty())
-            loaderVerId = mcVersion;
-    }
-
-    // Minimal instance JSON inheriting from the loader version
-    {
-        QJsonObject v;
-        v["id"] = instanceId;
-        v["inheritsFrom"] = loaderVerId;
-        v["type"] = "release";
-        v["mainClass"] = "";
-        QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-        v["time"] = now;
-        v["releaseTime"] = now;
-        QFile vf(verDir + "/" + instanceId + ".json");
-        if (vf.open(QIODevice::WriteOnly))
-            vf.write(QJsonDocument(v).toJson(QJsonDocument::Indented));
-    }
-
     // Minecraft base download (jar / libraries incl. natives / assets / logging)
     progress(0.50, "下载原版游戏文件");
     QString baseErr;
@@ -579,6 +590,89 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
     return instanceId;
 }
 
+// ─── Helper: detect loader from a pack archive and install it on the main thread ───
+// Returns the installed loader version id (or mcVersion for vanilla packs).
+// Sets *errorOut on failure. Caller must call mc_qt_download_thread_no_pump(0)
+// (or not set it at all) so the Forge installer QProcess works correctly.
+static QString detectAndInstallLoader(const QString &packPath, const QString &rootDir,
+                                      const std::function<void(qreal, const QString &)> &progress,
+                                      QString *errorOut)
+{
+    // Probe the archive to detect format and extract loader info.
+    QString tmpProbe = QDir(rootDir).filePath("versions/.loader_probe");
+    removeDirRecursively(tmpProbe);
+    QDir().mkpath(tmpProbe);
+    PackFormat fmt = PackFormat::None;
+    if (QFileInfo::exists(packPath) &&
+        mc_zip_extract(packPath.toUtf8().constData(), tmpProbe.toUtf8().constData()) == 1)
+        fmt = detectPackFormat(tmpProbe);
+    removeDirRecursively(tmpProbe);
+
+    QString mcVersion, loader, loaderVer;
+    if (fmt == PackFormat::CurseForge) {
+        QFile mfFile(tmpProbe + "/manifest.json");
+        if (!mfFile.open(QIODevice::ReadOnly)) {
+            if (errorOut) *errorOut = "整合包缺少 manifest.json";
+            return QString();
+        }
+        QJsonObject mf = QJsonDocument::fromJson(mfFile.readAll()).object();
+        mcVersion = mf["minecraftVersion"].toString();
+        QJsonArray mods = mf["files"].toArray();
+        for (auto mv : mods) {
+            QJsonObject mo = mv.toObject();
+            QString type = mo["type"].toString();
+            if (type == "required" && mo["modId"].toInt() == 231710) {
+                loader = "forge"; loaderVer = mo["version"].toString(); break;
+            }
+            if (type == "required" && (mo["modId"].toInt() == 241545 || mo["modId"].toInt() == 256858)) {
+                loader = "neoforge"; loaderVer = mo["version"].toString(); break;
+            }
+        }
+    } else {
+        // Modrinth or unknown
+        QFile idxFile(tmpProbe + "/modrinth.index.json");
+        QJsonObject idx;
+        if (idxFile.open(QIODevice::ReadOnly)) {
+            QJsonDocument doc = QJsonDocument::fromJson(idxFile.readAll());
+            if (doc.isObject()) idx = doc.object();
+        }
+        if (idx.isEmpty()) {
+            if (errorOut) *errorOut = "整合包格式无法识别";
+            return QString();
+        }
+        QJsonObject deps = idx["dependencies"].toObject();
+        mcVersion = deps["minecraft"].toString();
+        if (deps.contains("fabric-loader")) { loader = "fabric"; loaderVer = deps["fabric-loader"].toString(); }
+        else if (deps.contains("quilt-loader")) { loader = "quilt"; loaderVer = deps["quilt-loader"].toString(); }
+        else if (deps.contains("neoforge")) { loader = "neoforge"; loaderVer = deps["neoforge"].toString(); }
+        else if (deps.contains("forge")) { loader = "forge"; loaderVer = deps["forge"].toString(); }
+    }
+
+    if (mcVersion.isEmpty()) {
+        if (errorOut) *errorOut = "无法读取整合包的 Minecraft 版本";
+        return QString();
+    }
+
+    if (loader.isEmpty()) {
+        mc_info("[LoaderProbe] Vanilla pack, mc=%s", mcVersion.toUtf8().constData());
+        return mcVersion;
+    }
+
+    progress(0.03, "安装加载器 " + loader + " " + mcVersion);
+    QString loaderVerId, err;
+    if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
+                           [progress](qreal p, const QString &s) {
+                               progress(0.03 + 0.25 * p, "安装加载器 " + s);
+                           })) {
+        if (errorOut) *errorOut = "加载器安装失败: " + err;
+        return QString();
+    }
+    mc_info("[LoaderProbe] Installed loader %s %s -> verId=%s",
+            loader.toUtf8().constData(), loaderVer.toUtf8().constData(),
+            loaderVerId.toUtf8().constData());
+    return loaderVerId.isEmpty() ? mcVersion : loaderVerId;
+}
+
 // ─── Worker (lives in worker thread) ───────────────────────────────────────
 
 class ModpackWorker : public QObject
@@ -609,13 +703,32 @@ public slots:
             fmt = detectPackFormat(tmpProbe);
         removeDirRecursively(tmpProbe);
 
+        // Install the loader on the main thread (event loop must be active for
+        // Forge installer QProcess). Temporarily disable no_pump, then restore
+        // it before the pack-file download phase.
+        QString preloadLoaderVerId;
+        {
+            mc_qt_download_thread_no_pump(0);
+            QString error;
+            preloadLoaderVerId = detectAndInstallLoader(
+                filePath, rootDir,
+                [this](qreal p, const QString &s) { emit progressReported(p, s); },
+                &error);
+            mc_qt_download_thread_no_pump(1);
+            if (preloadLoaderVerId.isEmpty()) {
+                emit errorOccurred(error);
+                return;
+            }
+        }
+
         QString error;
         QString id;
         if (fmt == PackFormat::CurseForge) {
             id = installCfPack(filePath, rootDir, QString(), &error,
                                [this](qreal p, const QString &s) {
                                    emit progressReported(p, s);
-                               });
+                               },
+                               preloadLoaderVerId);
         } else {
             // modrinth.index.json present, or unknown: fall through to the
             // existing Modrinth path (which fails with a clear error if the
@@ -623,7 +736,8 @@ public slots:
             id = installPack(filePath, rootDir, QString(), &error,
                              [this](qreal p, const QString &s) {
                                  emit progressReported(p, s);
-                             });
+                             },
+                             preloadLoaderVerId);
         }
         if (id.isEmpty())
             emit errorOccurred(error);
@@ -694,16 +808,42 @@ public slots:
 
             mc_info("[Pack] downloaded, starting install: %s fmt=%d",
                     mrpackPath.toUtf8().constData(), (int)fmt);
+
+            // Install the loader on the main thread (event loop must be active
+            // for the Forge installer QProcess). Temporarily disable no_pump,
+            // then restore it before pack-file downloads continue.
+            QString preloadLoaderVerId;
+            {
+                mc_qt_download_thread_no_pump(0);
+                QString loaderErr;
+                preloadLoaderVerId = detectAndInstallLoader(
+                    mrpackPath, rootDir,
+                    [this](qreal p, const QString &s) {
+                        emit progressReported(0.45 + 0.55 * p, s);
+                    },
+                    &loaderErr);
+                mc_qt_download_thread_no_pump(1);
+                if (preloadLoaderVerId.isEmpty()) {
+                    error = loaderErr;
+                    emit errorOccurred(error);
+                    // Clean up the temp dir.
+                    removeDirRecursively(tmpDir);
+                    return;
+                }
+            }
+
             if (fmt == PackFormat::CurseForge) {
                 id = installCfPack(mrpackPath, rootDir, iconUrl, &error,
                                    [this](qreal p, const QString &s) {
                                        emit progressReported(0.45 + 0.55 * p, s);
-                                   });
+                                   },
+                                   preloadLoaderVerId);
             } else {
                 id = installPack(mrpackPath, rootDir, iconUrl, &error,
                                  [this](qreal p, const QString &s) {
                                      emit progressReported(0.45 + 0.55 * p, s);
-                                 });
+                                 },
+                                 preloadLoaderVerId);
             }
         }
         else

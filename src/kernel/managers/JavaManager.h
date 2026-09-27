@@ -34,6 +34,12 @@ class JavaManager : public QObject
     Q_PROPERTY(QVariantList runtimes READ runtimes NOTIFY runtimesChanged)
     Q_PROPERTY(bool searching READ searching NOTIFY searchingChanged)
     Q_PROPERTY(QString runtimeDir READ runtimeDir WRITE setRuntimeDir NOTIFY runtimeDirChanged)
+    Q_PROPERTY(bool downloadBusy READ downloadBusy NOTIFY downloadBusyChanged)
+    Q_PROPERTY(qreal downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
+    Q_PROPERTY(QString downloadTask READ downloadTask NOTIFY downloadTaskChanged)
+    Q_PROPERTY(int totalFiles READ totalFiles NOTIFY totalFilesChanged)
+    Q_PROPERTY(int completedFiles READ completedFiles NOTIFY completedFilesChanged)
+    Q_PROPERTY(double speedBytes READ speedBytes NOTIFY speedBytesChanged)
 
 public:
     explicit JavaManager(QObject *parent = nullptr);
@@ -50,6 +56,13 @@ public:
     Q_INVOKABLE void downloadJava(int majorVersion);
     Q_INVOKABLE void cancelDownloadJava();
 
+    bool downloadBusy() const { return m_downloadBusy; }
+    qreal downloadProgress() const { return m_downloadProgress; }
+    QString downloadTask() const { return m_downloadTask; }
+    int totalFiles() const { return m_totalFiles; }
+    int completedFiles() const { return m_completedFiles; }
+    double speedBytes() const { return m_speedBytes; }
+
 signals:
     void runtimesChanged();
     void searchingChanged();
@@ -57,6 +70,12 @@ signals:
     void javaDownloaded(const QString &path, int majorVersion);
     void javaDownloadFailed(int majorVersion);
     void errorOccurred(const QString &message);
+    void downloadBusyChanged();
+    void downloadProgressChanged(qreal progress);
+    void downloadTaskChanged(const QString &task);
+    void totalFilesChanged();
+    void completedFilesChanged();
+    void speedBytesChanged();
 
 private:
     void doFindJavaOnThread();
@@ -72,6 +91,13 @@ private:
     QThread *m_findThread = nullptr;         // findJava worker
     JavaDownloadWorker *m_activeJavaWorker = nullptr;
     bool m_cancelled = false;
+
+    bool m_downloadBusy = false;
+    qreal m_downloadProgress = 0.0;
+    QString m_downloadTask;
+    int m_totalFiles = 0;
+    int m_completedFiles = 0;
+    double m_speedBytes = 0.0;
 };
 
 #endif

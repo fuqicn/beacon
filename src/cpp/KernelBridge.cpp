@@ -1691,6 +1691,9 @@ void KernelBridge::launchGame(int memory)
         mc_info("No Java %d found, downloading...", requiredJava);
         if (!guard) return;
         QMetaObject::invokeMethod(this, [this, requiredJava]() {
+            // Reset downloading flag before starting the async download so
+            // the UI can reflect search/progress updates from JavaManager.
+            setJavaDownloading(false);
             m_javaManager->downloadJava(requiredJava);
             connect(m_javaManager, &JavaManager::javaDownloaded,
                     this, &KernelBridge::onJavaDownloaded, Qt::SingleShotConnection);

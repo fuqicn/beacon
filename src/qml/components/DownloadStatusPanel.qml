@@ -31,8 +31,9 @@ Rectangle {
     readonly property bool dlBusy: kernel.downloadManager.busy
     readonly property var modTasks: kernel.modManager.tasks || []
     readonly property bool packBusy: kernel.modpackManager.busy
+    readonly property bool installBusy: kernel.installManager.busy
     readonly property bool updBusy: kernel.updateDownloading
-    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.updBusy
+    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy
 
     height: root.anyVisible ? content.implicitHeight + 32 : 0
     radius: Theme.shapeExtraLarge
@@ -190,9 +191,10 @@ Rectangle {
             height: 1
             color: palette.mid
             opacity: 0.3
-            visible: (root.dlBusy && (root.modTasks.length > 0 || root.packBusy || root.updBusy))
-                     || (root.modTasks.length > 0 && (root.packBusy || root.updBusy))
-                     || (root.packBusy && root.updBusy)
+            visible: (root.dlBusy && (root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy))
+                     || (root.modTasks.length > 0 && (root.packBusy || root.installBusy || root.updBusy))
+                     || (root.packBusy && (root.installBusy || root.updBusy))
+                     || (root.installBusy && root.updBusy)
         }
 
         // ================= Mod install tasks =================
@@ -273,6 +275,18 @@ Rectangle {
             statusText: Math.round(kernel.modpackManager.progress * 100) + "%"
             statusColor: Theme.primary
             onCancelRequested: kernel.modpackManager.cancelAll()
+        }
+
+        // ================= Loader install =================
+        DownloadCard {
+            Layout.fillWidth: true
+            visible: root.installBusy
+            title: I18n.tr("status.loaderInstall")
+            subtitle: kernel.installManager.status
+            progress: kernel.installManager.progress
+            statusText: Math.round(kernel.installManager.progress * 100) + "%"
+            statusColor: Theme.primary
+            onCancelRequested: kernel.installManager.cancelAll()
         }
     }
 }

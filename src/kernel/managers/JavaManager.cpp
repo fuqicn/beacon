@@ -215,6 +215,8 @@ void JavaManager::downloadJava(int majorVersion)
     // background manifest/version-fetch work. Restore the user's setting
     // once the worker finishes.
     mc_qt_download_set_thread_limit(64);
+    m_downloadBusy = true;
+    emit downloadBusyChanged();
 
     QString targetDir = m_runtimeDir + QString("/java-%1").arg(majorVersion);
 
@@ -225,13 +227,35 @@ void JavaManager::downloadJava(int majorVersion)
     worker->moveToThread(m_workerThread);
 
     connect(m_workerThread, &QThread::started, worker, &JavaDownloadWorker::run);
+    connect(worker, &JavaDownloadWorker::progressChanged, this, [this](qreal p, const QString &t) {
+        m_downloadProgress = p;
+        m_downloadTask = t;
+        m_downloadBusy = true;
+        emit downloadProgressChanged(p);
+        emit downloadTaskChanged(t);
+        emit downloadBusyChanged();
+    });
+    connect(worker, &JavaDownloadWorker::subTaskChanged, this, [this](const QString &t) {
+        m_downloadTask = t;
+        emit downloadTaskChanged(t);
+    });
+    connect(worker, &JavaDownloadWorker::totalFilesChanged, this, [this](int total) {
+        m_totalFiles = total;
+        emit totalFilesChanged();
+    });
+    connect(worker, &JavaDownloadWorker::completedFilesChanged, this, [this](int completed) {
+        m_completedFiles = completed;
+        emit completedFilesChanged();
+    });
     connect(worker, &JavaDownloadWorker::finished, this, [this](bool ok, const QString &path, int ver) {
         m_searching = false;
         m_activeJavaWorker = nullptr;
         m_cancelled = false;
         mc_qt_download_set_cancel(false);
         mc_qt_download_set_thread_limit(16);
+        m_downloadBusy = false;
         emit searchingChanged();
+        emit downloadBusyChanged();
 
         if (ok && QFile::exists(path)) {
             QVariantMap rt;
@@ -263,13 +287,17 @@ void JavaManager::cancelDownloadJava()
     if (m_activeJavaWorker)
         m_activeJavaWorker->cancel();
     m_searching = false;
+    m_downloadBusy = false;
     emit searchingChanged();
+    emit downloadBusyChanged();
 }
 
 void JavaManager::finishStoppedWorker(bool prevCancelled, const QString &prevDir)
 {
     mc_qt_download_set_cancel(false);
     mc_qt_download_set_thread_limit(16);
+    m_downloadBusy = false;
+    emit downloadBusyChanged();
     if (prevCancelled && !prevDir.isEmpty())
         QDir(prevDir).removeRecursively();
 }

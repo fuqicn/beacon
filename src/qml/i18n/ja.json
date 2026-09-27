@@ -162,6 +162,7 @@
   "settings.checkUpdate.new": "新バージョン %1 があります — 右下の通知からダウンロードできます",
   "settings.checkUpdate.latest": "最新バージョンをご利用中です",
   "status.updateDownload": "アップデート %1 をダウンロード中",
+  "status.loaderInstall": "ローダーをインストール中",
   "update.later": "後で通知",
   "instance.jvmOptimize": "JVM最適化",
   "instance.jvmOptimizeDesc": "パフォーマンスチューニングされたJVMフラグを適用（G1GC、プリタッチなど）",

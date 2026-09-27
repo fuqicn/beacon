@@ -112,19 +112,9 @@ Item {
     }
 
     function applyAutoMemory() {
-        // Set a sensible default when switching to auto mode. The live value
-        // is re-computed at launch time in launchGame() from available memory.
-        var totalMb = kernel.getSystemMemoryMB()
-        if (totalMb <= 0) { kernel.settingsManager.setValue("java/memory", 4096); return }
-        var recommended = 4096
-        if (totalMb < 4096)        recommended = 1024
-        else if (totalMb < 8192)   recommended = 2048
-        else if (totalMb < 16384)  recommended = 3072
-        else if (totalMb < 32768)  recommended = 4096
-        else if (totalMb < 65536)  recommended = 6144
-        else if (totalMb < 131072) recommended = 8192
-        else if (totalMb < 262144) recommended = 12288
-        else                       recommended = 16384
+        // Use the same multi-tier allocator that launchGame() uses, so the
+        // preview value matches what will actually be allocated at launch.
+        var recommended = kernel.computeAutoMemoryMB(1024)
         kernel.settingsManager.setValue("java/memory", recommended)
         memCustom.text = String(recommended)
     }

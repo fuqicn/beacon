@@ -93,7 +93,7 @@
   "settings.memoryHint": "Mémoire de tas maximale allouée au jeu (Mo).",
   "settings.memoryAuto": "Auto",
   "settings.memoryManual": "Personnalisée",
-  "settings.memoryAutoDesc": "Alloué au lancement selon la RAM disponible (par paliers : 1 / 2 / 3 / 4 / 6 / 8 / 12 / 16 Go)",
+  "settings.memoryAutoDesc": "Allocateur multi-niveaux : budget consommé par efficacité (100 % / 70 % / 40 %), plancher à 1 Go",
   "settings.about": "À propos",
   "theme": "Thème",
   "theme.system": "Thème (suivre le système)",

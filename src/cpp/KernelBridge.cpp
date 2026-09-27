@@ -1310,6 +1310,60 @@ int KernelBridge::getAvailableMemoryMB() const
     return 0;
 }
 
+// Multi-tier budget allocator for auto memory sizing.
+//
+// The model: each tier has a target heap size and an efficiency coefficient.
+// Efficiency < 1.0 captures JVM overhead (metaspace, thread stacks, GC structures,
+// native libraries) — only a fraction of the requested heap actually benefits
+// the game. By charging the caller `allocate / efficiency` from the budget we
+// avoid over-allocating on low-memory machines.
+//
+// Tiers are consumed in priority order; a tier is skipped when its effective
+// budget (remaining × efficiency) falls below 0.1 GB, and the result is floored
+// at minMB.
+struct MemoryTier {
+    double targetGB;   // Upper bound of this tier's heap range (GB).
+    double efficiency; // Fraction of allocated heap that is game-useful.
+};
+
+static const MemoryTier kMemoryTiers[] = {
+    // Tier 1: baseline — ensure the game can start (100% of budget is有效).
+    { 2.0,  1.00 },
+    // Tier 2: comfortable modded play (70% efficiency — ~30% JVM overhead).
+    { 6.0,  0.70 },
+    // Tier 3: high-end / heavy modpacks (40% efficiency — more native cost).
+    { 12.0, 0.40 },
+};
+
+int KernelBridge::computeAutoMemoryMB(int minMB) const
+{
+    int availMb = getAvailableMemoryMB();
+    if (availMb <= 0)
+        availMb = getSystemMemoryMB();
+    if (availMb <= 0)
+        return minMB;
+
+    double budgetGb = availMb / 1024.0;
+    double resultGb = 0.0;
+    double prevTarget = 0.0;
+
+    for (const auto& tier : kMemoryTiers) {
+        double incremental = tier.targetGB - prevTarget;
+        double effective = budgetGb * tier.efficiency;
+        if (effective < 0.1) break;
+
+        double allocate = qMin(incremental, effective);
+        resultGb += allocate;
+        // Charge the real cost: allocate / efficiency GB of budget.
+        budgetGb -= allocate / tier.efficiency;
+        prevTarget = tier.targetGB;
+    }
+
+    int mb = static_cast<int>(qMax(resultGb, minMB / 1024.0) * 1024.0);
+    mc_info("computeAutoMemoryMB: avail=%d MB -> %d MB", availMb, mb);
+    return mb;
+}
+
 void KernelBridge::qmlCollectGarbage()
 {
     if (!m_engine) return;
@@ -1526,50 +1580,11 @@ void KernelBridge::launchGame(int memory)
         m_launchManager->setResolution(rw, rh);
     }
 
-    // Auto mode: recalculate heap at launch time based on currently available
-    // memory, not total RAM. This adapts to whatever else is running on the
-    // machine right now (browser tabs, other games, etc.).
-    // Tiered mapping (avoids arbitrary ratios):
-    //   <  2 GB free → 1 GB   (floor, always safe)
-    //   2-4 GB free  → 2 GB
-    //   4-8 GB free  → 3 GB
-    //   8-16 GB free → 4 GB
-    //   16-32 GB free → 6 GB
-    //   32-64 GB free → 8 GB
-    //   64-128 GB free → 12 GB
-    //   > 128 GB free → 16 GB (generous for extreme modpacks / Mac unified RAM)
+    // Auto mode: use the multi-tier budget allocator to size the heap from
+    // currently available memory. Falls back to total RAM on platforms where
+    // available-memory query is unavailable.
     if (memMode == "auto" || m_launchMemory <= 0) {
-        int availMb = getAvailableMemoryMB();
-        if (availMb > 0) {
-            int recommended = 4096;
-            if (availMb < 2048)       recommended = 1024;
-            else if (availMb < 4096)  recommended = 2048;
-            else if (availMb < 8192)  recommended = 3072;
-            else if (availMb < 16384) recommended = 4096;
-            else if (availMb < 32768) recommended = 6144;
-            else if (availMb < 65536) recommended = 8192;
-            else if (availMb < 131072) recommended = 12288;
-            else                        recommended = 16384;
-            mc_info("launchGame: auto memory from %d MB free -> %d MB", availMb, recommended);
-            m_launchMemory = recommended;
-        } else {
-            // Fallback: same tiered mapping based on total RAM.
-            int totalMb = getSystemMemoryMB();
-            if (totalMb > 0) {
-                int recommended = 4096;
-                if (totalMb < 4096)       recommended = 1024;
-                else if (totalMb < 8192)  recommended = 2048;
-                else if (totalMb < 16384) recommended = 3072;
-                else if (totalMb < 32768) recommended = 4096;
-                else if (totalMb < 65536) recommended = 6144;
-                else if (totalMb < 131072) recommended = 8192;
-                else if (totalMb < 262144) recommended = 12288;
-                else                        recommended = 16384;
-                mc_info("launchGame: auto memory fallback from %d MB total -> %d MB",
-                        totalMb, recommended);
-                m_launchMemory = recommended;
-            }
-        }
+        m_launchMemory = computeAutoMemoryMB(1024);
     }
 
     mc_info("launchGame: verId=%s javaPath=%s mcDir=%s",

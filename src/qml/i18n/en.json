@@ -81,7 +81,7 @@
   "settings.memoryHint": "Maximum heap memory allocated for the game (MB).",
   "settings.memoryAuto": "Auto",
   "settings.memoryManual": "Custom",
-  "settings.memoryAutoDesc": "Allocated at launch based on currently free RAM (tiered: 1 / 2 / 3 / 4 / 6 / 8 / 12 / 16 GB)",
+  "settings.memoryAutoDesc": "Multi-tier allocator: charges budget by efficiency (100 % / 70 % / 40 %) and floors at 1 GB",
   "settings.about": "About",
   "theme": "Theme",
   "theme.system": "Theme (follow system)",

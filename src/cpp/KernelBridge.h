@@ -190,8 +190,10 @@ public:
     // Total physical memory in MB (Win32 GlobalMemoryStatusEx; returns 0 on other OSes).
     Q_INVOKABLE int getSystemMemoryMB() const;
     // Available physical memory in MB at the time of call (Win32 GlobalMemoryStatusEx; returns 0 on other OSes).
-    // Used by auto-memory mode to size the game heap based on what is currently free, not total RAM.
     Q_INVOKABLE int getAvailableMemoryMB() const;
+    // Compute an auto memory tier based on the multi-tier budget allocator.
+    // Returns the recommended heap size in MB (at least minMB, defaults to 1024).
+    Q_INVOKABLE int computeAutoMemoryMB(int minMB = 1024) const;
     // Auto-update helpers
     Q_INVOKABLE QString detectLinuxPackageType() const;
     Q_INVOKABLE void qmlCollectGarbage();

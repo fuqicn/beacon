@@ -901,6 +901,19 @@ void LaunchManager::doLaunch()
         jvmArgs << extra;
     }
 
+    // Optimised JVM flags for smoother Minecraft performance.
+    // These are safe across Java 8–21 and target the G1 garbage collector plus
+    // a few well-known latency / throughput tweaks.
+    if (m_jvmOptimize) {
+        jvmArgs << "-XX:+UseG1GC"
+                << "-XX:G1NewSizePercent=20"
+                << "-XX:G1ReservePercent=10"
+                << "-XX:MaxGCPauseMillis=200"
+                << "-XX:G1HeapWastePercent=15"
+                << "-XX:+ParallelRefProcEnabled"
+                << "-XX:+AlwaysPreTouch";
+    }
+
     // Game variable setup (needed by substPlaceholders)
     QString username = m_session.is_authenticated ? QString::fromUtf8(m_session.name) : m_username;
     QString uuid;
@@ -1370,6 +1383,7 @@ void LaunchManager::doLaunch()
         if (m_gameLog) { m_gameLog->close(); delete m_gameLog; m_gameLog = nullptr; }
         m_running = false;
         emit runningChanged();
+        emit processFinished();
         emit errorOccurred("进程启动失败: " + (m_process ? m_process->errorString() : QString("unknown")));
         if (m_process) {
             m_process->deleteLater();
@@ -1383,6 +1397,7 @@ void LaunchManager::doLaunch()
         if (m_gameLog) { m_gameLog->close(); delete m_gameLog; m_gameLog = nullptr; }
         m_running = false;
         emit runningChanged();
+        emit processFinished();
         emit launchCompleted(exitCode);
         m_process->deleteLater();
         m_process = nullptr;
@@ -1403,7 +1418,11 @@ void LaunchManager::doLaunch()
 void LaunchManager::stop()
 {
     if (m_process && m_process->state() != QProcess::NotRunning) {
-        m_process->kill();
-        m_process->waitForFinished(5000);
+        // Try graceful exit first (Minecraft can save world, close cleanly);
+        // fall back to forceful kill if it ignores the SIGTERM.
+        m_process->terminate();
+        if (!m_process->waitForFinished(4000))
+            m_process->kill();
+        m_process->waitForFinished(2000);
     }
 }

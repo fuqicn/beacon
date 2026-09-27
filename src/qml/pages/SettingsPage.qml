@@ -19,6 +19,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "../components"
 
 Item {
@@ -78,7 +79,13 @@ Item {
                     + " text=" + langCombo.currentText)
 
         javaPathInput.text = kernel.settingsManager.value("java/path", "")
-        memorySetting.value = kernel.settingsManager.value("java/memory", 4096)
+        var memModeVal = kernel.settingsManager.value("java/memoryMode", "auto")
+        for (var _mm = 0; _mm < memMode.model.length; ++_mm)
+            if (memMode.model[_mm].key === memModeVal) { memMode.currentIndex = _mm; break }
+        if (memModeVal === "auto")
+            applyAutoMemory()
+        else
+            memCustom.text = String(kernel.settingsManager.value("java/memory", 4096))
         dlThreadsSetting.value = kernel.settingsManager.value("download/threads", 64)
 
         var dlSource = kernel.settingsManager.value("download/source", "auto")
@@ -102,6 +109,17 @@ Item {
                 break
             }
         }
+    }
+
+    function applyAutoMemory() {
+        var sysMb = kernel.getSystemMemoryMB()
+        if (sysMb <= 0) { kernel.settingsManager.setValue("java/memory", 4096); return }
+        // Heuristic: use ~50% of total RAM for the game, cap at 8192 MB.
+        var recommended = Math.min(Math.floor(sysMb * 0.5), 8192)
+        if (recommended < 1024) recommended = 1024
+        if (recommended > 6144) recommended = 6144
+        kernel.settingsManager.setValue("java/memory", recommended)
+        memCustom.text = String(recommended)
     }
 
     Flickable {
@@ -183,20 +201,47 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 12
-                        Text { text: I18n.tr("settings.memory") + " (MB)"; color: palette.placeholderText; font.pixelSize: 14 }
-                        Item { Layout.fillWidth: true }
-                        SpinBox {
-                            id: memorySetting
-                            from: 512; to: 65536; stepSize: 512
-                            value: 4096
-                            onValueChanged: {
-                                kernel.settingsManager.endInstance()
-                                kernel.settingsManager.setValue("java/memory", value)
+                        ColumnLayout {
+                            spacing: 2
+                            Text { text: I18n.tr("settings.memory") + " (MB)"; color: palette.placeholderText; font.pixelSize: 14 }
+                            Text {
+                                text: I18n.tr("settings.memoryAutoDesc").arg(kernel.getSystemMemoryMB() / 1024)
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                                visible: memMode.currentIndex === 0
                             }
-                            HoverHandler { id: memHintHover }
-                            ToolTip.visible: memHintHover.hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: I18n.tr("settings.memoryHint")
+                        }
+                        Item { Layout.fillWidth: true }
+                        ComboBox {
+                            id: memMode
+                            model: [
+                                { text: I18n.tr("settings.memoryAuto"), key: "auto" },
+                                { text: I18n.tr("settings.memoryManual"), key: "manual" }
+                            ]
+                            textRole: "text"
+                            valueRole: "key"
+                            currentIndex: kernel.settingsManager.value("java/memoryMode", "auto") === "manual" ? 1 : 0
+                            onActivated: {
+                                kernel.settingsManager.endInstance()
+                                kernel.settingsManager.setValue("java/memoryMode", currentValue)
+                                if (currentValue === "auto") applyAutoMemory()
+                                else memCustom.text = String(kernel.settingsManager.value("java/memory", 4096))
+                            }
+                        }
+                        TextField {
+                            id: memCustom
+                            Layout.preferredWidth: 120
+                            text: String(kernel.settingsManager.value("java/memory", 4096))
+                            validator: IntValidator { bottom: 512; top: 65536 }
+                            enabled: memMode.currentIndex === 1
+                            visible: memMode.currentIndex === 1
+                            onEditingFinished: {
+                                var v = parseInt(text)
+                                if (isNaN(v) || v < 512) v = 512
+                                if (v > 65536) v = 65536
+                                kernel.settingsManager.endInstance()
+                                kernel.settingsManager.setValue("java/memory", v)
+                            }
                         }
                     }
             }
@@ -461,16 +506,6 @@ Item {
                             visible: restartNeeded
                             Layout.fillWidth: true
                         }
-                        Item { Layout.fillWidth: true }
-                        Button {
-                            text: I18n.tr("settings.restartNow")
-                            enabled: restartNeeded
-                            onClicked: kernel.restartApp()
-                            HoverHandler { id: restartHover }
-                            ToolTip.visible: restartHover.hovered && restartNeeded
-                            ToolTip.delay: 500
-                            ToolTip.text: I18n.tr("settings.restartHint")
-                        }
                     }
                 }
             }
@@ -665,6 +700,48 @@ Item {
             followAlways: true
             policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
             width: 8
+        }
+    }
+
+    // Restart-required dialog: replaces the old inline button so the user is
+    // reminded (not forced) to restart after changing language or style.
+    Connections {
+        target: root
+        function onRestartNeededChanged() {
+            if (root.restartNeeded) restartDialog.open()
+        }
+    }
+
+    Dialog {
+        id: restartDialog
+        title: I18n.tr("settings.restartTitle")
+        standardButtons: Dialog.None
+        closePolicy: Popup.NoAutoClose
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+            Text {
+                text: I18n.tr("settings.restartMessage")
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.pixelSize: 14
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                Button {
+                    text: I18n.tr("settings.restartNow")
+                    Layout.fillWidth: true
+                    highlighted: true
+                    onClicked: kernel.restartApp()
+                }
+                Button {
+                    text: I18n.tr("settings.restartLater")
+                    Layout.fillWidth: true
+                    onClicked: { root.restartNeeded = false; close() }
+                }
+            }
         }
     }
 }

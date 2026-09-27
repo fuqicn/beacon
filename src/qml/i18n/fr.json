@@ -79,6 +79,9 @@
   "settings.styleImagine": "Imagine",
   "settings.restartNow": "Redémarrer maintenant",
   "settings.restartHint": "Ferme et redémarre immédiatement l'application pour appliquer les modifications.",
+  "settings.restartTitle": "Redémarrage requis",
+  "settings.restartMessage": "Certains paramètres ont changé et ne prendront effet qu'après un redémarrage. Redémarrer maintenant ou plus tard ?",
+  "settings.restartLater": "Plus tard",
   "settings.isolation": "Isolation des versions",
   "settings.isolationDesc": "Les versions de jeu utilisent des répertoires dédiés : saves, mods et configuration restent séparés et ne provoquent jamais de crash entre versions.",
   "settings.isolationHint": "Chaque version peut être configurée individuellement dans Paramètres d'instance.",
@@ -88,6 +91,9 @@
   "settings.isolationPolicyHint": "Versions utilisant un répertoire dédié : uniquement les versions avec loader (Fabric/Forge/NeoForge/Quilt/LiteLoader) ou toutes.",
   "settings.memory": "Mémoire max",
   "settings.memoryHint": "Mémoire de tas maximale allouée au jeu (Mo).",
+  "settings.memoryAuto": "Auto",
+  "settings.memoryManual": "Personnalisée",
+  "settings.memoryAutoDesc": "Recommandé : %1 Go (calculé d'après la RAM système)",
   "settings.about": "À propos",
   "theme": "Thème",
   "theme.system": "Thème (suivre le système)",
@@ -157,5 +163,7 @@
   "settings.checkUpdate.latest": "Vous utilisez déjà la dernière version",
   "status.updateDownload": "Téléchargement de la mise à jour %1",
   "update.later": "Me le rappeler plus tard",
+  "instance.jvmOptimize": "Optimisation JVM",
+  "instance.jvmOptimizeDesc": "Applique des drapeaux JVM optimisés pour les performances (G1GC, pré-allocation, etc.)",
   "search.loadingMore": "Chargement..."
 }

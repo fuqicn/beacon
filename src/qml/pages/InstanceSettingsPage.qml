@@ -228,10 +228,35 @@ Item {
                     anchors.margins: 16
                     spacing: 12
 
+                    // Auto-optimisation toggle
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12
+                        ColumnLayout {
+                            spacing: 2
+                            Text {
+                                text: I18n.tr("instance.jvmOptimize")
+                                font.pixelSize: 14
+                                color: palette.text
+                            }
+                            Text {
+                                text: I18n.tr("instance.jvmOptimizeDesc")
+                                font.pixelSize: 11
+                                color: palette.placeholderText
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Switch {
+                            id: jvmOptSwitch
+                            checked: root.readInstanceSetting("launch/jvmOptimize", false)
+                            onToggled: root.writeInstanceSetting("launch/jvmOptimize", checked)
+                        }
+                    }
 
+                    // Custom JVM args
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
                         ColumnLayout {
                             spacing: 2
                             Text {
@@ -245,9 +270,7 @@ Item {
                                 color: palette.placeholderText
                             }
                         }
-
                         Item { Layout.fillWidth: true }
-
                         Switch {
                             id: jvmSwitch
                             checked: root.readInstanceSetting("launch/jvmArgsEnabled", false)

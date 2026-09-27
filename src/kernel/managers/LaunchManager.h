@@ -65,6 +65,8 @@ public:
     void setUsername(const QString &name) { m_username = name; }
     void setSession(const McAuthSession *session);
     void setExtraJvmArgs(const QString &args) { m_extraJvmArgs = args; }
+    void setJvmOptimize(bool on) { m_jvmOptimize = on; }
+    QProcess *process() const { return m_process; }
     void setFullscreen(bool on) { m_fullscreen = on; }
     void setResolution(int w, int h) { m_resolutionW = w; m_resolutionH = h; }
 
@@ -75,6 +77,10 @@ public:
 
 signals:
     void runningChanged();
+    // Emitted immediately when the launched Java process exits (before the
+    // background poller catches up). Used by main.qml to clear the kill
+    // button without waiting for the next 15 s poll cycle.
+    void processFinished();
     void readyChanged();
     void verifyingChanged();
     void verifyProgressChanged();
@@ -134,6 +140,7 @@ private:
     bool m_fullscreen = false;
     int m_resolutionW = 0;
     int m_resolutionH = 0;
+    bool m_jvmOptimize = false;
     McAuthSession m_session;
     bool m_running = false;
     bool m_ready = false;

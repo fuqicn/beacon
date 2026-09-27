@@ -1223,49 +1223,80 @@ static bool pollMinecraftRunning()
 void KernelBridge::killAllMinecraft()
 {
 #if defined(Q_OS_WIN)
+    // 1) If the launcher itself launched the process, try a graceful terminate
+    // first so Minecraft can save its world and exit cleanly.
+    if (m_launchManager && m_launchManager->process()
+        && m_launchManager->process()->state() != QProcess::NotRunning) {
+        m_launchManager->stop();
+        // Give it a moment to close gracefully before we fall through to the
+        // process-scan path below (which is a safety-net for any stragglers).
+        QThread::sleep(1);
+    }
+
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) return;
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        emit minecraftRunningChanged();
+        return;
+    }
 
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(pe);
 
     if (!Process32FirstW(snapshot, &pe)) {
         CloseHandle(snapshot);
+        emit minecraftRunningChanged();
         return;
     }
 
+    bool anyKilled = false;
     do {
         QString exe = QString::fromWCharArray(pe.szExeFile).toLower();
         if (exe != "javaw.exe" && exe != "java.exe") continue;
 
-        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+        HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION, FALSE, pe.th32ProcessID);
         if (!hProcess) continue;
 
+        // Only kill Java processes that own a Minecraft window (to avoid killing
+        // other Java apps the user may have open).
         EnumMinecraftData ed = { pe.th32ProcessID, false };
         EnumWindows(enumMinecraftWindow, reinterpret_cast<LPARAM>(&ed));
-        CloseHandle(hProcess);
 
         if (ed.found) {
-            HANDLE hKill = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-            if (hKill) {
-                TerminateProcess(hKill, 0);
-                CloseHandle(hKill);
-            }
+            TerminateProcess(hProcess, 0);
+            anyKilled = true;
         }
+        CloseHandle(hProcess);
     } while (Process32NextW(snapshot, &pe));
 
     CloseHandle(snapshot);
 
-    emit minecraftRunningChanged();
+    // If we killed something directly (no launcher-tracked process), signal
+    // the change here; otherwise stop() above already cleared it.
+    if (anyKilled)
+        emit minecraftRunningChanged();
+    // Also force-clear: the poller may still report true for up to 15 s.
+    setMinecraftRunning(false);
 #elif defined(Q_OS_UNIX)
     // Unix: pkill for the Minecraft main class.
     QProcess proc;
     proc.start(QStringLiteral("pkill"), QStringList() << "-f" << "net.minecraft.client");
     proc.waitForFinished(3000);
     emit minecraftRunningChanged();
+    setMinecraftRunning(false);
 #else
     Q_UNUSED(this);
 #endif
+}
+
+int KernelBridge::getSystemMemoryMB() const
+{
+#ifdef Q_OS_WIN
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (GlobalMemoryStatusEx(&ms))
+        return static_cast<int>(ms.ullTotalPhys / (1024 * 1024));
+#endif
+    return 0;
 }
 
 void KernelBridge::qmlCollectGarbage()
@@ -1465,6 +1496,8 @@ void KernelBridge::launchGame(int memory)
         m_settingsManager->setInstance(verId);
         if (m_settingsManager->contains("launch/jvmArgs"))
             m_launchManager->setExtraJvmArgs(m_settingsManager->value("launch/jvmArgs").toString());
+        if (m_settingsManager->contains("launch/jvmOptimize"))
+            m_launchManager->setJvmOptimize(m_settingsManager->value("launch/jvmOptimize", false).toBool());
         if (m_settingsManager->contains("launch/javaPath"))
             m_launchManager->setJavaPath(m_settingsManager->value("launch/javaPath").toString());
         if (m_settingsManager->contains("launch/memory"))

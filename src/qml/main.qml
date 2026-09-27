@@ -412,9 +412,9 @@ ApplicationWindow {
             anchors.centerIn: parent
             iconName: "power"
             iconSize: 20
-            // Reversed tint vs. other icons: light mode -> black icon,
-            // dark mode -> white icon.
-            tint: Theme.darkMode ? "#ffffff" : "#000000"
+            // Always white: the button has a solid primary-colour background in
+            // both light and dark themes, so a white icon is legible everywhere.
+            tint: "#ffffff"
         }
     }
 
@@ -447,6 +447,12 @@ ApplicationWindow {
     Connections {
         target: kernel.launchManager
         function onRunningChanged() {
+            refreshMcRunning()
+        }
+        function onProcessFinished() {
+            // Clear immediately so the kill button disappears right away,
+            // rather than waiting for the next 15 s background poll cycle.
+            kernel.setMinecraftRunning(false)
             refreshMcRunning()
         }
     }

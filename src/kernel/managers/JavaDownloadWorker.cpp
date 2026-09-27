@@ -68,12 +68,15 @@ void JavaDownloadWorker::run()
     emit progressChanged(0.01, QStringLiteral("Fetching manifest..."));
 
     bool manifestOk = false;
+    emit subTaskChanged(QStringLiteral("Connecting to mirror..."));
     if (!mc_java_download_manifest(m_majorVersion, mc_download_effective_mirror(), &list)) {
         if (m_cancelled.load()) {
             mc_info("[DL-J] Java %d cancelled during manifest fetch", m_majorVersion);
             emit finished(false, QString(), m_majorVersion);
             return;
         }
+        emit subTaskChanged(QStringLiteral("Mirror 1 timeout, trying mirror 2..."));
+        emit progressChanged(0.02, QStringLiteral("Mirror 1"));
         mc_info("[DL-J] primary mirror failed, trying bmclapi...");
         if (!mc_java_download_manifest(m_majorVersion, "bmclapi", &list)) {
             if (m_cancelled.load()) {
@@ -81,6 +84,8 @@ void JavaDownloadWorker::run()
                 emit finished(false, QString(), m_majorVersion);
                 return;
             }
+            emit subTaskChanged(QStringLiteral("Mirror 2 timeout, trying mirror 3..."));
+            emit progressChanged(0.03, QStringLiteral("Mirror 2"));
             mc_info("[DL-J] bmclapi failed, trying mojang...");
             manifestOk = mc_java_download_manifest(m_majorVersion, "mojang", &list);
         } else {

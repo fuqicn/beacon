@@ -1529,19 +1529,40 @@ void KernelBridge::launchGame(int memory)
     // Auto mode: recalculate heap at launch time based on currently available
     // memory, not total RAM. This adapts to whatever else is running on the
     // machine right now (browser tabs, other games, etc.).
+    // Use a tiered mapping instead of a fixed ratio or hard cap:
+    //   < 2 GB free   → 1 GB (floor, safe for any machine)
+    //   2-4 GB free   → 2 GB
+    //   4-8 GB free   → 3 GB
+    //   8-16 GB free  → 4 GB
+    //   16-32 GB free → 6 GB
+    //   > 32 GB free  → 8 GB (reasonably generous without starving the OS)
     if (memMode == "auto" || m_launchMemory <= 0) {
         int availMb = getAvailableMemoryMB();
         if (availMb > 0) {
-            // Cap at 6 GB to avoid starving the OS; floor at 1 GB.
-            int recommended = qBound(1024, availMb / 2, 6144);
+            int recommended = 4096; // default mid-range
+            if (availMb < 2048)       recommended = 1024;
+            else if (availMb < 4096)  recommended = 2048;
+            else if (availMb < 8192)  recommended = 3072;
+            else if (availMb < 16384) recommended = 4096;
+            else if (availMb < 32768) recommended = 6144;
+            else                      recommended = 8192;
             mc_info("launchGame: auto memory from %d MB free -> %d MB", availMb, recommended);
             m_launchMemory = recommended;
         } else {
-            // Fallback: same heuristic as the settings-page preview (based on
-            // total RAM, which is always available even if inaccurate at runtime).
+            // Fallback to total-RAM heuristic when available-memory query fails.
             int totalMb = getSystemMemoryMB();
-            if (totalMb > 0)
-                m_launchMemory = qBound(1024, totalMb / 2, 6144);
+            if (totalMb > 0) {
+                int recommended = 4096;
+                if (totalMb < 4096)       recommended = 1024;
+                else if (totalMb < 8192)  recommended = 2048;
+                else if (totalMb < 16384) recommended = 3072;
+                else if (totalMb < 32768) recommended = 4096;
+                else if (totalMb < 65536) recommended = 6144;
+                else                      recommended = 8192;
+                mc_info("launchGame: auto memory fallback from %d MB total -> %d MB",
+                        totalMb, recommended);
+                m_launchMemory = recommended;
+            }
         }
     }
 

@@ -112,14 +112,17 @@ Item {
     }
 
     function applyAutoMemory() {
-        // Only set a sensible default for manual-mode users who just switched.
-        // The actual launch-time value is computed in launchGame() from
-        // available memory at that moment.
+        // Set a sensible default when switching to auto mode. The live value
+        // is re-computed at launch time in launchGame() from available memory.
         var totalMb = kernel.getSystemMemoryMB()
         if (totalMb <= 0) { kernel.settingsManager.setValue("java/memory", 4096); return }
-        var recommended = Math.min(Math.floor(totalMb * 0.5), 8192)
-        if (recommended < 1024) recommended = 1024
-        if (recommended > 6144) recommended = 6144
+        var recommended = 4096
+        if (totalMb < 4096)       recommended = 1024
+        else if (totalMb < 8192)  recommended = 2048
+        else if (totalMb < 16384) recommended = 3072
+        else if (totalMb < 32768) recommended = 4096
+        else if (totalMb < 65536) recommended = 6144
+        else                      recommended = 8192
         kernel.settingsManager.setValue("java/memory", recommended)
         memCustom.text = String(recommended)
     }

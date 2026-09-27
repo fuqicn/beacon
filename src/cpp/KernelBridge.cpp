@@ -1611,10 +1611,34 @@ void KernelBridge::launchGame(int memory)
     std::thread([this, guard, requiredJava]() {
         mc_info("Java detection: need version %d", requiredJava);
 
-        // 1. Check bundled runtime for exact version match
+        // Helper: verify the actual major version of a java executable.
+        // Returns -1 on failure (binary doesn't exist, command errors, etc.).
+        auto verifyJavaVersion = [](const QString &javaExe, int expected) -> int {
+            if (!QFile::exists(javaExe)) return -1;
+            QProcess proc;
+            proc.setProgram(javaExe);
+            proc.setArguments({"-version"});
+            proc.setProcessChannelMode(QProcess::MergedChannels);
+            proc.start();
+            if (!proc.waitForFinished(5000)) return -1;
+            QString output = QString::fromUtf8(proc.readAllStandardOutput());
+            // Match patterns like "17.0.1", "17.0.11", "25-ea", "21.0.3", etc.
+            QRegularExpression re(R"(\b(\d+)\b)");
+            auto it = re.globalMatch(output);
+            if (it.hasNext()) {
+                int major = it.next().captured(1).toInt();
+                mc_info("Java version check: %s -> major=%d (expected %d)",
+                        javaExe.toUtf8().constData(), major, expected);
+                return major;
+            }
+            return -1;
+        };
+
+        // 1. Check bundled runtime for exact version match.
+        // First verify the path exists AND the binary is actually the right version.
         QString runtimeDir = s_launcherDir.isEmpty()
-                                 ? QCoreApplication::applicationDirPath() + "/.runtime"
-                                 : s_launcherDir + "/.runtime";
+                                     ? QCoreApplication::applicationDirPath() + "/.runtime"
+                                     : s_launcherDir + "/.runtime";
         QString bundledPath;
 #ifdef Q_OS_WIN
         bundledPath = runtimeDir + QString("/java-%1/bin/java.exe").arg(requiredJava);
@@ -1622,57 +1646,49 @@ void KernelBridge::launchGame(int memory)
         bundledPath = runtimeDir + QString("/java-%1/bin/java").arg(requiredJava);
 #endif
 
-        // Verify Java is fully installed (not mid-download) by checking for a sibling binary
-        QString javaBinDir = QFileInfo(bundledPath).path();
+        int bundledMajor = verifyJavaVersion(bundledPath, requiredJava);
+        if (bundledMajor == requiredJava) {
+            // Also check jlink sibling to confirm full JDK install
+            QString javaBinDir = QFileInfo(bundledPath).path();
 #ifdef Q_OS_WIN
-        QString jlinkPath = javaBinDir + "/jlink.exe";
+            QString jlinkPath = javaBinDir + "/jlink.exe";
 #else
-        QString jlinkPath = javaBinDir + "/jlink";
+            QString jlinkPath = javaBinDir + "/jlink";
 #endif
-        if (QFile::exists(bundledPath) && QFile::exists(jlinkPath)) {
-            mc_info("Found bundled Java %d: %s", requiredJava, bundledPath.toUtf8().constData());
-            if (!guard) return;
-            QMetaObject::invokeMethod(this, [this, bundledPath]() {
-                setJavaDownloading(false);
-                if (m_launchCancelled) return;
-                m_launchManager->setJavaPath(bundledPath);
-                doAuthAndLaunch();
-            }, Qt::QueuedConnection);
-            return;
-        }
-
-        // 2. Scan system Java for exact version match.
-        // Use the lightweight cached scan (no QProcess spawning). The full
-        // mc_java_find_all does per-candidate "java -version" QProcess probes
-        // which, when run on a bare std::thread, contend with the GUI event
-        // loop and freeze the UI. For launch we only need an exact major
-        // version match; if not found we download the required runtime.
-        {
-            QString scanDir = s_launcherDir.isEmpty()
-                                  ? QCoreApplication::applicationDirPath()
-                                  : s_launcherDir;
-            QString candidate = scanDir + QStringLiteral("/.runtime/java-%1/bin/java")
-                                                        .arg(requiredJava);
-#ifdef Q_OS_WIN
-            candidate = scanDir + QStringLiteral("/.runtime/java-%1/bin/java.exe")
-                                                         .arg(requiredJava);
-#endif
-            if (QFile::exists(candidate)) {
-                mc_info("Found cached runtime Java %d: %s", requiredJava,
-                        candidate.toUtf8().constData());
+            if (QFile::exists(jlinkPath)) {
+                mc_info("Found bundled Java %d: %s", requiredJava, bundledPath.toUtf8().constData());
                 if (!guard) return;
-                QMetaObject::invokeMethod(this, [this, candidate]() {
+                QMetaObject::invokeMethod(this, [this, bundledPath]() {
                     setJavaDownloading(false);
                     if (m_launchCancelled) return;
-                    m_launchManager->setJavaPath(candidate);
+                    m_launchManager->setJavaPath(bundledPath);
                     doAuthAndLaunch();
                 }, Qt::QueuedConnection);
                 return;
             }
         }
 
+        // 2. Scan system Java via mc_java_find_all for an exact version match.
+        // This runs a lightweight QProcess probe per candidate — we cache the
+        // result in a small local buffer rather than the full runtime list.
+        McJavaRuntime runtimes[128];
+        int count = mc_java_find_all(runtimes, 128);
+        for (int i = 0; i < count; ++i) {
+            if (runtimes[i].major_version != requiredJava) continue;
+            QString path = QString::fromUtf8(runtimes[i].path);
+            mc_info("Found system Java %d: %s", requiredJava, path.toUtf8().constData());
+            if (!guard) return;
+            QMetaObject::invokeMethod(this, [this, path]() {
+                setJavaDownloading(false);
+                if (m_launchCancelled) return;
+                m_launchManager->setJavaPath(path);
+                doAuthAndLaunch();
+            }, Qt::QueuedConnection);
+            return;
+        }
+
         // 3. No matching Java found — download required version
-        mc_info("No matching Java found, downloading Java %d...", requiredJava);
+        mc_info("No Java %d found, downloading...", requiredJava);
         if (!guard) return;
         QMetaObject::invokeMethod(this, [this, requiredJava]() {
             m_javaManager->downloadJava(requiredJava);

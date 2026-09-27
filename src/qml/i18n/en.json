@@ -81,7 +81,7 @@
   "settings.memoryHint": "Maximum heap memory allocated for the game (MB).",
   "settings.memoryAuto": "Auto",
   "settings.memoryManual": "Custom",
-  "settings.memoryAutoDesc": "Recommended: %1 GB (based on your system RAM)",
+  "settings.memoryAutoDesc": "Recommended at launch: ~50%% of currently available RAM (capped at 6 GB)",
   "settings.about": "About",
   "theme": "Theme",
   "theme.system": "Theme (follow system)",

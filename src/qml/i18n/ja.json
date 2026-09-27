@@ -93,7 +93,7 @@
   "settings.memoryHint": "ゲームに割り当てる最大ヒープメモリ（MB）",
   "settings.memoryAuto": "自動",
   "settings.memoryManual": "カスタム",
-  "settings.memoryAutoDesc": "推奨：%1 GB（システムRAMに基づいて自動計算）",
+  "settings.memoryAutoDesc": "起動時に自動計算：利用可能RAMの約50%%（最大6GB）",
   "settings.about": "情報",
   "theme": "テーマ",
   "theme.system": "テーマ（システムに追従）",

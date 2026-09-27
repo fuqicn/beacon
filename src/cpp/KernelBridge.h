@@ -187,8 +187,11 @@ public:
     bool minecraftRunning() const { return m_minecraftRunning; }
     void setMinecraftRunning(bool v);
     Q_INVOKABLE void killAllMinecraft();
-    // System memory in MB (Win32 GlobalMemoryStatusEx; returns 0 on other OSes).
+    // Total physical memory in MB (Win32 GlobalMemoryStatusEx; returns 0 on other OSes).
     Q_INVOKABLE int getSystemMemoryMB() const;
+    // Available physical memory in MB at the time of call (Win32 GlobalMemoryStatusEx; returns 0 on other OSes).
+    // Used by auto-memory mode to size the game heap based on what is currently free, not total RAM.
+    Q_INVOKABLE int getAvailableMemoryMB() const;
     // Auto-update helpers
     Q_INVOKABLE QString detectLinuxPackageType() const;
     Q_INVOKABLE void qmlCollectGarbage();

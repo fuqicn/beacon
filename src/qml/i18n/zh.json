@@ -81,7 +81,7 @@
   "settings.memoryHint": "游戏启动时分配的最大堆内存（MB）",
   "settings.memoryAuto": "自动",
   "settings.memoryManual": "自定义",
-  "settings.memoryAutoDesc": "推荐：%1 GB（根据系统内存自动计算）",
+  "settings.memoryAutoDesc": "启动时自动计算：可用内存的约 50%%（上限 6 GB）",
   "settings.about": "关于",
   "theme": "主题",
   "theme.system": "主题（跟随系统）",

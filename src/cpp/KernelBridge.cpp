@@ -1299,6 +1299,17 @@ int KernelBridge::getSystemMemoryMB() const
     return 0;
 }
 
+int KernelBridge::getAvailableMemoryMB() const
+{
+#ifdef Q_OS_WIN
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (GlobalMemoryStatusEx(&ms))
+        return static_cast<int>(ms.ullAvailPhys / (1024 * 1024));
+#endif
+    return 0;
+}
+
 void KernelBridge::qmlCollectGarbage()
 {
     if (!m_engine) return;
@@ -1489,6 +1500,11 @@ void KernelBridge::launchGame(int memory)
     m_launchMemory = memory;
     m_launchCancelled = false;
 
+    // Read the global memory mode before applying per-instance overrides.
+    QString memMode = m_settingsManager
+                          ? m_settingsManager->value("java/memoryMode", "auto").toString()
+                          : QStringLiteral("auto");
+
     // Apply per-instance launch settings (isolation, JVM args, java path,
     // memory, resolution/fullscreen) from the selected instance's settings.ini
     QString verId = m_launchManager->versionId();
@@ -1508,6 +1524,25 @@ void KernelBridge::launchGame(int memory)
         m_settingsManager->endInstance();
         m_launchManager->setFullscreen(fullscreen);
         m_launchManager->setResolution(rw, rh);
+    }
+
+    // Auto mode: recalculate heap at launch time based on currently available
+    // memory, not total RAM. This adapts to whatever else is running on the
+    // machine right now (browser tabs, other games, etc.).
+    if (memMode == "auto" || m_launchMemory <= 0) {
+        int availMb = getAvailableMemoryMB();
+        if (availMb > 0) {
+            // Cap at 6 GB to avoid starving the OS; floor at 1 GB.
+            int recommended = qBound(1024, availMb / 2, 6144);
+            mc_info("launchGame: auto memory from %d MB free -> %d MB", availMb, recommended);
+            m_launchMemory = recommended;
+        } else {
+            // Fallback: same heuristic as the settings-page preview (based on
+            // total RAM, which is always available even if inaccurate at runtime).
+            int totalMb = getSystemMemoryMB();
+            if (totalMb > 0)
+                m_launchMemory = qBound(1024, totalMb / 2, 6144);
+        }
     }
 
     mc_info("launchGame: verId=%s javaPath=%s mcDir=%s",

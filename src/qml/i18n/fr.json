@@ -93,7 +93,7 @@
   "settings.memoryHint": "Mémoire de tas maximale allouée au jeu (Mo).",
   "settings.memoryAuto": "Auto",
   "settings.memoryManual": "Personnalisée",
-  "settings.memoryAutoDesc": "Recommandé : %1 Go (calculé d'après la RAM système)",
+  "settings.memoryAutoDesc": "Recommandé au lancement : ~50 %% de la RAM disponible (plafonné à 6 Go)",
   "settings.about": "À propos",
   "theme": "Thème",
   "theme.system": "Thème (suivre le système)",

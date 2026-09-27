@@ -112,10 +112,12 @@ Item {
     }
 
     function applyAutoMemory() {
-        var sysMb = kernel.getSystemMemoryMB()
-        if (sysMb <= 0) { kernel.settingsManager.setValue("java/memory", 4096); return }
-        // Heuristic: use ~50% of total RAM for the game, cap at 8192 MB.
-        var recommended = Math.min(Math.floor(sysMb * 0.5), 8192)
+        // Only set a sensible default for manual-mode users who just switched.
+        // The actual launch-time value is computed in launchGame() from
+        // available memory at that moment.
+        var totalMb = kernel.getSystemMemoryMB()
+        if (totalMb <= 0) { kernel.settingsManager.setValue("java/memory", 4096); return }
+        var recommended = Math.min(Math.floor(totalMb * 0.5), 8192)
         if (recommended < 1024) recommended = 1024
         if (recommended > 6144) recommended = 6144
         kernel.settingsManager.setValue("java/memory", recommended)
@@ -205,7 +207,7 @@ Item {
                             spacing: 2
                             Text { text: I18n.tr("settings.memory") + " (MB)"; color: palette.placeholderText; font.pixelSize: 14 }
                             Text {
-                                text: I18n.tr("settings.memoryAutoDesc").arg(kernel.getSystemMemoryMB() / 1024)
+                                text: I18n.tr("settings.memoryAutoDesc")
                                 font.pixelSize: 11
                                 color: palette.placeholderText
                                 visible: memMode.currentIndex === 0

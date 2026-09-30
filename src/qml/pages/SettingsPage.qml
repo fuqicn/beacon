@@ -717,7 +717,7 @@ Item {
         closePolicy: Popup.NoAutoClose
         // Match DownloadDialog's sizing pattern: explicit width + height from content
         width: Math.min(window.width - 64, 420)
-        height: contentColumn.implicitHeight + 64
+        height: restartContentColumn.implicitHeight + 64
         x: Math.round((window.width - width) / 2)
         y: Math.round((window.height - height) / 2)
 
@@ -729,7 +729,7 @@ Item {
         }
 
         ColumnLayout {
-            id: contentColumn
+            id: restartContentColumn
             anchors.fill: parent
             anchors.margins: 24
             spacing: 16

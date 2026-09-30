@@ -748,7 +748,7 @@ Item {
                 Button {
                     text: I18n.tr("settings.restartLater")
                     font.weight: Font.Normal
-                    onClicked: { root.restartNeeded = false; close() }
+                    onClicked: { root.restartNeeded = false; window._skipNextQuit = true; close(); window._skipNextQuit = false }
                 }
                 Button {
                     text: I18n.tr("settings.restartNow")

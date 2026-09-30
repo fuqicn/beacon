@@ -711,7 +711,7 @@ Item {
 
     Popup {
         id: restartDialog
-        modal: false
+        modal: true
         focus: true
         closePolicy: Popup.NoAutoClose
         // Match DownloadDialog's sizing pattern: explicit width + height from content
@@ -748,7 +748,7 @@ Item {
                 Button {
                     text: I18n.tr("settings.restartLater")
                     font.weight: Font.Normal
-                    onClicked: { root.restartNeeded = false; close() }
+                    onClicked: { root.restartNeeded = false; restartDialog.visible = false }
                 }
                 Button {
                     text: I18n.tr("settings.restartNow")

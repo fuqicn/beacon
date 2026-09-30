@@ -748,7 +748,7 @@ Item {
                 Button {
                     text: I18n.tr("settings.restartLater")
                     font.weight: Font.Normal
-                    onClicked: { root.restartNeeded = false; window._skipNextQuit = true; close(); window._skipNextQuit = false }
+                    onClicked: { root.restartNeeded = false; window._skipNextQuit = true; close(); Qt.callLater(function(){ window._skipNextQuit = false; }) }
                 }
                 Button {
                     text: I18n.tr("settings.restartNow")

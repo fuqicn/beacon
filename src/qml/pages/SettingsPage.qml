@@ -657,6 +657,7 @@ Item {
                         onActivated: {
                             kernel.settingsManager.endInstance()
                             kernel.settingsManager.setValue("language/index", currentIndex - 1)
+                            restartNeeded = true
                         }
                         HoverHandler { id: langHover }
                         ToolTip.visible: langHover.hovered
@@ -714,6 +715,12 @@ Item {
         title: I18n.tr("settings.restartTitle")
         standardButtons: Dialog.None
         closePolicy: Popup.NoAutoClose
+        modal: true
+        focus: true
+        // Explicitly center on screen using the application window dimensions
+        // (Dialog is a top-level Popup; parent.width/height are unreliable there).
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20

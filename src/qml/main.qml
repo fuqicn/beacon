@@ -51,18 +51,11 @@ ApplicationWindow {
     property color _cachedTextColor: kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
     property color _cachedPaletteText: Qt.rgba(0.8, 0.8, 0.8, 1)  // light-gray fallback
 
-    // Guard flag: when the restart dialog is being dismissed (user clicked
-    // "Later"), the Popup close event propagates up to the window and would
-    // otherwise trigger onClosing → prepareShutdown → Qt.quit(). This flag
-    // lets us intercept that secondary close event and allow it to pass through
-    // cleanly without actually quitting the app.
-    property bool _skipNextQuit: false
-
     onClosing: function(close) {
         // Cancel every in-flight download and sweep temp files before quitting.
-        if (!_skipNextQuit) kernel.prepareShutdown()
+        kernel.prepareShutdown()
         close.accepted = true
-        if (!_skipNextQuit) Qt.quit()
+        Qt.quit()
     }
 
     Component.onCompleted: {

@@ -711,7 +711,6 @@ Item {
 
     Popup {
         id: restartDialog
-        title: I18n.tr("settings.restartTitle")
         modal: true
         focus: true
         closePolicy: Popup.NoAutoClose

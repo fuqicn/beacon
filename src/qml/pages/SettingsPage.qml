@@ -710,40 +710,53 @@ Item {
         }
     }
 
-    Dialog {
+    Popup {
         id: restartDialog
         title: I18n.tr("settings.restartTitle")
-        standardButtons: Dialog.None
-        closePolicy: Popup.NoAutoClose
         modal: true
         focus: true
-        // Explicitly center on screen using the application window dimensions
-        // (Dialog is a top-level Popup; parent.width/height are unreliable there).
+        closePolicy: Popup.NoAutoClose
+        // Match DownloadDialog's sizing pattern: explicit width + height from content
+        width: Math.min(window.width - 64, 420)
+        height: contentColumn.implicitHeight + 64
         x: Math.round((window.width - width) / 2)
         y: Math.round((window.height - height) / 2)
+
+        background: Rectangle {
+            radius: Theme.shapeLarge
+            color: palette.window
+            border.color: palette.mid
+            border.width: 1
+        }
+
         ColumnLayout {
+            id: contentColumn
             anchors.fill: parent
-            anchors.margins: 20
-            spacing: 12
+            anchors.margins: 24
+            spacing: 16
             Text {
                 text: I18n.tr("settings.restartMessage")
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 font.pixelSize: 14
+                color: palette.text
+                lineHeight: 1.4
             }
+            Item { Layout.fillHeight: true }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
-                Button {
-                    text: I18n.tr("settings.restartNow")
-                    Layout.fillWidth: true
-                    highlighted: true
-                    onClicked: kernel.restartApp()
-                }
+                Layout.alignment: Qt.AlignRight
                 Button {
                     text: I18n.tr("settings.restartLater")
-                    Layout.fillWidth: true
+                    font.weight: Font.Normal
                     onClicked: { root.restartNeeded = false; close() }
+                }
+                Button {
+                    text: I18n.tr("settings.restartNow")
+                    highlighted: true
+                    font.weight: Font.Normal
+                    onClicked: kernel.restartApp()
                 }
             }
         }

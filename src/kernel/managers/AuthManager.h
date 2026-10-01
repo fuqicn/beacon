@@ -56,6 +56,7 @@ public:
     Q_INVOKABLE void switchAccount(int index);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void refreshBeforeLaunch();
+    Q_INVOKABLE void switchToOffline();
 
     void setLauncherDir(const QString &dir);
     const McAuthSession *session() const { return &m_session; }

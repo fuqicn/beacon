@@ -274,6 +274,19 @@ void AuthManager::switchAccount(int index)
     saveAccounts();
 }
 
+void AuthManager::switchToOffline()
+{
+    // Find existing offline account
+    for (int i = 0; i < m_accounts.size(); ++i) {
+        if (m_accounts[i].type == 1) {
+            switchAccount(i);
+            return;
+        }
+    }
+    // No offline account: create one with default name
+    addOfflineAccount("Player");
+}
+
 void AuthManager::refreshBeforeLaunch()
 {
     if (!loggedIn()) {

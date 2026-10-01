@@ -425,6 +425,8 @@ window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
         width: Math.min(parent.width - 64, 420)
         padding: 24
 
+        onOpened: root.hoveredIndex = -1
+
         background: Rectangle {
             radius: Theme.shapeLarge
             color: palette.window
@@ -492,7 +494,7 @@ window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
         width: Math.min(parent.width - 64, 420)
         padding: 24
 
-        onOpened: nameField.forceActiveFocus()
+        onOpened: { nameField.forceActiveFocus(); root.hoveredIndex = -1 }
 
         background: Rectangle {
             radius: Theme.shapeLarge

@@ -270,6 +270,7 @@ Component.onCompleted: {
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.NoButton
+                    z: -1
                 }
             }
         }
@@ -307,6 +308,14 @@ Component.onCompleted: {
             font.weight: Font.Normal
             enabled: !kernel.authManager.loggingIn
             onClicked: kernel.authManager.addMicrosoftAccount()
+        }
+
+        Button {
+            Layout.fillWidth: true
+            text: I18n.tr("account.offline")
+            font.weight: Font.Normal
+            enabled: !kernel.authManager.loggingIn
+            onClicked: kernel.authManager.switchToOffline()
         }
 
         RowLayout {

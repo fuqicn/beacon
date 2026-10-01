@@ -114,6 +114,7 @@ function selectCategory(index) {
                 height: 34
                 radius: Theme.shapeFull
                 color: Qt.alpha(Theme.primary, 0.15)
+                z: -1
                 Behavior on x {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
@@ -472,18 +473,21 @@ Item {
 
     DownloadDialog {
         id: downloadDialog
-        onClosed: root._hoveredItemIndex = -1
+        onOpened: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
+        onClosed: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
     }
 
     // Mod / modpack install dialogs are declared here (outside the StackView
     // pages) so they render like DownloadDialog instead of inside a page.
     ModDownloadDialog {
         id: modDownloadDialog
-        onClosed: root._hoveredItemIndex = -1
+        onOpened: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
+        onClosed: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
     }
 
     ModpackInstallDialog {
         id: modpackInstallDialog
-        onClosed: root._hoveredItemIndex = -1
+        onOpened: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
+        onClosed: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
     }
 }

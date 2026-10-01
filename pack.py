@@ -292,7 +292,7 @@ def find_msvc_toolchain(arch=None):
             return None
         msvc_ver = versions[0]
         for subdir in arch_subdirs:
-            td = msvc_ver.parent / "bin" / subdir
+            td = msvc_ver / "bin" / subdir
             cl_e = td / "cl.exe"
             rc_e = td / "rc.exe"
             link_e = td / "link.exe"
@@ -436,9 +436,7 @@ def configure_and_build(args, build_dir, qt_dir):
                 cfg.append("Visual Studio 17 2022")
                 cfg.append("-A")
                 cfg.append("ARM64" if arm64 else "x64")
-                if arm64:
-                    cfg.append("-T")
-                    cfg.append("arm64")
+                # Don't pass -T — let -A ARM64 determine the toolset automatically.
             # Use vcpkg for dependencies that MSVC can't find natively (e.g. zlib).
             vcpkg_root = _resolve_vcpkg_root(args)
             if vcpkg_root:

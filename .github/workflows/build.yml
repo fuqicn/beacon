@@ -201,7 +201,7 @@ jobs:
 
       - name: Install MSVC Build Tools (ARM64)
         run: |
-          choco install visualstudio2022buildtools --package-version 17.11.35321.152 --yes `
+          choco install visualstudio2022buildtools --yes `
             --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive"
 
       - name: Cache Qt 6.8 MSVC (ARM64 cross-compiled)

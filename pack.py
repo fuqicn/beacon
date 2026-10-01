@@ -286,14 +286,13 @@ def find_msvc_toolchain(arch=None):
         vc_tools = base_path / edition / "VC" / "Tools" / "MSVC"
         if not vc_tools.is_dir():
             return None
-        # Find the latest MSVC version directory (e.g., "14.51.36231")
+        # Find the latest MSVC version directory
         versions = sorted(vc_tools.iterdir(), reverse=True)
         if not versions:
             return None
         msvc_ver = versions[0]
         for subdir in arch_subdirs:
-            # msvc_ver is the version directory itself, so bin is under it
-            td = msvc_ver / "bin" / subdir
+            td = msvc_ver.parent / "bin" / subdir
             cl_e = td / "cl.exe"
             rc_e = td / "rc.exe"
             link_e = td / "link.exe"

@@ -225,24 +225,34 @@ def find_msvc_toolchain(arch=None):
     arch = (arch or "x64").lower()
     tool_subdir = "arm64" if "arm" in arch else "x64"
 
-    # Find VS 2022 installation root and MSVC version directory.
+    # Find VS 2022/2025/2026 installation root and MSVC version directory.
+    # VS 2022 = version 17, VS 2025/2026 = version 18.
     msvc_ver = None
-    for base in [
-        r"C:\Program Files\Microsoft Visual Studio\2022",
-        r"C:\Program Files (x86)\Microsoft Visual Studio\2022",
-    ]:
-        for edition in ("Enterprise", "BuildTools", "Community"):
-            vc_tools = Path(base) / edition / "VC" / "Tools" / "MSVC"
-            if vc_tools.is_dir():
-                versions = sorted(vc_tools.iterdir(), reverse=True)
-                if versions:
-                    msvc_ver = versions[0]
-                    break
+    for ver in ("18", "17"):
+        for base in [
+            r"C:\Program Files\Microsoft Visual Studio",
+            r"C:\Program Files (x86)\Microsoft Visual Studio",
+        ]:
+            vs_root = Path(base) / ver
+            if not vs_root.is_dir():
+                continue
+            for edition in ("Enterprise", "BuildTools", "Community"):
+                vc_tools = vs_root / edition / "VC" / "Tools" / "MSVC"
+                if vc_tools.is_dir():
+                    versions = sorted(vc_tools.iterdir(), reverse=True)
+                    if versions:
+                        msvc_ver = versions[0]
+                        break
+            if msvc_ver:
+                break
         if msvc_ver:
             break
 
     if msvc_ver:
-        # Build toolchain dirs: prefer same-arch host, then cross-compile host.
+        # Build toolchain dirs: prefer native ARM64 host, then cross-compile.
+        # On some ARM64 runners (e.g. new GitHub Actions windows-11-arm),
+        # the native Hostarm64 folder may be absent; fall back to x64-host
+        # cross-compile toolset (Hostx64/arm64).
         if tool_subdir == "x64":
             tool_dirs = [
                 msvc_ver.parent / "bin" / "Hostx64" / "x64",
@@ -250,8 +260,9 @@ def find_msvc_toolchain(arch=None):
             ]
         else:
             tool_dirs = [
-                msvc_ver.parent / "bin" / "Hostarm64" / "arm64",
+                # x64-host cross-compile is available on all ARM64 runners
                 msvc_ver.parent / "bin" / "Hostx64" / "arm64",
+                msvc_ver.parent / "bin" / "Hostarm64" / "arm64",
                 msvc_ver.parent / "bin" / "Hostx64" / "x64",
             ]
         for td in tool_dirs:
@@ -268,17 +279,19 @@ def find_msvc_toolchain(arch=None):
                 log("using MSVC toolchain: %s" % td)
                 return result
 
-    # Last resort: hardcoded known CI paths.
+    # Last resort: hardcoded known CI paths (VS 2022 = ver 17, VS 2025/2026 = ver 18).
     known = {
         "x64": [
+            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64",
+            r"C:\Program Files\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64",
             r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64",
             r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64",
         ],
         "arm64": [
-            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
+            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64",
+            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
             r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64",
-            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
-            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\arm64",
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
         ],
     }
     import glob
@@ -577,13 +590,15 @@ def _copy_vc_runtime_dlls(dest_dir, is_arm64=False):
     """
     dest = Path(dest_dir)
     arch_dir = "arm64" if is_arm64 else "x64"
-    # DLLs needed for MSVC builds (VS 2022 = v143, VS 2019 = v142)
+    # DLLs needed for MSVC builds (VS 2022/2025/2026 = v143)
     dll_names = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "concrt140.dll"]
 
     found = []
-    # 1. VS 2022 Redist
+    # 1. VS Redist (search both VS 2022 and VS 2025/2026)
     for base in [
+        r"C:\Program Files\Microsoft Visual Studio\18",
         r"C:\Program Files\Microsoft Visual Studio\2022",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\18",
         r"C:\Program Files (x86)\Microsoft Visual Studio\2022",
     ]:
         for edition in ("Enterprise", "BuildTools", "Community"):

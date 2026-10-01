@@ -393,7 +393,13 @@ def configure_and_build(args, build_dir, qt_dir):
             cfg.append("-G")
             cfg.append("Visual Studio 17 2022")
             cfg.append("-A")
-            cfg.append("ARM64" if getattr(args, 'arch', None) == "arm64" else "x64")
+            arm64 = getattr(args, 'arch', None) == "arm64"
+            cfg.append("ARM64" if arm64 else "x64")
+            # On Windows ARM64 runners the VS generator may default to the x64
+            # cross-compile toolset. Force the native ARM64 toolset explicitly.
+            if arm64:
+                cfg.append("-T")
+                cfg.append("arm64")
             # Use vcpkg for dependencies that MSVC can't find natively (e.g. zlib).
             vcpkg_root = _resolve_vcpkg_root(args)
             if vcpkg_root:

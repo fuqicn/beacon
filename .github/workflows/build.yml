@@ -199,7 +199,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache MSVC Build Tools (ARM64)
+        uses: actions/cache@v4
+        id: msvc-cache
+        with:
+          path: C:/Program Files/Microsoft Visual Studio
+          key: ${{ runner.os }}-msvc-${{ env.CACHE_PREFIX }}
+
       - name: Install MSVC Build Tools (ARM64)
+        if: steps.msvc-cache.outputs.cache-hit != 'true'
         run: |
           choco install visualstudio2022buildtools --yes `
             --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive"
@@ -228,8 +236,10 @@ jobs:
       - name: Cache vcpkg
         uses: actions/cache@v4
         with:
-          path: C:/vcpkg
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('.github/workflows/build.yml') }}
+          path: |
+            C:/vcpkg
+            %LOCALAPPDATA%/vcpkg/archives
+          key: ${{ runner.os }}-vcpkg-${{ env.CACHE_PREFIX }}
 
       - name: Install zlib via vcpkg (ARM64)
         run: vcpkg install zlib:arm64-windows --triplet arm64-windows

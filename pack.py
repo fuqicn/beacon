@@ -279,26 +279,20 @@ def find_msvc_toolchain(arch=None):
                 log("using MSVC toolchain: %s" % td)
                 return result
 
-    # Last resort: hardcoded known CI paths (VS 2022 = ver 17, VS 2025/2026 = ver 18).
-    known = {
-        "x64": [
-            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64",
-            r"C:\Program Files\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64",
-            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64",
-            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*\bin\Hostx64\x64",
-        ],
-        "arm64": [
-            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64",
-            r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
-            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\arm64",
-            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostarm64\arm64",
-        ],
-    }
-    import glob
-    for pat in known.get(tool_subdir, []):
-        dirs = sorted(glob.glob(pat))
-        for d in dirs:
-            td = Path(d)
+    # Last resort: directly enumerate known CI paths by directory traversal
+    # (avoids glob issues with version-number dirs like "14.42.34433").
+    def _scan_toolchain(base_path, edition, arch_subdirs):
+        """Scan a specific VS edition for MSVC toolchain dirs."""
+        vc_tools = base_path / edition / "VC" / "Tools" / "MSVC"
+        if not vc_tools.is_dir():
+            return None
+        # Find the latest MSVC version directory
+        versions = sorted(vc_tools.iterdir(), reverse=True)
+        if not versions:
+            return None
+        msvc_ver = versions[0]
+        for subdir in arch_subdirs:
+            td = msvc_ver.parent / "bin" / subdir
             cl_e = td / "cl.exe"
             rc_e = td / "rc.exe"
             link_e = td / "link.exe"
@@ -309,8 +303,28 @@ def find_msvc_toolchain(arch=None):
                 db = td / "dumpbin.exe"
                 if db.is_file():
                     result["strip"] = db
-                log("using MSVC toolchain (glob): %s" % td)
+                log("using MSVC toolchain (scan): %s" % td)
                 return result
+        return None
+
+    import itertools
+    for base, ver in itertools.product(
+        [Path(r"C:\Program Files\Microsoft Visual Studio"),
+         Path(r"C:\Program Files (x86)\Microsoft Visual Studio")],
+        [Path(ver) for ver in ("18", "17")],
+    ):
+        vs_root = base / ver
+        if not vs_root.is_dir():
+            continue
+        if tool_subdir == "arm64":
+            # x64-host cross-compile is available on all ARM64 runners
+            arch_subdirs = ["Hostx64/arm64", "Hostarm64/arm64", "Hostx64/x64"]
+        else:
+            arch_subdirs = ["Hostx64/x64", "Hostx64/arm64"]
+        for edition in ("Enterprise", "BuildTools", "Community"):
+            found = _scan_toolchain(vs_root, edition, arch_subdirs)
+            if found:
+                return found
 
     return None
 

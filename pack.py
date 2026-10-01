@@ -390,16 +390,28 @@ def configure_and_build(args, build_dir, qt_dir):
         # whatever CMake finds on PATH (mingw, ninja, etc.).
         use_msvc = getattr(args, 'msvc', False)
         if use_msvc:
-            cfg.append("-G")
-            cfg.append("Visual Studio 17 2022")
-            cfg.append("-A")
             arm64 = getattr(args, 'arch', None) == "arm64"
-            cfg.append("ARM64" if arm64 else "x64")
-            # On Windows ARM64 runners the VS generator may default to the x64
-            # cross-compile toolset. Force the native ARM64 toolset explicitly.
-            if arm64:
-                cfg.append("-T")
-                cfg.append("arm64")
+            # Try to locate MSVC ourselves first — the VS CMake generator may
+            # fail on new ARM64 runners where MSVC lives in a non-standard path.
+            msvc = find_msvc_toolchain("arm64" if arm64 else "x64")
+            if msvc and msvc["cl"]:
+                # Use Ninja generator with explicitly found MSVC compiler —
+                # this is more reliable than the VS generator on ARM64 runners.
+                log("using Ninja + found MSVC: %s" % msvc["cl"])
+                cfg.append("-G")
+                cfg.append("Ninja")
+                cfg.append("-DCMAKE_C_COMPILER=%s" % msvc["cl"])
+                cfg.append("-DCMAKE_CXX_COMPILER=%s" % msvc["cl"])
+            else:
+                # Fallback: let CMake's VS generator try to find MSVC itself.
+                log("MSVC not found by pack.py; falling back to VS generator")
+                cfg.append("-G")
+                cfg.append("Visual Studio 17 2022")
+                cfg.append("-A")
+                cfg.append("ARM64" if arm64 else "x64")
+                if arm64:
+                    cfg.append("-T")
+                    cfg.append("arm64")
             # Use vcpkg for dependencies that MSVC can't find natively (e.g. zlib).
             vcpkg_root = _resolve_vcpkg_root(args)
             if vcpkg_root:

@@ -27,6 +27,7 @@ Popup {
     property string versionId: ""
     property string versionType: ""
     property string downloadDir: ""
+    property string customName: ""
 
     // True while downloading post-install files (libraries + assets)
     property bool postInstallDownload: false
@@ -114,6 +115,25 @@ Popup {
         ColumnLayout {
             spacing: 12
             visible: !postInstallDownload
+
+            // Custom instance name
+            RowLayout {
+                spacing: 12
+
+                Text {
+                    text: I18n.tr("download.instanceName")
+                    font.pixelSize: 14
+                    color: palette.placeholderText
+                }
+
+                TextField {
+                    id: customNameField
+                    Layout.fillWidth: true
+                    placeholderText: I18n.tr("download.instanceNamePlaceholder")
+                    text: root.customName
+                    onTextChanged: root.customName = text
+                }
+            }
 
             RowLayout {
                 spacing: 12
@@ -324,7 +344,7 @@ Popup {
                         cancelBtn.enabled = false
                         installSpinner.visible = true
                         installStatus.text = I18n.tr("download.installing").replace("%1", loader)
-                        kernel.installManager.installLoader(root.versionId, loader, lver, "", root.downloadDir)
+                        kernel.installManager.installLoader(root.versionId, loader, lver, "", root.downloadDir, root.customName)
                     }
                 }
             }

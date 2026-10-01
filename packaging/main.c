@@ -535,8 +535,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow)
         }
 
         if (ok) {
+            /* Pre-clean the old install directory so extraction starts fresh
+                and stale files cannot interfere with the new payload. */
+            if (file_exists(beacon_dir)) {
+                log_msg("Pre-cleaning old install: %s", beacon_dir);
+                delete_tree(beacon_dir);
+            }
             /* Move user data from the old install into the fresh dir, then
-               swap directories. */
+                swap directories. */
             if (file_exists(beacon_dir)) {
                 ok = preserve_user_data(beacon_dir, new_dir);
                 if (ok) {

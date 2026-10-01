@@ -29,6 +29,7 @@ Popup {
     property string source: "modrinth"
     property bool loading: true
     property string targetDir: ""
+    property string customName: ""
 
     signal installed(string message)
 
@@ -109,6 +110,25 @@ Popup {
                 Layout.fillWidth: true
             }
 
+            // Custom instance name
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Text {
+                    text: I18n.tr("download.instanceName")
+                    font.pixelSize: 14
+                    color: palette.placeholderText
+                }
+
+                TextField {
+                    Layout.fillWidth: true
+                    placeholderText: I18n.tr("download.instanceNamePlaceholder")
+                    text: root.customName
+                    onTextChanged: root.customName = text
+                }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
@@ -131,7 +151,7 @@ Popup {
                             var f = root.file
                             f.iconUrl = root.logoUrl || ""
                             f.source = root.source
-                            kernel.modpackManager.installFromProject(f, root.targetDir)
+                            kernel.modpackManager.installFromProject(f, root.targetDir, root.customName)
                             root.installed(I18n.tr("modpackInstall.started"))
                         }
                         root.close()

@@ -161,9 +161,10 @@ static PackFormat detectPackFormat(const QString &extractDir)
 // If `preloadLoaderVerId` is non-empty, the loader has already been installed
 // on the main thread and this function skips that step.
 static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
-                              const QString &iconUrl, QString *errorOut,
-                              const std::function<void(qreal, const QString &)> &progress,
-                              const QString &preloadLoaderVerId = QString())
+                               const QString &iconUrl, QString *errorOut,
+                               const std::function<void(qreal, const QString &)> &progress,
+                               const QString &preloadLoaderVerId = QString(),
+                               const QString &customName = QString())
 {
     QString tmp = QDir(rootDir).filePath("versions/.cfsack_tmp");
     QString verDir;
@@ -241,13 +242,21 @@ static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
                                   &err, &loaderVerId,
                                   [progress](qreal p, const QString &s) {
                                       progress(0.08 + 0.20 * p, "安装加载器 " + s);
-                                  })) {
+                                  },
+                                  customName)) {
         return fail("加载器安装失败: " + err);
     }
     if (loaderVerId.isEmpty())
         loaderVerId = mcVersion;
 
-    QString instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
+    QString instanceId;
+    if (!customName.isEmpty()) {
+        instanceId = uniqueInstanceId(rootDir, sanitizeId(customName));
+        mc_info("[CfPack] Using custom instance name: %s -> %s",
+                customName.toUtf8().constData(), instanceId.toUtf8().constData());
+    } else {
+        instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
+    }
     verDir = QDir(rootDir).filePath("versions/" + instanceId);
     QDir().mkpath(verDir);
 
@@ -321,9 +330,10 @@ static QString installCfPack(const QString &cfZipPath, const QString &rootDir,
 }
 
 static QString installPack(const QString &mrpackPath, const QString &rootDir,
-                           const QString &iconUrl, QString *errorOut,
-                           const std::function<void(qreal, const QString &)> &progress,
-                           const QString &preloadLoaderVerId = QString())
+                            const QString &iconUrl, QString *errorOut,
+                            const std::function<void(qreal, const QString &)> &progress,
+                            const QString &preloadLoaderVerId = QString(),
+                            const QString &customName = QString())
 {
     QString tmp = QDir(rootDir).filePath("versions/.mrpack_tmp");
     QString verDir;   // the pack's instance dir; only removed if we created it
@@ -377,7 +387,14 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
     // Instance identity is independent of the base-download outcome, so decide
     // it up front and let the two download halves (Minecraft base + pack files)
     // run concurrently inside the global persistent download pool.
-    QString instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
+    QString instanceId;
+    if (!customName.isEmpty()) {
+        instanceId = uniqueInstanceId(rootDir, sanitizeId(customName));
+        mc_info("[Pack] Using custom instance name: %s -> %s",
+                customName.toUtf8().constData(), instanceId.toUtf8().constData());
+    } else {
+        instanceId = uniqueInstanceId(rootDir, sanitizeId(packName) + "-" + (loader.isEmpty() ? "vanilla" : loader));
+    }
     verDir = QDir(rootDir).filePath("versions/" + instanceId);
     QDir().mkpath(verDir);
 
@@ -443,7 +460,8 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
                 if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
                                        [&progress](qreal p, const QString &s) {
                                            progress(0.05 + 0.35 * p, "安装加载器 " + s);
-                                       })) {
+                                       },
+                                       customName)) {
                     return fail("加载器安装失败: " + err);
                 }
             }
@@ -595,8 +613,9 @@ static QString installPack(const QString &mrpackPath, const QString &rootDir,
 // Sets *errorOut on failure. Caller must call mc_qt_download_thread_no_pump(0)
 // (or not set it at all) so the Forge installer QProcess works correctly.
 static QString detectAndInstallLoader(const QString &packPath, const QString &rootDir,
-                                      const std::function<void(qreal, const QString &)> &progress,
-                                      QString *errorOut)
+                                       const std::function<void(qreal, const QString &)> &progress,
+                                       QString *errorOut,
+                                       const QString &customName = QString())
 {
     // Probe the archive to detect format and extract loader info.
     QString tmpProbe = QDir(rootDir).filePath("versions/.loader_probe");
@@ -661,9 +680,10 @@ static QString detectAndInstallLoader(const QString &packPath, const QString &ro
     progress(0.03, "安装加载器 " + loader + " " + mcVersion);
     QString loaderVerId, err;
     if (!installLoaderSync(mcVersion, loader, loaderVer, QString(), rootDir, &err, &loaderVerId,
-                           [progress](qreal p, const QString &s) {
-                               progress(0.03 + 0.25 * p, "安装加载器 " + s);
-                           })) {
+                            [progress](qreal p, const QString &s) {
+                                progress(0.03 + 0.25 * p, "安装加载器 " + s);
+                            },
+                            customName)) {
         if (errorOut) *errorOut = "加载器安装失败: " + err;
         return QString();
     }
@@ -683,7 +703,8 @@ public:
     explicit ModpackWorker(QObject *parent = nullptr) : QObject(parent) {}
 
 public slots:
-    void doInstallFile(const QString &filePath, const QString &rootDir)
+    void doInstallFile(const QString &filePath, const QString &rootDir,
+                       const QString &customName = QString())
     {
         // Never pump the shared Qt event loop from this worker thread while the
         // GUI thread runs its own (concurrent processEvents is UB and crashes
@@ -713,7 +734,7 @@ public slots:
             preloadLoaderVerId = detectAndInstallLoader(
                 filePath, rootDir,
                 [this](qreal p, const QString &s) { emit progressReported(p, s); },
-                &error);
+                &error, customName);
             mc_qt_download_thread_no_pump(1);
             if (preloadLoaderVerId.isEmpty()) {
                 emit errorOccurred(error);
@@ -728,7 +749,7 @@ public slots:
                                [this](qreal p, const QString &s) {
                                    emit progressReported(p, s);
                                },
-                               preloadLoaderVerId);
+                               preloadLoaderVerId, customName);
         } else {
             // modrinth.index.json present, or unknown: fall through to the
             // existing Modrinth path (which fails with a clear error if the
@@ -737,7 +758,7 @@ public slots:
                              [this](qreal p, const QString &s) {
                                  emit progressReported(p, s);
                              },
-                             preloadLoaderVerId);
+                             preloadLoaderVerId, customName);
         }
         if (id.isEmpty())
             emit errorOccurred(error);
@@ -745,7 +766,8 @@ public slots:
             emit installCompleted(id);
     }
 
-    void doInstallProject(const QVariantMap &file, const QString &rootDir)
+    void doInstallProject(const QVariantMap &file, const QString &rootDir,
+                          const QString &customName = QString())
     {
         mc_qt_download_thread_no_pump(1);
         QString fileName = file.value("fileName").toString();
@@ -821,7 +843,7 @@ public slots:
                     [this](qreal p, const QString &s) {
                         emit progressReported(0.45 + 0.55 * p, s);
                     },
-                    &loaderErr);
+                    &loaderErr, customName);
                 mc_qt_download_thread_no_pump(1);
                 if (preloadLoaderVerId.isEmpty()) {
                     error = loaderErr;
@@ -837,13 +859,13 @@ public slots:
                                    [this](qreal p, const QString &s) {
                                        emit progressReported(0.45 + 0.55 * p, s);
                                    },
-                                   preloadLoaderVerId);
+                                   preloadLoaderVerId, customName);
             } else {
                 id = installPack(mrpackPath, rootDir, iconUrl, &error,
                                  [this](qreal p, const QString &s) {
                                      emit progressReported(0.45 + 0.55 * p, s);
                                  },
-                                 preloadLoaderVerId);
+                                 preloadLoaderVerId, customName);
             }
         }
         else
@@ -1024,7 +1046,8 @@ void ModpackManager::startPackInstall(ModpackManager *self, ModpackWorker *worke
     self->m_workerThread->start();
 }
 
-void ModpackManager::installFromFile(const QString &filePath, const QString &rootDir)
+void ModpackManager::installFromFile(const QString &filePath, const QString &rootDir,
+                                      const QString &customName)
 {
     if (busy()) { mc_info("[Pack] Already busy, ignoring"); return; }
     stopWorkerThread();
@@ -1035,20 +1058,21 @@ void ModpackManager::installFromFile(const QString &filePath, const QString &roo
     // (0xC00000FD right after "mrpack downloaded, starting install"). Give the
     // worker room before start().
     m_workerThread->setStackSize(16 * 1024 * 1024);
-    startPackInstall(this, m_worker, [w = m_worker, filePath, rootDir]() {
-        w->doInstallFile(filePath, rootDir);
+    startPackInstall(this, m_worker, [w = m_worker, filePath, rootDir, customName]() {
+        w->doInstallFile(filePath, rootDir, customName);
     });
 }
 
-void ModpackManager::installFromProject(const QVariantMap &file, const QString &rootDir)
+void ModpackManager::installFromProject(const QVariantMap &file, const QString &rootDir,
+                                        const QString &customName)
 {
     if (busy()) { mc_info("[Pack] Already busy, ignoring"); return; }
     stopWorkerThread();
     m_worker = new ModpackWorker;
     m_workerThread = new QThread(this);
     m_workerThread->setStackSize(16 * 1024 * 1024);
-    startPackInstall(this, m_worker, [w = m_worker, file, rootDir]() {
-        w->doInstallProject(file, rootDir);
+    startPackInstall(this, m_worker, [w = m_worker, file, rootDir, customName]() {
+        w->doInstallProject(file, rootDir, customName);
     });
 }
 

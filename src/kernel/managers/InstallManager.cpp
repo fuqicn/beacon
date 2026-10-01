@@ -87,14 +87,7 @@ static QStringList forgeVersionsFromMaven(const QString &mcVersion);
 static QJsonObject forgeProfileFromInstaller(const QByteArray &jarData);
 static QByteArray extractFromJar(const QByteArray &jarData, const QString &entryPath);
 
-// Synchronous loader installer. Reused by both InstallWorker and ModpackManager.
-// Returns true on success; on failure sets *errorOut and returns false.
-// *outVerId receives the installed version id (may be null).
-// progress receives (0..1, status) updates. Safe to call from any thread.
-bool installLoaderSync(const QString &mcVersion, const QString &loader,
-                       const QString &loaderVer, const QString &javaPath,
-                       const QString &dir, QString *errorOut, QString *outVerId,
-                       const std::function<void(qreal, const QString&)> &progress);
+// Translate an official URL using the kernel's mirror config.
 
 // Translate an official URL using the kernel's mirror config.
 // Returns the mirrored URL if a matching rule is found, or the original URL.
@@ -178,8 +171,8 @@ public:
 
 public slots:
     void doInstall(const QString &mcVersion, const QString &loader,
-                   const QString &loaderVer, const QString &javaPath,
-                   const QString &dir)
+                    const QString &loaderVer, const QString &javaPath,
+                    const QString &dir, const QString &customName)
     {
         // Block on the global download pool futures without pumping the Qt event
         // loop.  Concurrent processEvents from this thread and the GUI main
@@ -188,7 +181,8 @@ public slots:
         QString error, verId;
         bool ok = installLoaderSync(
             mcVersion, loader, loaderVer, javaPath, dir, &error, &verId,
-            [this](qreal p, const QString &s) { reportStep(p, s); });
+            [this](qreal p, const QString &s) { reportStep(p, s); },
+            customName);
         if (ok)
             emit installCompleted(verId);
         else
@@ -442,10 +436,62 @@ static QString findJavaForInstall(const QString &mcDir)
 
 // ─── Synchronous loader installer (shared by InstallWorker + ModpackManager) ───
 
+static QString sanitizeLoaderId(const QString &name)
+{
+    QString out;
+    for (QChar c : name) {
+        if (c.isLetterOrNumber() || c == '-' || c == '_')
+            out += c;
+        else if (!out.isEmpty() && !out.endsWith('-'))
+            out += '-';
+    }
+    while (out.startsWith('-')) out = out.mid(1);
+    if (out.isEmpty()) out = "instance";
+    return out.left(48).trimmed();
+}
+
+static QString uniqueLoaderInstanceId(const QString &rootDir, QString base)
+{
+    QString candidate = base;
+    int n = 2;
+    while (QDir(QDir(rootDir).filePath("versions/" + candidate)).exists()) {
+        candidate = base + "-" + QString::number(n++);
+    }
+    return candidate;
+}
+
+// Smart-copy: if another instance already has the base version files we need,
+// copy them into verDir so we don't re-download. Returns true when copied.
+static bool smartCopyBaseVersion(const QString &rootDir, const QString &inheritsFrom,
+                                  const QString &verDir)
+{
+    QDir versions(QDir(rootDir).filePath("versions"));
+    for (const auto &d : versions.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        const QString otherId = d.fileName();
+        if (otherId == inheritsFrom) continue;
+        // Only consider instances whose id contains the target version
+        if (!otherId.contains(inheritsFrom, Qt::CaseInsensitive)) continue;
+        const QString candidateJar = d.filePath() + "/" + otherId + ".jar";
+        const QString candidateJson = d.filePath() + "/" + otherId + ".json";
+        if (!QFileInfo::exists(candidateJar) || !QFileInfo::exists(candidateJson))
+            continue;
+        const QString dstJson = verDir + "/" + inheritsFrom + ".json";
+        const QString dstJar = verDir + "/" + inheritsFrom + ".jar";
+        QDir().mkpath(verDir);
+        QFile::copy(candidateJson, dstJson);
+        QFile::copy(candidateJar, dstJar);
+        mc_info("[Install] Smart-copied base %s from %s into %s",
+                inheritsFrom.toUtf8().constData(), otherId.toUtf8().constData(), verDir.toUtf8().constData());
+        return true;
+    }
+    return false;
+}
+
 bool installLoaderSync(const QString &mcVersion, const QString &loader,
-                       const QString &loaderVer, const QString &javaPath,
-                       const QString &dir, QString *errorOut, QString *outVerId,
-                       const std::function<void(qreal, const QString&)> &progress)
+                        const QString &loaderVer, const QString &javaPath,
+                        const QString &dir, QString *errorOut, QString *outVerId,
+                        const std::function<void(qreal, const QString&)> &progress,
+                        const QString &customName)
 {
     auto fail = [errorOut](const QString &msg) -> bool {
         mc_error("[Install] ERROR: %s", msg.toUtf8().constData());
@@ -556,12 +602,27 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
 
     if (verId.isEmpty()) return fail("Invalid loader profile: missing version ID");
 
+    // Apply custom name if the caller requested one.
+    if (!customName.isEmpty()) {
+        QString baseId = sanitizeLoaderId(customName);
+        verId = uniqueLoaderInstanceId(mcDir, baseId);
+        mc_info("[Install] Using custom instance name: %s (final id=%s)",
+                customName.toUtf8().constData(), verId.toUtf8().constData());
+    }
+
     // Step 2: Save profile JSON
     progress(0.15, "Saving profile");
 
     QString verDir = QDir(mcDir).filePath("versions/" + verId);
     QString verJson = verDir + "/" + verId + ".json";
     QDir().mkpath(verDir);
+
+    // Smart-copy: if the target directory already exists with base version files
+    // (e.g. from a previous install), preserve them instead of re-downloading.
+    if (QFileInfo::exists(verDir) && !inheritsFrom.isEmpty() &&
+        !QFileInfo::exists(verDir + "/" + inheritsFrom + ".jar")) {
+        smartCopyBaseVersion(mcDir, inheritsFrom, verDir);
+    }
 
     {   QFile f(verJson);
         if (f.open(QIODevice::WriteOnly))
@@ -1244,8 +1305,8 @@ void InstallManager::setBusy(bool b)
 }
 
 void InstallManager::installLoader(const QString &mcVersion, const QString &loader,
-                                   const QString &loaderVer, const QString &javaPath,
-                                   const QString &dir)
+                                    const QString &loaderVer, const QString &javaPath,
+                                    const QString &dir, const QString &customName)
 {
     if (m_busy) {
         mc_info("[Install] Already busy, ignoring");
@@ -1299,8 +1360,8 @@ void InstallManager::installLoader(const QString &mcVersion, const QString &load
     m_workerThread->setStackSize(16 * 1024 * 1024);
     m_worker->moveToThread(m_workerThread);
 
-    connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, effectiveJava, dir]() {
-        w->doInstall(mcVersion, loader, loaderVer, effectiveJava, dir);
+    connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, effectiveJava, dir, customName]() {
+        w->doInstall(mcVersion, loader, loaderVer, effectiveJava, dir, customName);
     }, Qt::DirectConnection);
 
     connect(m_worker, &InstallWorker::progressReported, this, [this](qreal p, const QString &s) {

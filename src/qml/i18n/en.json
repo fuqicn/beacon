@@ -207,6 +207,8 @@
   "download.downloadComplete": "Download complete",
   "download.partialFail": "Some files failed to download",
   "download.downloadError": "Download error: %1",
+  "download.instanceName": "Instance name:",
+  "download.instanceNamePlaceholder": "Enter instance name (optional)",
   "settings.javaRuntime": "Java Runtime",
   "settings.javaPath": "Java path",
   "settings.javaPlaceholder": "Leave empty to use built-in Java",

@@ -32,7 +32,8 @@ class InstallWorker;
 bool installLoaderSync(const QString &mcVersion, const QString &loader,
                        const QString &loaderVer, const QString &javaPath,
                        const QString &dir, QString *errorOut, QString *outVerId,
-                       const std::function<void(qreal, const QString &)> &progress);
+                       const std::function<void(qreal, const QString &)> &progress,
+                       const QString &customName = QString());
 
 class InstallManager : public QObject
 {
@@ -50,8 +51,8 @@ public:
     qreal progress() const { return m_progress; }
 
     Q_INVOKABLE void installLoader(const QString &mcVersion, const QString &loader,
-                                   const QString &loaderVer, const QString &javaPath,
-                                   const QString &dir);
+                                    const QString &loaderVer, const QString &javaPath,
+                                    const QString &dir, const QString &customName = QString());
 
     Q_INVOKABLE void fetchLoaderVersions(const QString &mcVersion, const QString &loader);
 

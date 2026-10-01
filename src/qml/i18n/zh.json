@@ -208,6 +208,8 @@
   "download.downloadComplete": "下载完成",
   "download.partialFail": "部分文件下载失败",
   "download.downloadError": "下载错误: %1",
+  "download.instanceName": "实例名称：",
+  "download.instanceNamePlaceholder": "输入实例名称（可选）",
   "settings.javaRuntime": "Java 运行时",
   "settings.javaPath": "Java 路径",
   "settings.javaPlaceholder": "留空使用内置 Java",

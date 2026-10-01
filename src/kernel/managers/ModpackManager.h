@@ -45,8 +45,10 @@ public:
     QString status() const { return m_status; }
     qreal progress() const { return m_progress; }
 
-    Q_INVOKABLE void installFromFile(const QString &filePath, const QString &rootDir);
-    Q_INVOKABLE void installFromProject(const QVariantMap &file, const QString &rootDir);
+    Q_INVOKABLE void installFromFile(const QString &filePath, const QString &rootDir,
+                                      const QString &customName = QString());
+    Q_INVOKABLE void installFromProject(const QVariantMap &file, const QString &rootDir,
+                                        const QString &customName = QString());
     Q_INVOKABLE void cancelAll();
 
 signals:

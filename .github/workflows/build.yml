@@ -210,7 +210,7 @@ jobs:
         if: steps.msvc-cache.outputs.cache-hit != 'true'
         run: |
           choco install visualstudio2022buildtools --yes `
-            --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive"
+            --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --includeRecommended --passive"
 
       - name: Cache Qt 6.8 MSVC (ARM64 cross-compiled)
         uses: actions/cache@v4

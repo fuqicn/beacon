@@ -167,57 +167,43 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-x86
 
-      - name: Clean stale CMake cache (generator mismatch)
-        run: Remove-Item -Recurse -Force launcher/build -ErrorAction SilentlyContinue
+       - name: Clean stale CMake cache (generator mismatch)
+         run: Remove-Item -Recurse -Force launcher/build -ErrorAction SilentlyContinue
 
-      - name: Cache vcpkg
-        uses: actions/cache@v4
-        with:
-          path: C:/vcpkg
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('.github/workflows/build.yml') }}
+       - name: Cache vcpkg
+         uses: actions/cache@v4
+         with:
+           path: C:/vcpkg
+           key: ${{ runner.os }}-vcpkg-${{ env.CACHE_PREFIX }}
 
-      - name: Install zlib via vcpkg
-        run: vcpkg install zlib:x64-windows --triplet x64-windows
+       - name: Install zlib via vcpkg
+         run: vcpkg install zlib:x64-windows --triplet x64-windows
 
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build
-          key: ${{ runner.os }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build (Windows x86_64, MSVC)
-        run: python pack.py --msvc
+       - name: Build (Windows x86_64, MSVC)
+         run: python pack.py --msvc
 
       - uses: actions/upload-artifact@v4
         with:
           name: BeaconLauncher-windows-amd64
           path: dist/BeaconLauncher-windows-amd64.exe
 
-  # ---------------------------------------------------------------- Windows ARM64 (MSVC + Qt 6.8)
-  windows-arm:
-    runs-on: windows-11-arm
-    steps:
-      - uses: actions/checkout@v4
+   # ---------------------------------------------------------------- Windows ARM64 (MSVC + Qt 6.8)
+   windows-arm:
+     runs-on: windows-11-arm
+     steps:
+       - uses: actions/checkout@v4
 
-      - name: Cache MSVC Build Tools (ARM64)
-        uses: actions/cache@v4
-        id: msvc-cache
-        with:
-          path: C:/Program Files/Microsoft Visual Studio
-          key: ${{ runner.os }}-msvc-${{ env.CACHE_PREFIX }}
+       - name: Install MSVC Build Tools (ARM64)
+         run: |
+           choco install visualstudio2022buildtools --yes `
+             --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --includeRecommended --passive"
 
-      - name: Install MSVC Build Tools (ARM64)
-        if: steps.msvc-cache.outputs.cache-hit != 'true'
-        run: |
-          choco install visualstudio2022buildtools --yes `
-            --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --includeRecommended --passive"
-
-      - name: Cache Qt 6.8 MSVC (ARM64 cross-compiled)
-        uses: actions/cache@v4
-        id: qt-cache
-        with:
-          path: C:/Qt/6.8.3/msvc2022_arm64
-          key: ${{ runner.os }}-qt-arm-${{ env.CACHE_PREFIX }}
+       - name: Cache Qt 6.8 MSVC (ARM64 cross-compiled)
+         uses: actions/cache@v4
+         id: qt-cache
+         with:
+           path: C:/Qt/6.8.3/msvc2022_arm64
+           key: ${{ runner.os }}-qt-arm-${{ env.CACHE_PREFIX }}
 
       - name: Install Qt 6.8 (MSVC ARM64 cross-compiled)
         if: steps.qt-cache.outputs.cache-hit != 'true'
@@ -230,28 +216,22 @@ jobs:
           cache: 'true'
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
 
-      - name: Clean stale CMake cache (generator mismatch)
-        run: Remove-Item -Recurse -Force launcher/build-arm -ErrorAction SilentlyContinue
+        - name: Clean stale CMake cache (generator mismatch)
+          run: Remove-Item -Recurse -Force launcher/build-arm -ErrorAction SilentlyContinue
 
-      - name: Cache vcpkg
-        uses: actions/cache@v4
-        with:
-          path: |
-            C:/vcpkg
-            %LOCALAPPDATA%/vcpkg/archives
-          key: ${{ runner.os }}-vcpkg-${{ env.CACHE_PREFIX }}
+        - name: Cache vcpkg
+          uses: actions/cache@v4
+          with:
+            path: |
+              C:/vcpkg
+              C:/Users/runneradmin/AppData/Local/vcpkg/archives
+            key: ${{ runner.os }}-vcpkg-${{ env.CACHE_PREFIX }}
 
-      - name: Install zlib via vcpkg (ARM64)
-        run: vcpkg install zlib:arm64-windows --triplet arm64-windows
+        - name: Install zlib via vcpkg (ARM64)
+          run: vcpkg install zlib:arm64-windows --triplet arm64-windows
 
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: launcher/build-arm
-          key: ${{ runner.os }}-build-arm-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
-
-      - name: Build (Windows ARM64, MSVC)
-        run: python pack.py --msvc --arch arm64 --build-dir build-arm --qt-dir C:/Qt/6.8.3/msvc2022_arm64
+        - name: Build (Windows ARM64, MSVC)
+          run: python pack.py --msvc --arch arm64 --build-dir build-arm --qt-dir C:/Qt/6.8.3/msvc2022_arm64
 
       - uses: actions/upload-artifact@v4
         with:

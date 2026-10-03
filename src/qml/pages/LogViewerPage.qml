@@ -37,6 +37,10 @@ Item {
         return c
     }
 
+    // Track whether the view is currently pinned to the bottom.
+    // Only auto-scroll when pin is active (user hasn't manually scrolled up).
+    property bool followBottom: true
+
     function refresh() {
         logTextArea.text = currentLog()
         if (logTextArea.text.length === 0)
@@ -45,7 +49,16 @@ Item {
         var issues = kernel.diagnoseCrash(logTextArea.text)
         for (var i = 0; i < issues.length; ++i)
             diagModel.append(issues[i])
-        logScroll.contentItem.contentY = logScroll.contentItem.contentHeight
+        if (followBottom)
+            logScroll.contentItem.contentY = logScroll.contentItem.contentHeight
+    }
+
+    Connections {
+        target: logScroll.contentItem
+        function onContentYChanged() {
+            var maxScroll = logScroll.contentItem.contentHeight - logScroll.contentItem.height
+            followBottom = (maxScroll > 0 && logScroll.contentItem.contentY >= maxScroll - 2)
+        }
     }
 
     ListModel { id: diagModel }

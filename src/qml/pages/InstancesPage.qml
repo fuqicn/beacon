@@ -392,7 +392,6 @@ window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
                     hoverEnabled: true
-                    z: 99
                     onEntered: root.hoveredIndex = index
                     onExited: root.hoveredIndex = -1
                 }

@@ -310,14 +310,6 @@ Component.onCompleted: {
             onClicked: kernel.authManager.addMicrosoftAccount()
         }
 
-        Button {
-            Layout.fillWidth: true
-            text: I18n.tr("account.offline")
-            font.weight: Font.Normal
-            enabled: !kernel.authManager.loggingIn
-            onClicked: kernel.authManager.switchToOffline()
-        }
-
         RowLayout {
             Layout.fillWidth: true
             spacing: 12

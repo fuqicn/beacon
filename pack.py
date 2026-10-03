@@ -1145,7 +1145,14 @@ def build_arch_pkg(staging, version, dist, arch_override=None):
         raise PackError("makepkg produced no package")
     out = Path(dist) / ("BeaconLauncher-arch-%s.pkg.tar.zst" % arch)
     out.unlink(missing_ok=True)
-    shutil.copy2(produced[-1], out)
+    # Pick the non-debug package: makepkg also emits a debug package
+    # (even when empty after stripping), which sorts after the main one.
+    non_debug = [p for p in produced if "debug" not in p.name]
+    if non_debug:
+        shutil.copy2(non_debug[-1], out)
+        log("arch package: %s" % out)
+    else:
+        shutil.copy2(produced[-1], out)
     return out
 
 

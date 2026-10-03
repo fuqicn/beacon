@@ -72,6 +72,9 @@ jobs:
           path: ${{ matrix.cache-path }}
           key: ${{ runner.os }}-${{ matrix.distro }}-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
 
+      - name: Clean stale CMake cache (Linux)
+        run: rm -f ${{ matrix.cache-path }}/CMakeCache.txt
+
       - name: Build package (${{ matrix.distro }} x86_64)
         run: python3 pack.py --build-dir ${{ matrix.cache-path }}
 
@@ -134,6 +137,9 @@ jobs:
         with:
           path: ${{ matrix.cache-path }}
           key: ${{ runner.os }}-${{ matrix.distro }}-arm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Clean stale CMake cache (Linux ARM64)
+        run: rm -f ${{ matrix.cache-path }}/CMakeCache.txt
 
       - name: Build package (${{ matrix.distro }} ARM64)
         run: python3 pack.py --build-dir ${{ matrix.cache-path }}

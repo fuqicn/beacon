@@ -167,5 +167,17 @@
     "pack_none_query": "未找到匹配的整合包",
     "java_alternative": "回退至 OpenJDK 下载",
     "mirror_load_ok": "已加载镜像配置",
-    "mirror_load_fail": "加载镜像配置失败"
+    "mirror_load_fail": "加载镜像配置失败",
+    "dpsearch_desc": "搜索和浏览 Modrinth 与 CurseForge 的数据包",
+    "dp_mc_ver": "Minecraft 版本过滤",
+    "dp_none": "未找到数据包",
+    "dp_none_query": "未找到匹配的数据包",
+    "shdsearch_desc": "搜索和浏览 Modrinth 与 CurseForge 的光影包",
+    "shd_mc_ver": "Minecraft 版本过滤",
+    "shd_none": "未找到光影包",
+    "shd_none_query": "未找到匹配的光影包",
+    "rsrcsearch_desc": "搜索和浏览 Modrinth 与 CurseForge 的资源包",
+    "rsrc_mc_ver": "Minecraft 版本过滤",
+    "rsrc_none": "未找到资源包",
+    "rsrc_none_query": "未找到匹配的资源包"
 }

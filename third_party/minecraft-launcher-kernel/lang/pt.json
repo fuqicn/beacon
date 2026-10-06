@@ -139,5 +139,17 @@
     "mirror_load_ok": "Loaded mirror config",
     "mirror_load_fail": "Failed to load mirror config",
     "source_opt": "Fonte de pesquisa",
-    "cf_api_key_opt": "Chave API da CurseForge (não armazenada)"
+    "cf_api_key_opt": "Chave API da CurseForge (não armazenada)",
+    "dpsearch_desc": "Search and browse datapacks from Modrinth and CurseForge",
+    "dp_mc_ver": "Minecraft version filter",
+    "dp_none": "No datapacks found",
+    "dp_none_query": "No datapacks found for",
+    "shdsearch_desc": "Search and browse shader packs from Modrinth and CurseForge",
+    "shd_mc_ver": "Minecraft version filter",
+    "shd_none": "No shader packs found",
+    "shd_none_query": "No shader packs found for",
+    "rsrcsearch_desc": "Search and browse resource packs from Modrinth and CurseForge",
+    "rsrc_mc_ver": "Minecraft version filter",
+    "rsrc_none": "No resource packs found",
+    "rsrc_none_query": "No resource packs found for"
 }

@@ -183,6 +183,10 @@
   "download.tabVersion": "版本下载",
   "download.tabMod": "模组下载",
   "download.tabPack": "整合包下载",
+  "download.tabResource": "资源包",
+  "download.tabShader": "光影包",
+  "download.tabDataPack": "数据包",
+  "download.tabResource": "资源包",
   "download.latestRelease": "最新正式版",
   "download.latestSnapshot": "最新快照版",
   "download.noVersions": "该分类暂无版本",
@@ -326,5 +330,16 @@
   "status.updateDownload": "正在下载更新 %1",
   "status.loaderInstall": "安装加载器",
   "update.later": "稍后提醒",
-  "search.loadingMore": "加载更多..."
+  "search.loadingMore": "加载更多...",
+  "searchResource.title": "资源包搜索",
+  "searchResource.typeResourcepack": "材质包",
+  "searchResource.typeShader": "光影包",
+  "searchResource.typeDatapack": "数据包",
+  "searchResource.placeholder": "搜索资源包...",
+  "searchResource.search": "搜索",
+  "searchResource.noResults": "没有找到相关资源包",
+  "searchResource.installTitle": "安装任务",
+  "searchResource.installDesc": "将安装到 %1 文件夹",
+  "searchResource.install": "下载安装",
+  "searchResource.supportedVersions": "支持的游戏版本"
 }

@@ -40,6 +40,9 @@
   "download.tabVersion": "Versions",
   "download.tabMod": "Mods",
   "download.tabPack": "Modpacks",
+  "download.tabResource": "Packs de ressources",
+  "download.tabShader": "Shaders",
+  "download.tabDataPack": "Packs de données",
   "download.latestRelease": "Dernière version stable",
   "download.latestSnapshot": "Dernier snapshot",
   "download.noVersions": "Aucune version dans cette catégorie",
@@ -197,7 +200,18 @@
   "update.later": "Me le rappeler plus tard",
   "instance.jvmOptimize": "Optimisation JVM",
   "instance.jvmOptimizeDesc": "Applique des drapeaux JVM optimisés pour les performances (G1GC, pré-allocation, etc.)",
-  "search.loadingMore": "Chargement..."
+  "search.loadingMore": "Chargement...",
+  "searchResource.title": "Recherche de packs de ressources",
+  "searchResource.typeResourcepack": "Packs de ressources",
+  "searchResource.typeShader": "Shaders",
+  "searchResource.typeDatapack": "Packs de données",
+  "searchResource.placeholder": "Rechercher des packs de ressources...",
+  "searchResource.search": "Rechercher",
+  "searchResource.noResults": "Aucun pack de ressources trouvé",
+  "searchResource.installTitle": "Tâches d'installation",
+  "searchResource.installDesc": "Sera installé dans le dossier %1",
+  "searchResource.install": "Télécharger et installer",
+  "searchResource.supportedVersions": "Versions de jeu supportées"
 ,
   "download.cancel": "Annuler"
 }

@@ -22,6 +22,7 @@
 #include "AuthManager.h"
 #include "JavaManager.h"
 #include "ModManager.h"
+#include "SearchManager.h"
 #include "InstallManager.h"
 #include "LaunchManager.h"
 #include "InstanceManager.h"
@@ -135,6 +136,7 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     s_instance->m_authManager = new AuthManager(s_instance);
     s_instance->m_javaManager = new JavaManager(s_instance);
     s_instance->m_modManager = new ModManager(s_instance);
+    s_instance->m_searchManager = new SearchManager(s_instance);
     s_instance->m_installManager = new InstallManager(s_instance);
     s_instance->m_modpackManager = new ModpackManager(s_instance);
     s_instance->m_launchManager = new LaunchManager(s_instance);
@@ -228,7 +230,7 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     // Default to "modrinth" — "all" would trigger dual-source network queries
     // on every search, doubling latency and causing frequent UI freezes.
     // Users can switch to "all" in the search page if they want both sources.
-    s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "modrinth").toString();
+    s_instance->m_modSource = s_instance->m_settingsManager->value("mod/source", "all").toString();
     s_instance->emit modSourceChanged();
     mc_info("[Bridge] mod source=%s cfKey=%s",
             s_instance->m_modSource.toUtf8().constData(),

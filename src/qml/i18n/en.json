@@ -182,6 +182,10 @@
   "download.tabVersion": "Version",
   "download.tabMod": "Mod",
   "download.tabPack": "Modpack",
+  "download.tabResource": "Resource packs",
+  "download.tabShader": "Shaders",
+  "download.tabDataPack": "Data packs",
+  "download.tabResource": "Resource packs",
   "download.latestRelease": "Latest release",
   "download.latestSnapshot": "Latest snapshot",
   "download.noVersions": "No versions in this category",
@@ -324,5 +328,16 @@
   "status.updateDownload": "Downloading update %1",
   "status.loaderInstall": "Installing loader",
   "update.later": "Remind me later",
-  "search.loadingMore": "Loading more..."
+  "search.loadingMore": "Loading more...",
+  "searchResource.title": "Resource pack search",
+  "searchResource.typeResourcepack": "Resource packs",
+  "searchResource.typeShader": "Shaders",
+  "searchResource.typeDatapack": "Data packs",
+  "searchResource.placeholder": "Search resource packs...",
+  "searchResource.search": "Search",
+  "searchResource.noResults": "No matching resource packs found",
+  "searchResource.installTitle": "Install tasks",
+  "searchResource.installDesc": "Will install to %1 folder",
+  "searchResource.install": "Download & Install",
+  "searchResource.supportedVersions": "Supported game versions"
 }

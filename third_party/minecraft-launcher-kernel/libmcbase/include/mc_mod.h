@@ -111,4 +111,10 @@ int mc_mod_translate_download_url(const char *url, char *out, size_t out_size);
 // Return 1 if a CurseForge API key has been configured (CF search is enabled).
 int mc_mod_curseforge_available(void);
 
+// Search CurseForge with a custom class ID (e.g. 12=resourcepack, 4472=datapack,
+// 6552=shader). Same result struct as mc_mod_search.
+int mc_mod_search_class(const char *query, const char *mc_version, const char *loader,
+                        int class_id, int limit, int offset, int sort,
+                        McModProject *results, int max_results);
+
 #endif

@@ -80,6 +80,11 @@ function selectCategory(index) {
                 categoryTabs.model = root.categories
                 selectCategory(0)
                 loading = false
+                // Pre-warm all three resource search types so results are ready
+                // when the user switches to any of those tabs.
+                kernel.searchManager.search("", "relevance", 20, "", "", 0, "all", "resourcepack")
+                kernel.searchManager.search("", "relevance", 20, "", "", 0, "all", "shader")
+                kernel.searchManager.search("", "relevance", 20, "", "", 0, "all", "datapack")
             })
         } else {
             kernel.versionManager.fetchManifest()
@@ -124,12 +129,16 @@ function selectCategory(index) {
             Row {
                 anchors.fill: parent
                 spacing: 8
+                layoutDirection: Qt.LeftToRight
 
                 Repeater {
                     model: [
                         { label: I18n.tr("download.tabVersion") },
                         { label: I18n.tr("download.tabMod") },
-                        { label: I18n.tr("download.tabPack") }
+                        { label: I18n.tr("download.tabPack") },
+                        { label: I18n.tr("download.tabResource") },
+                        { label: I18n.tr("download.tabShader") },
+                        { label: I18n.tr("download.tabDataPack") }
                     ]
                     delegate: Item {
                         width: 100
@@ -444,6 +453,117 @@ Item {
                 initialItem: ModpackSearchPage {
                     stackView: packsStack
                     installDialog: modpackInstallDialog
+                }
+                focus: true
+
+                pushEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                }
+                pushExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+                popEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                }
+                popExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+            }
+
+            // ---------------- 资源包下载 ----------------
+            StackView {
+                id: resourceStack
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.modeIndex === 3 ? 1 : 0
+                x: root.modeIndex === 3 ? 0 : (root.modeIndex < 3 ? -48 : 48)
+                Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                initialItem: SearchResourcePage {
+                    type: "resourcepack"
+                    stackView: resourceStack
+                }
+                focus: true
+
+                pushEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                }
+                pushExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+                popEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                }
+                popExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+            }
+
+            // ---------------- 光影包下载 ----------------
+            StackView {
+                id: shaderStack
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.modeIndex === 4 ? 1 : 0
+                x: root.modeIndex === 4 ? 0 : (root.modeIndex < 4 ? -48 : 48)
+                Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                initialItem: SearchResourcePage {
+                    type: "shader"
+                    stackView: shaderStack
+                }
+                focus: true
+
+                pushEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                }
+                pushExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: -item.width; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+                popEnter: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                }
+                popExit: Transition {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { property: "x"; from: 0; to: item.width; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 320; easing.type: Easing.InCubic }
+                }
+            }
+
+            // ---------------- 数据包下载 ----------------
+            StackView {
+                id: dataPackStack
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.modeIndex === 5 ? 1 : 0
+                x: root.modeIndex === 5 ? 0 : (root.modeIndex < 5 ? -48 : 48)
+                Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on x { enabled: Theme.animationsEnabled; NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                initialItem: SearchResourcePage {
+                    type: "datapack"
+                    stackView: dataPackStack
                 }
                 focus: true
 

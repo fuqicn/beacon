@@ -48,6 +48,7 @@ set(KERNEL_SRC
     ${KERNEL_SRC_DIR}/libmcbase/src/mc_library.cpp
     ${KERNEL_SRC_DIR}/libmcbase/src/mc_manifest.cpp
     ${KERNEL_SRC_DIR}/libmcbase/src/mc_mod.cpp
+    ${KERNEL_SRC_DIR}/libmcbase/src/mc_search.cpp
     ${KERNEL_SRC_DIR}/login/private/mc_auth.cpp
     ${KERNEL_SRC_DIR}/login/private/mc_auth_msa.cpp
     ${KERNEL_SRC_DIR}/mcjava/private/mc_java.cpp
@@ -98,6 +99,8 @@ set(MANAGER_SRC
     src/kernel/managers/SkinManager.cpp
     src/kernel/managers/I18nManager.h
     src/kernel/managers/I18nManager.cpp
+    src/kernel/managers/SearchManager.h
+    src/kernel/managers/SearchManager.cpp
     src/kernel/platform/WindowEffects.h
     src/kernel/platform/WindowEffects.cpp
     src/cpp/VersionGroupModel.h
@@ -175,6 +178,8 @@ set(QML_SOURCES
     src/qml/components/ModpackSearchPage.qml
     src/qml/components/ModpackDetailPage.qml
     src/qml/components/ModpackInstallDialog.qml
+    src/qml/components/SearchResourcePage.qml
+    src/qml/components/SearchResultDetailPage.qml
     src/qml/components/OverlayScrollBar.qml
     src/qml/components/UpdatePopup.qml
 )

@@ -308,6 +308,17 @@ int mc_mod_search(const char *query, const char *mc_version, const char *loader,
                            results, max_results);
 }
 
+// Search CurseForge with a custom class ID (e.g. 12=resourcepack, 4472=datapack,
+// 6552=shader). Returns the number of results written. When no CF key is
+// configured and the mcimirror relay is not active, returns 0 immediately.
+int mc_mod_search_class(const char *query, const char *mc_version, const char *loader,
+                        int class_id, int limit, int offset, int sort,
+                        McModProject *results, int max_results) {
+    if (!results || max_results <= 0 || class_id <= 0) return 0;
+    return search_curseforge(query, mc_version, loader, limit, offset, sort,
+                             class_id, results, max_results);
+}
+
 int mc_mod_search_pack(const char *query, const char *mc_version, const char *loader,
                        int limit, int offset, int sort,
                        McModProject *results, int max_results) {

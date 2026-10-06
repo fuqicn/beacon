@@ -29,6 +29,7 @@
 #include "AuthManager.h"
 #include "JavaManager.h"
 #include "ModManager.h"
+#include "SearchManager.h"
 #include "InstallManager.h"
 #include "ModpackManager.h"
 #include "LaunchManager.h"
@@ -51,6 +52,7 @@ class KernelBridge : public QObject
     Q_PROPERTY(AuthManager *authManager READ authManager CONSTANT)
     Q_PROPERTY(JavaManager *javaManager READ javaManager CONSTANT)
     Q_PROPERTY(ModManager *modManager READ modManager CONSTANT)
+    Q_PROPERTY(SearchManager *searchManager READ searchManager CONSTANT)
     Q_PROPERTY(InstallManager *installManager READ installManager CONSTANT)
     Q_PROPERTY(ModpackManager *modpackManager READ modpackManager CONSTANT)
     Q_PROPERTY(LaunchManager *launchManager READ launchManager CONSTANT)
@@ -73,6 +75,7 @@ public:
     AuthManager *authManager() const { return m_authManager; }
     JavaManager *javaManager() const { return m_javaManager; }
     ModManager *modManager() const { return m_modManager; }
+    SearchManager *searchManager() const { return m_searchManager; }
     InstallManager *installManager() const { return m_installManager; }
     ModpackManager *modpackManager() const { return m_modpackManager; }
     LaunchManager *launchManager() const { return m_launchManager; }
@@ -253,6 +256,7 @@ private:
     AuthManager *m_authManager = nullptr;
     JavaManager *m_javaManager = nullptr;
     ModManager *m_modManager = nullptr;
+    SearchManager *m_searchManager = nullptr;
     InstallManager *m_installManager = nullptr;
     ModpackManager *m_modpackManager = nullptr;
     LaunchManager *m_launchManager = nullptr;

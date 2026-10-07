@@ -86,7 +86,23 @@ void mc_search_results_free(McSearchResult *results, int count) {
         mc_search_result_free(&results[i]);
 }
 
-// ---- curseforge api key / mirror ----
+// ---- McSearchFile lifecycle ----
+
+void mc_search_file_free(McSearchFile *f) {
+    if (!f) return;
+    free(f->version_id); free(f->file_id); free(f->file_name);
+    free(f->download_url); free(f->sha1);
+    free(f->version_type); free(f->date_published);
+    memset(f, 0, sizeof(*f));
+}
+
+void mc_search_files_free(McSearchFile *files, int count) {
+    if (!files) return;
+    for (int i = 0; i < count; i++)
+        mc_search_file_free(&files[i]);
+}
+
+// ---- source / mirror config ----
 
 void mc_search_set_cf_api_key(const char *api_key) {
     mc_mod_set_curseforge_api_key(api_key);
@@ -96,122 +112,33 @@ void mc_search_set_mirror(const char *mirror) {
     mc_mod_set_mirror(mirror);
 }
 
-// ---- shared search implementation (Modrinth + optional CurseForge) ----
+// ---- type → strings ----
 
 static const char *modrinth_project_type_str(int type) {
     switch (type) {
-        case MC_SEARCH_TYPE_DATAPACK:  return "datapack";
-        case MC_SEARCH_TYPE_SHADER:    return "shader";
-        case MC_SEARCH_TYPE_RESOURCEPACK: return "resourcepack";
+        case MC_SEARCH_TYPE_DATAPACK:       return "datapack";
+        case MC_SEARCH_TYPE_SHADER:         return "shader";
+        case MC_SEARCH_TYPE_RESOURCEPACK:   return "resourcepack";
         default: return "mod";
     }
 }
 
 static int cf_class_for_type(int type) {
     switch (type) {
-        case MC_SEARCH_TYPE_DATAPACK:  return 4472;
-        case MC_SEARCH_TYPE_SHADER:    return 6552;
-        case MC_SEARCH_TYPE_RESOURCEPACK: return 12;
+        case MC_SEARCH_TYPE_DATAPACK:       return 4472;
+        case MC_SEARCH_TYPE_SHADER:         return 6552;
+        case MC_SEARCH_TYPE_RESOURCEPACK:   return 12;
         default: return 6;
     }
 }
 
-static int cf_source_for_type(int type) {
-    switch (type) {
-        case MC_SEARCH_TYPE_DATAPACK:  return MC_MOD_CURSEFORGE;
-        case MC_SEARCH_TYPE_SHADER:    return MC_MOD_CURSEFORGE;
-        case MC_SEARCH_TYPE_RESOURCEPACK: return MC_MOD_CURSEFORGE;
-        default: return MC_MOD_CURSEFORGE;
-    }
-}
+// ---- Modrinth search ----
 
-static int parse_modrinth_hit(const QJsonObject &obj, int type,
-                              McSearchResult *r, bool fetch_primary_file) {
-    r->id         = strdup_qstring(safe_string(obj, "project_id"));
-    if (!r->id) r->id = strdup_qstring(safe_string(obj, "id"));
-    r->slug       = strdup_qstring(safe_string(obj, "slug"));
-    r->name       = strdup_qstring(safe_string(obj, "title"));
-    r->description = strdup_qstring(safe_string(obj, "description"));
-    r->logo_url   = strdup_qstring(safe_string(obj, "icon_url"));
-    r->download_count = safe_int(obj, "downloads");
-    r->project_type = strdup_qstring(modrinth_project_type_str(type));
-    r->source = strdup_qstring("Modrinth");
-
-    QStringList vers = safe_string_array(obj, "versions");
-    if (!vers.isEmpty())
-        r->game_versions = strdup_qstring(vers.join(", "));
-    else {
-        QStringList gv = safe_string_array(obj, "game_versions");
-        if (!gv.isEmpty())
-            r->game_versions = strdup_qstring(gv.join(", "));
-    }
-    QStringList loaders = safe_string_array(obj, "loaders");
-    if (!loaders.isEmpty())
-        r->loaders = strdup_qstring(loaders.join(", "));
-
-    // Fetch the most recent primary file's download URL
-    if (fetch_primary_file) {
-        QJsonArray files = obj.value("files").toArray();
-        for (auto fval : files) {
-            QJsonObject fo = fval.toObject();
-            // Prefer release type; otherwise pick first
-            QString vt = safe_string(fo, "version_type");
-            if (vt == "release" || files.size() == 1) {
-                QJsonArray fa = fo.value("files").toArray();
-                if (!fa.isEmpty()) {
-                    QJsonObject fi = fa.first().toObject();
-                    r->download_url = strdup_qstring(safe_string(fi, "url"));
-                    r->size = safe_int64(fi, "size");
-                }
-                break;
-            }
-        }
-    }
-    return 1;
-}
-
-static int parse_cf_hit(const QJsonObject &obj, int type,
-                        McSearchResult *r, bool fetch_primary_file) {
-    r->id         = strdup_qstring(QString::number(safe_int(obj, "id")));
-    r->slug       = strdup_qstring(safe_string(obj, "slug"));
-    r->name       = strdup_qstring(safe_string(obj, "name"));
-    r->description = strdup_qstring(safe_string(obj, "summary"));
-    r->download_count = safe_int(obj, "downloadCount");
-    r->project_type = strdup_qstring(modrinth_project_type_str(type));
-    r->source = strdup_qstring("CurseForge");
-    r->logo_url = strdup_qstring(safe_string(obj.value("logo").toObject(), "thumbnailUrl"));
-
-    QStringList gv = safe_string_array(obj, "gameVersions");
-    if (!gv.isEmpty())
-        r->game_versions = strdup_qstring(gv.join(", "));
-
-    QStringList loaders = safe_string_array(obj, "modLoaders");
-    if (!loaders.isEmpty())
-        r->loaders = strdup_qstring(loaders.join(", "));
-
-    if (fetch_primary_file) {
-        QJsonArray files = obj.value("latestFiles").toArray();
-        for (auto fval : files) {
-            QJsonObject fo = fval.toObject();
-            QString vt_s = safe_string(fo, "releaseType");
-            int rt = vt_s == "release" ? 1 : (vt_s == "beta" ? 2 : 3);
-            if (rt == 1 || files.size() == 1) {
-                r->download_url = strdup_qstring(safe_string(fo, "downloadUrl"));
-                r->size = (long long)safe_int(fo, "fileLength");
-                break;
-            }
-        }
-    }
-    return 1;
-}
-
-// Search Modrinth for a given type (datapack / shader / resourcepack)
 static int search_modrinth_type(const char *query, const char *mc_version,
                                  const char *loader, int type,
                                  int limit, int offset, int sort,
                                  McSearchResult *results, int max_results) {
-    QString url = QString("%1/search?limit=%2")
-        .arg("https://api.modrinth.com/v2")
+    QString url = QString("https://api.modrinth.com/v2/search?limit=%1")
         .arg(qMin(limit, 50));
 
     if (offset > 0) url += "&offset=" + QString::number(offset);
@@ -255,123 +182,111 @@ static int search_modrinth_type(const char *query, const char *mc_version,
         QJsonObject obj = hit.toObject();
         McSearchResult *r = &results[count];
         mc_search_result_init(r);
-        parse_modrinth_hit(obj, type, r, true);
+
+        r->id         = strdup_qstring(safe_string(obj, "project_id"));
+        if (!r->id) r->id = strdup_qstring(safe_string(obj, "id"));
+        r->slug       = strdup_qstring(safe_string(obj, "slug"));
+        r->name       = strdup_qstring(safe_string(obj, "title"));
+        r->description = strdup_qstring(safe_string(obj, "description"));
+        r->logo_url   = strdup_qstring(safe_string(obj, "icon_url"));
+        r->download_count = safe_int(obj, "downloads");
+        r->project_type = strdup_qstring(modrinth_project_type_str(type));
+        r->source     = strdup_qstring("Modrinth");
+
+        QStringList vers = safe_string_array(obj, "versions");
+        if (!vers.isEmpty())
+            r->game_versions = strdup_qstring(vers.join(", "));
+        else {
+            QStringList gv = safe_string_array(obj, "game_versions");
+            if (!gv.isEmpty())
+                r->game_versions = strdup_qstring(gv.join(", "));
+        }
+        QStringList loaders = safe_string_array(obj, "loaders");
+        if (!loaders.isEmpty())
+            r->loaders = strdup_qstring(loaders.join(", "));
+
+        // Modrinth search results do not include file artifacts. Build a
+        // best-effort CDN URL from project_id + latest_version so the
+        // consumer has at least a link to follow.
+        // Pattern: https://cdn.modrinth.com/data/{project_id}/versions/{version_id}/
+        QString latest_ver = safe_string(obj, "latest_version");
+        if (!latest_ver.isEmpty() && r->id && r->id[0]) {
+            r->download_url = strdup_qstring(
+                QString("https://cdn.modrinth.com/data/%1/versions/%2/")
+                    .arg(r->id, latest_ver).toUtf8().constData());
+        }
         count++;
     }
     return count;
 }
 
-// Search CurseForge for a given type
+// ---- CurseForge search (delegates to mc_mod_search_class) ----
+
 static int search_curseforge_type(const char *query, const char *mc_version,
-                                   const char *loader, int type,
-                                   int limit, int offset, int sort,
-                                   McSearchResult *results, int max_results) {
+                                    const char *loader, int type,
+                                    int limit, int offset, int sort,
+                                    McSearchResult *results, int max_results) {
     if (!mc_mod_curseforge_available()) return 0;
 
     int class_id = cf_class_for_type(type);
-    QString url = QString("https://api.curseforge.com/v1/mods/search?gameId=432&classId=%1&pageSize=%2&index=%3")
-        .arg(class_id).arg(qMin(limit, 100)).arg(offset);
-
-    if (query && query[0])
-        url += "&searchFilter=" + QUrl::toPercentEncoding(QString::fromUtf8(query));
-    if (mc_version && mc_version[0])
-        url += "&gameVersion=" + QUrl::toPercentEncoding(QString::fromUtf8(mc_version));
-    if (loader && loader[0]) {
-        const char *lt = loader;
-        if (strcmp(lt, "forge") == 0) lt = "1";
-        else if (strcmp(lt, "fabric") == 0) lt = "4";
-        else if (strcmp(lt, "neoforge") == 0) lt = "6";
-        else lt = "1";
-        url += QString("&modLoaderType=%1").arg(lt);
-    }
-    if (sort == MC_SEARCH_SORT_NEWEST) url += "&sortField=1";
-    else if (sort == MC_SEARCH_SORT_UPDATED) url += "&sortField=2";
-    else url += "&sortField=6&sortOrder=desc";
-
-    // Mirror translate
-    HttpClient client;
-    mc_http_init(&client);
-    mc_http_set_timeout(&client, 15000);
-
-    // Translate URL through mirror
-    char translated_url[4096];
-    strncpy(translated_url, url.toUtf8().constData(), sizeof(translated_url) - 1);
-    translated_url[sizeof(translated_url) - 1] = '\0';
-
-    // Apply modrinth-style mirror (same mechanism)
-    QString qurl = url;
-    apply_mod_mirror(qurl);
-    strncpy(translated_url, qurl.toUtf8().constData(), sizeof(translated_url) - 1);
-
-    char *api_hdr = nullptr;
-    const char *cf_key = nullptr;
-    // Access the internal CF API key via mc_mod's mirror translation path
-    // We use mc_mod_get_project_cf indirectly — instead, just use the generic CF search
-    // that mc_mod already handles via mc_mod_search with the right class_id
-
-    // Reuse mc_mod's search with the right class_id by calling search_curseforge
-    // But we need our own McSearchResult. Instead, let's call mc_mod_search_pack
-    // with a custom approach.
-    // Actually, let's just use the same pattern as mc_mod.cpp
-    // Use the internal approach: call search_curseforge via the existing mc_mod functions
-    // and convert results.
-    (void)cf_key; (void)api_hdr;
-
-    // Fallback: use mc_mod's internal search and convert
-    McModProject *cf_results = (McModProject *)malloc(sizeof(McModProject) * (size_t)max_results);
+    McModProject *cf_results = (McModProject *)malloc(
+        sizeof(McModProject) * (size_t)max_results);
     if (!cf_results) return 0;
-    int cf_count = mc_mod_search(query, mc_version, loader,
-                                  MC_MOD_CURSEFORGE, limit, offset, sort,
-                                  cf_results, max_results);
-    // mc_mod_search only searches mods (classId=6); we need classId for our type
-    // Instead, let's just use mc_mod_search_pack which searches modpacks
-    // For now, fall through to Modrinth-only path when CF key is not available
-    free(cf_results);
+    int cf_count = mc_mod_search_class(query, mc_version, loader,
+                                        class_id, limit, offset, sort,
+                                        cf_results, max_results);
+    if (cf_count <= 0) { free(cf_results); return 0; }
 
-    // Direct CF search without going through mc_mod (which is mod-specific)
-    // We need to build the request ourselves
-    HttpClient cf_client;
-    mc_http_init(&cf_client);
-    mc_http_set_timeout(&cf_client, 15000);
-
-    // Get API key from environment or config
-    const char *key_env = getenv("CF_API_KEY");
-    char api_header[512];
-    const char *headers[1];
-    int hdr_count = 0;
-    if (key_env && key_env[0]) {
-        snprintf(api_header, sizeof(api_header), "x-api-key: %s", key_env);
-        headers[0] = api_header;
-        hdr_count = 1;
-    }
-
-    McHttpResponse *resp = hdr_count > 0
-        ? mc_http_get_with_headers(&cf_client, translated_url, (const char**)headers, hdr_count)
-        : mc_http_get(&cf_client, translated_url);
-
-    if (!resp || !resp->success || resp->status_code != 200) {
-        if (resp) mc_http_response_free(resp);
-        return 0;
-    }
-
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(QByteArray(resp->data, (int)resp->data_len), &err);
-    mc_http_response_free(resp);
-    if (err.error != QJsonParseError::NoError) return 0;
-
-    QJsonObject root = doc.object();
-    QJsonArray data = root.value("data").toArray();
     int count = 0;
-    for (auto item : data) {
-        if (count >= max_results) break;
-        QJsonObject obj = item.toObject();
+    for (int i = 0; i < cf_count; i++) {
         McSearchResult *r = &results[count];
+        McModProject *p = &cf_results[i];
+
         mc_search_result_init(r);
-        parse_cf_hit(obj, type, r, true);
+        r->id         = strdup_qstring(p->id);
+        r->slug       = strdup_qstring(p->slug);
+        r->name       = strdup_qstring(p->name);
+        r->description = strdup_qstring(p->description);
+        r->logo_url   = strdup_qstring(p->logo_url);
+        r->download_count = p->download_count;
+        const char *pt = modrinth_project_type_str(class_id == 12 ? MC_SEARCH_TYPE_RESOURCEPACK
+                                                                   : class_id == 4472 ? MC_SEARCH_TYPE_DATAPACK
+                                                                   : class_id == 6552 ? MC_SEARCH_TYPE_SHADER
+                                                                                      : MC_SEARCH_TYPE_DATAPACK);
+        r->project_type = strdup_qstring(pt);
+        r->source     = strdup_qstring("CurseForge");
+        r->game_versions = strdup_qstring(p->game_versions);
+        r->loaders   = strdup_qstring(p->loaders);
+
+        // Fetch primary file download URL via mc_mod_get_versions
+        McModFile files[20];
+        int fc = mc_mod_get_versions(p->id, MC_MOD_CURSEFORGE,
+                                      mc_version, loader, files, 20);
+        for (int j = 0; j < fc; j++) {
+            if (files[j].release_type &&
+                (strcmp(files[j].release_type, "release") == 0 || fc == 1)) {
+                r->download_url = strdup_qstring(files[j].download_url);
+                r->size = files[j].size;
+                break;
+            }
+        }
+        if (!r->download_url && fc > 0) {
+            r->download_url = strdup_qstring(files[0].download_url);
+            r->size = files[0].size;
+        }
+        for (int j = 0; j < fc; j++)
+            mc_mod_file_free(&files[j]);
+
         count++;
     }
+
+    for (int i = 0; i < cf_count; i++)
+        mc_mod_project_free(&cf_results[i]);
+    free(cf_results);
     return count;
 }
+
+// ---- Public API ----
 
 int mc_search(const char *query, const char *mc_version,
               const char *loader, int type,
@@ -398,4 +313,105 @@ int mc_search(const char *query, const char *mc_version,
     return search_modrinth_type(query, mc_version, loader, type,
                                  limit_clamped, offset, sort,
                                  results, max_results);
+}
+
+// ---- mc_search_get_files implementation ----
+// Fetches the version list for a Modrinth project and resolves the primary
+// file download URL for each entry. Mirrors the same logic as
+// mc_mod_get_versions in mc_mod.cpp but returns McSearchFile structs.
+
+int mc_search_get_files(const char *project_id,
+                        const char *mc_version, const char *loader,
+                        McSearchFile *out, int max_files) {
+    if (!project_id || !out || max_files <= 0) return 0;
+
+    QString url = QString("https://api.modrinth.com/v2/project/%1/version")
+        .arg(QString::fromUtf8(project_id));
+    apply_mod_mirror(url);
+
+    HttpClient client;
+    mc_http_init(&client);
+    mc_http_set_timeout(&client, 15000);
+    McHttpResponse *resp = mc_http_get(&client, url.toUtf8().constData());
+    if (!resp || !resp->success || resp->status_code != 200) {
+        if (resp) mc_http_response_free(resp);
+        return 0;
+    }
+
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(QByteArray(resp->data, (int)resp->data_len), &err);
+    mc_http_response_free(resp);
+    if (err.error != QJsonParseError::NoError) return 0;
+
+    int count = 0;
+    QJsonArray data = doc.array();
+    for (auto item : data) {
+        if (count >= max_files) break;
+        QJsonObject obj = item.toObject();
+
+        // Filter by MC version
+        if (mc_version && mc_version[0]) {
+            QJsonArray gv = obj.value("game_versions").toArray();
+            bool match = false;
+            for (auto v : gv) {
+                if (v.toString() == QString::fromUtf8(mc_version)) {
+                    match = true; break;
+                }
+            }
+            if (!match) continue;
+        }
+
+        // Filter by loader
+        if (loader && loader[0]) {
+            QJsonArray ld = obj.value("loaders").toArray();
+            bool match = false;
+            for (auto v : ld) {
+                if (v.toString() == QString::fromUtf8(loader)) {
+                    match = true; break;
+                }
+            }
+            if (!match) continue;
+        }
+
+        McSearchFile *f = &out[count];
+        memset(f, 0, sizeof(*f));
+        f->version_id   = strdup_qstring(safe_string(obj, "id"));
+        f->file_name    = strdup_qstring(safe_string(obj, "name"));
+        f->version_type = strdup_qstring(safe_string(obj, "version_type"));
+        f->date_published = strdup_qstring(safe_string(obj, "date_published"));
+        f->is_primary   = 0;
+
+        // Grab the primary file entry from this version
+        QJsonArray fileArr = obj.value("files").toArray();
+        for (auto fv : fileArr) {
+            QJsonObject fi = fv.toObject();
+            bool primary = safe_int(fi, "primary");
+            if (primary) f->is_primary = 1;
+            if (!f->file_id)
+                f->file_id   = strdup_qstring(safe_string(fi, "id"));
+            if (!f->download_url)
+                f->download_url = strdup_qstring(safe_string(fi, "url"));
+            if (!f->sha1)
+                f->sha1 = strdup_qstring(
+                    safe_string(fi.value("hashes").toObject(), "sha1"));
+            if (!f->file_name || !f->file_name[0])
+                f->file_name = strdup_qstring(safe_string(fi, "filename"));
+            if (!f->size)
+                f->size = safe_int64(fi, "size");
+        }
+
+        // Fallback: use latest_version as a CDN hint if no file entry had a URL
+        if (!f->download_url) {
+            QString lv = safe_string(obj, "id"); // version id itself
+            if (!lv.isEmpty()) {
+                f->download_url = strdup_qstring(
+                    QString("https://cdn.modrinth.com/data/%1/versions/%2/")
+                        .arg(QString::fromUtf8(project_id), lv)
+                        .toUtf8().constData());
+            }
+        }
+
+        count++;
+    }
+    return count;
 }

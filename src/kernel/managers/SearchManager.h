@@ -73,6 +73,7 @@ public:
                             const QString &type);
     Q_INVOKABLE void getProject(const QString &projectId, const QString &source,
                                  const QString &type);
+    Q_INVOKABLE void getFiles(const QString &projectId, const QString &type);
     Q_INVOKABLE void installResult(const QVariantMap &result, const QString &rootDir);
     Q_INVOKABLE void cancelTask(int index);
     Q_INVOKABLE void retryTask(int index);
@@ -85,6 +86,7 @@ signals:
     // Emitted with the search type so pages can filter out irrelevant results.
     void searchResultReady(const QVariantList &results, const QString &type);
     void projectLoaded(const QVariantMap &project);
+    void filesLoaded(const QVariantList &files);
     void installCompleted(bool success, const QString &path);
     void errorOccurred(const QString &message);
 

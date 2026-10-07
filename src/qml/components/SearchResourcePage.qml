@@ -369,7 +369,8 @@ Item {
             root.stackView.push(Qt.resolvedUrl("SearchResultDetailPage.qml"), {
                 stackView: root.stackView,
                 result: result,
-                type: root.type
+                type: root.type,
+                downloadDialog: root.downloadDialog
             })
     }
 

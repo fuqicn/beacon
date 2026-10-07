@@ -116,8 +116,28 @@ int main(int argc, char **argv) {
                           r->download_count,
                           r->game_versions ? r->game_versions : "",
                           r->source ? r->source : "");
+
+        // Resolve accurate download URL via the files API (Modrinth search
+        // hits carry only latest_version; real file metadata is in /version).
+        if (r->source && strcmp(r->source, "Modrinth") == 0) {
+            McSearchFile files[5];
+            int fc = mc_search_get_files(r->id, mc_version, loader,
+                                         files, 5);
+            for (int j = 0; j < fc; j++) {
+                if (files[j].download_url && files[j].download_url[0]) {
+                    // Always replace the best-effort CDN path with the real URL
+                    free(r->download_url);
+                    r->download_url = strdup(files[j].download_url);
+                    if (!r->size)
+                        r->size = files[j].size;
+                    break;
+                }
+            }
+            mc_search_files_free(files, fc);
+        }
+
         if (r->download_url && r->download_url[0])
-            mc_console_printf("  %s\n", r->download_url);
+            mc_console_printf("  DL: %s\n", r->download_url);
         if (r->description && r->description[0]) {
             std::string desc = r->description;
             if (desc.length() > 90) desc = desc.substr(0, 87) + "...";

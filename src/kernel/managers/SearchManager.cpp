@@ -208,6 +208,35 @@ void SearchManager::getProject(const QString &, const QString &, const QString &
     emit errorOccurred(QString());
 }
 
+void SearchManager::getFiles(const QString &projectId, const QString &type)
+{
+    McSearchFile out[100];
+    for (int i = 0; i < 100; ++i) memset(&out[i], 0, sizeof(McSearchFile));
+
+    int count = mc_search_get_files(
+        projectId.toUtf8().constData(),
+        nullptr,   // mc_version — not needed here
+        nullptr,   // loader
+        out, 100);
+
+    QVariantList list;
+    for (int i = 0; i < count; ++i) {
+        QVariantMap m;
+        m["id"]             = QString::fromUtf8(out[i].file_id);
+        m["fileName"]       = QString::fromUtf8(out[i].file_name);
+        m["downloadUrl"]    = QString::fromUtf8(out[i].download_url);
+        m["sha1"]           = QString::fromUtf8(out[i].sha1);
+        m["size"]           = (qlonglong)out[i].size;
+        m["versionType"]    = QString::fromUtf8(out[i].version_type);
+        m["datePublished"]  = QString::fromUtf8(out[i].date_published);
+        m["isPrimary"]      = out[i].is_primary;
+        list.append(m);
+        mc_search_file_free(&out[i]);
+    }
+
+    emit filesLoaded(list);
+}
+
 void SearchManager::installResult(const QVariantMap &result, const QString &rootDir)
 {
     QString fileName = result.value("fileName").toString();

@@ -341,5 +341,13 @@
   "searchResource.installTitle": "安装任务",
   "searchResource.installDesc": "将安装到 %1 文件夹",
   "searchResource.install": "下载安装",
-  "searchResource.supportedVersions": "支持的游戏版本"
+  "searchResource.supportedVersions": "支持的游戏版本",
+  "searchResource.selectInstance": "选择实例",
+  "searchResource.installToInstance": "安装到 %1",
+  "searchResource.versionNotFound": "未找到对应实例版本，是否继续下载？",
+  "searchResource.continueDownload": "继续下载",
+  "searchResource.sharedModsDir": "共享模组目录",
+  "searchResource.instances": "Minecraft 目录",
+  "searchResource.downloadDir": "下载 Minecraft 目录",
+  "searchResource.noInstances": "未添加任何目录"
 }

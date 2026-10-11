@@ -33,7 +33,24 @@ Rectangle {
     readonly property bool packBusy: kernel.modpackManager.busy
     readonly property bool installBusy: kernel.installManager.busy
     readonly property bool updBusy: kernel.updateDownloading
-    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy
+    // 搜索任务（资源包/光影包/数据包）
+    readonly property var searchTasks: kernel.searchManager.tasks || []
+    readonly property bool searchBusy: {
+        for (var i = 0; i < searchTasks.length; i++) {
+            var s = searchTasks[i].status
+            if (s === "queued" || s === "downloading" || s === "cancelling") return true
+        }
+        return false
+    }
+    readonly property bool searchFinished: {
+        for (var i = 0; i < searchTasks.length; i++) {
+            var s = searchTasks[i].status
+            if (s === "success" || s === "failed" || s === "cancelled")
+                return true
+        }
+        return false
+    }
+    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy || root.searchBusy
 
     height: root.anyVisible ? content.implicitHeight + 32 : 0
     radius: Theme.shapeExtraLarge
@@ -106,10 +123,48 @@ Rectangle {
     Connections {
         target: kernel.modManager
         function onTasksChanged() {
-            if (kernel.modManager.busy) {
-                root.autoCloseTimer.stop()
+            if (!kernel.modManager.busy && kernel.modManager.tasks && kernel.modManager.tasks.length > 0) {
+                // 下载完成时立即清除已完成的任务
+                kernel.modManager.clearFinished()
+            }
+        }
+    }
+
+    // Auto-close search card shortly after all search tasks reach a terminal state.
+    Timer {
+        id: searchAutoCloseTimer
+        interval: 1600
+        repeat: false
+        onTriggered: kernel.searchManager.clearFinished()
+    }
+
+    function hasActiveSearchTasks() {
+        var ts = kernel.searchManager.tasks || []
+        for (var i = 0; i < ts.length; i++) {
+            var s = ts[i].status
+            if (s === "queued" || s === "downloading" || s === "cancelling")
+                return true
+        }
+        return false
+    }
+
+    function maybeAutoCloseSearch() {
+        if (kernel.searchManager.tasks && kernel.searchManager.tasks.length > 0
+                && !root.hasActiveSearchTasks()) {
+            root.searchAutoCloseTimer.restart()
+        } else {
+            root.searchAutoCloseTimer.stop()
+        }
+    }
+
+    Connections {
+        target: kernel.searchManager
+        function onTasksChanged() {
+            if (kernel.searchManager.busy) {
+                root.searchAutoCloseTimer.stop()
             } else {
-                root.maybeAutoCloseMods()
+                // 下载完成时立即清除已完成的任务
+                kernel.searchManager.clearFinished()
             }
         }
     }
@@ -197,6 +252,65 @@ Rectangle {
                      || (root.installBusy && root.updBusy)
         }
 
+        // ================= Search tasks (resource/shader/datapack) =================
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+            visible: root.searchTasks.length > 0
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                AppIcon {
+                    iconName: "download"
+                    iconSize: 14
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: I18n.tr("searchResource.installTitle")
+                    font.pixelSize: 12; font.weight: Font.DemiBold
+                    color: palette.text; elide: Text.ElideRight
+                    Layout.alignment: Qt.AlignVCenter
+                }
+            }
+
+            ListView {
+                id: searchTaskListView
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(root.searchTasks.length * 36, 144)
+                implicitHeight: Math.min(root.searchTasks.length * 36, 144)
+                clip: true
+                model: root.searchTasks
+                spacing: 2
+                interactive: root.searchTasks.length > 4
+                ScrollBar.vertical: OverlayScrollBar {
+                    policy: ScrollBar.AsNeeded
+                    width: 6
+                }
+
+                delegate: DownloadCard {
+                    width: searchTaskListView.width
+                    dense: false
+                    title: modelData.name || modelData.fileName || ""
+                    subtitle: (modelData.status === "downloading" && (modelData.total || 0) > 0)
+                              ? root.formatBytes(modelData.received || 0) + " / " + root.formatBytes(modelData.total)
+                              : ""
+                    progress: modelData.progress || 0
+                    indeterminate: false
+                    speedText: root.formatSpeed(modelData.speedBytes || 0)
+                    statusText: root.statusText(modelData.status, modelData.progress, modelData.received, modelData.total)
+                    statusColor: root.statusColor(modelData.status)
+                    showCancel: modelData.status === "queued" || modelData.status === "downloading"
+                    showRetry: modelData.status === "failed" || modelData.status === "cancelled"
+                    onCancelRequested: kernel.searchManager.cancelTask(index)
+                    onRetryRequested: kernel.searchManager.retryTask(index)
+                }
+            }
+        }
+
         // ================= Mod install tasks =================
         ColumnLayout {
             Layout.fillWidth: true
@@ -246,7 +360,7 @@ Rectangle {
 
                 delegate: DownloadCard {
                     width: taskListView.width
-                    dense: true
+                    dense: false
                     title: modelData.name || modelData.fileName || ""
                     subtitle: (modelData.status === "downloading" && (modelData.total || 0) > 0)
                               ? root.formatBytes(modelData.received || 0) + " / " + root.formatBytes(modelData.total)

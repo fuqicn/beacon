@@ -339,5 +339,13 @@
   "searchResource.installTitle": "Install tasks",
   "searchResource.installDesc": "Will install to %1 folder",
   "searchResource.install": "Download & Install",
-  "searchResource.supportedVersions": "Supported game versions"
+  "searchResource.supportedVersions": "Supported game versions",
+  "searchResource.selectInstance": "Select Instance",
+  "searchResource.installToInstance": "Install to %1",
+  "searchResource.versionNotFound": "Instance version not found, continue download?",
+  "searchResource.continueDownload": "Continue",
+  "searchResource.sharedModsDir": "Shared Mods Directory",
+  "searchResource.instances": "Minecraft Directories",
+  "searchResource.downloadDir": "Download to Minecraft Directory",
+  "searchResource.noInstances": "No directories added"
 }

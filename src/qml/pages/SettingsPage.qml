@@ -77,7 +77,6 @@ Item {
                     + " count=" + langCombo.count
                     + " text=" + langCombo.currentText)
 
-        javaPathInput.text = kernel.settingsManager.value("java/path", "")
         var memModeVal = kernel.settingsManager.value("java/memoryMode", "auto")
         for (var _mm = 0; _mm < memMode.model.length; ++_mm)
             if (memMode.model[_mm].key === memModeVal) { memMode.currentIndex = _mm; break }
@@ -132,53 +131,6 @@ Item {
             anchors.top: parent.top
             anchors.margins: 24
             spacing: 16
-
-            // Java settings
-            Text {
-                text: I18n.tr("settings.javaRuntime")
-                font.pixelSize: 18; font.weight: Font.Medium
-                color: palette.text
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: javaInner.implicitHeight + 32
-                radius: Theme.shapeMedium
-                color: Theme.surfaceContainer
-                ColumnLayout {
-                    id: javaInner
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-
-                        Text { text: I18n.tr("settings.javaPath"); color: palette.placeholderText; font.pixelSize: 14 }
-                        TextField {
-                            id: javaPathInput
-                            Layout.fillWidth: true
-                            placeholderText: I18n.tr("settings.javaPlaceholder")
-                            font.pixelSize: 13
-                            onTextChanged: {
-                                kernel.settingsManager.endInstance()
-                                kernel.settingsManager.setValue("java/path", text)
-                            }
-                        }
-                        Button {
-                            text: I18n.tr("settings.scan")
-                            font.weight: Font.Normal
-                            onClicked: { kernel.javaManager.findJava() }
-                        }
-                    }
-
-                    Text {
-                        text: I18n.tr("settings.javaDetected").replace("%1", String(kernel.javaManager.runtimes.length))
-                        font.pixelSize: 12; color: palette.placeholderText
-                    }
-                }
-            }
 
             // Memory settings
             Text {

@@ -180,6 +180,7 @@ set(QML_SOURCES
     src/qml/components/ModpackInstallDialog.qml
     src/qml/components/SearchResourcePage.qml
     src/qml/components/SearchResultDetailPage.qml
+    src/qml/components/SearchDownloadDialog.qml
     src/qml/components/OverlayScrollBar.qml
     src/qml/components/UpdatePopup.qml
 )

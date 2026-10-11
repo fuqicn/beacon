@@ -211,7 +211,15 @@
   "searchResource.installTitle": "インストールタスク",
   "searchResource.installDesc": "%1 フォルダにインストールされます",
   "searchResource.install": "ダウンロード＆インストール",
-  "searchResource.supportedVersions": "対応ゲームバージョン"
+  "searchResource.supportedVersions": "対応ゲームバージョン",
+  "searchResource.selectInstance": "インスタンスを選択",
+  "searchResource.installToInstance": "%1 にインストール",
+  "searchResource.versionNotFound": "インスタンスバージョンが見つかりません。続けますか？",
+  "searchResource.continueDownload": "続行",
+  "searchResource.sharedModsDir": "共有Modsディレクトリ",
+  "searchResource.instances": "Minecraftディレクトリ",
+  "searchResource.downloadDir": "Minecraftディレクトリにダウンロード",
+  "searchResource.noInstances": "ディレクトリが追加されていません"
 ,
   "download.cancel": "キャンセル"
 }

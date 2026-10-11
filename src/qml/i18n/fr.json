@@ -211,7 +211,15 @@
   "searchResource.installTitle": "Tâches d'installation",
   "searchResource.installDesc": "Sera installé dans le dossier %1",
   "searchResource.install": "Télécharger et installer",
-  "searchResource.supportedVersions": "Versions de jeu supportées"
+  "searchResource.supportedVersions": "Versions de jeu supportées",
+  "searchResource.selectInstance": "Sélectionner l'instance",
+  "searchResource.installToInstance": "Installer dans %1",
+  "searchResource.versionNotFound": "Version d'instance introuvable, continuer le téléchargement ?",
+  "searchResource.continueDownload": "Continuer",
+  "searchResource.sharedModsDir": "Répertoire Mods partagé",
+  "searchResource.instances": "Répertoires Minecraft",
+  "searchResource.downloadDir": "Télécharger dans le répertoire Minecraft",
+  "searchResource.noInstances": "Aucun répertoire ajouté"
 ,
   "download.cancel": "Annuler"
 }

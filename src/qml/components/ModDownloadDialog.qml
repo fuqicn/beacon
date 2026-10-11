@@ -148,12 +148,6 @@ Popup {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: I18n.tr("modDownload.cancel")
-                    font.weight: Font.Normal
-                    onClicked: root.close()
-                }
-
-                Button {
                     text: I18n.tr("modDownload.download")
                     font.weight: Font.Normal
                     highlighted: true

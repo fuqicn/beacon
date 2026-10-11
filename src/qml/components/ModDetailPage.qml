@@ -70,6 +70,36 @@ property var project: ({})
         return palette.placeholderText
     }
 
+    function cmpVerDesc(a, b) {
+        var pa = (a||"").split(".").map(Number), pb = (b||"").split(".").map(Number)
+        for (var i=0; i<Math.max(pa.length,pb.length); i++) {
+            var x = pa[i]||0, y = pb[i]||0
+            if (x < y) return 1; if (x > y) return -1
+        }
+        return 0
+    }
+    function supportLine(loadersCsv, versionsCsv) {
+        var lds = (loadersCsv||"").split(",").map(function(s){return s.trim()}).filter(Boolean)
+        var loaderPart = ""
+        if (lds.length === 1) loaderPart = lds[0].charAt(0).toUpperCase() + lds[0].slice(1)
+        else if (lds.length > 1) loaderPart = lds.map(function(s){return s.charAt(0).toUpperCase()+s.slice(1)}).join(" / ")
+        var raw = (versionsCsv||"").split(",").map(function(s){return s.trim()}).filter(Boolean)
+        var releases = raw.filter(function(v){return /^\d+\.\d+(\.\d+)*$/.test(v)})
+        releases.sort(cmpVerDesc)
+        var hasSnap = raw.length !== releases.length
+        var verPart = ""
+        if (releases.length === 0) verPart = hasSnap ? "仅快照版本" : ""
+        else if (releases.length === 1) verPart = releases[0]
+        else {
+            var first = releases[0], last = releases[releases.length-1]
+            if (releases.length >= 4 && !first.match(/\d+\.\d+\.\d+$/))
+                verPart = first + "~" + last
+            else
+                verPart = releases.slice(0, 4).join(", ") + (releases.length > 4 ? " ..." : "")
+        }
+        return (loaderPart + (verPart ? "   " + verPart : "")).trim()
+    }
+
     // Grouping, collapse/expand and version ordering are implemented
     // in C++ (VersionGroupModel) so the view only deals with display.
 
@@ -241,8 +271,7 @@ function onVersionsLoaded(versions) {
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: (root.project.gameVersions || "") +
-                                  (root.project.loaders ? "   |   " + root.project.loaders : "")
+                            text: root.supportLine(root.project.loaders, root.project.gameVersions)
                             font.pixelSize: 10
                             color: Theme.primary
                             elide: Text.ElideRight
@@ -373,7 +402,7 @@ Rectangle {
                                           ? Qt.alpha(Theme.primary, 0.14)
                                           : (vma.containsMouse
                                              ? Qt.alpha(palette.placeholderText, 0.10)
-                                             : Qt.alpha(palette.placeholderText, 0.06)))
+                                             : "transparent"))
                                        : "transparent"
 
                                 RowLayout {

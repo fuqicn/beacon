@@ -25,18 +25,9 @@ Item {
     id: root
 
     property var stackView: null
+    property var downloadDialog: null
     property var result: ({})
     property string type: "resourcepack"   // resourcepack | shader | datapack
-
-    // Grouped version list: { type: "header", primary, count } + { type: "item", ver }
-    property var versionGroups: []
-    property bool versionGroupsCollapsed: true
-    property bool hasVersionData: false
-
-    // File list fetched via mc_search_get_files()
-    property var files: []
-    property var selectedFile: ({})
-    property bool loading: true
 
     function formatCount(n) {
         if (n >= 1000000) return (n / 1000000).toFixed(1) + "M"
@@ -85,30 +76,24 @@ Item {
         return host.indexOf("curseforge") >= 0 || host.indexOf("forgecdn") >= 0
     }
 
-    function buildVersionGroups() {
-        var raw = (root.result.gameVersions || "").split(",").map(function(s){return s.trim()}).filter(Boolean)
-        root.hasVersionData = raw.length > 0
-        var releases = raw.filter(function(v){return /^\d+\.\d+(\.\d+)*$/.test(v)})
-        releases.sort(cmpVerDesc)
-        var groups = {}, order = []
-        for (var i = 0; i < releases.length; ++i) {
-            var v = releases[i], parts = v.split(".")
-            var key = parts[0] + "." + (parts[1]||"0")
-            if (!groups[key]) { groups[key] = []; order.push(key) }
-            groups[key].push(v)
+    property var files: []
+    property var selectedFile: ({})
+    property bool loading: true
+
+    // Filtered tasks: only show downloads for this page's type
+    // 只显示进行中或队列中的任务，完成/失败/取消的自动隐藏
+    readonly property var filteredTasks: {
+        var list = []
+        var all = kernel.searchManager.tasks
+        for (var i = 0; i < all.length; ++i) {
+            var t = all[i]
+            if (t.type === root.type && (t.status === "downloading" || t.status === "queued"))
+                list[list.length] = t
         }
-        // Clear then repopulate to force ListView model refresh
-        root.versionGroups = []
-        for (var g = 0; g < order.length; ++g) {
-            var gm = order[g], vers = groups[gm]
-            root.versionGroups[root.versionGroups.length] = { type: "header", primary: "Minecraft " + gm, count: vers.length }
-            for (var j = 0; j < vers.length; ++j)
-                root.versionGroups[root.versionGroups.length] = { type: "item", ver: vers[j] }
-        }
+        return list
     }
 
     Component.onCompleted: {
-        buildVersionGroups()
         kernel.searchManager.getFiles(root.result.id, root.type)
     }
 
@@ -117,14 +102,7 @@ Item {
         function onFilesLoaded(files) {
             root.files = files
             root.loading = false
-            // Auto-select primary release file
-            for (var i = 0; i < files.length; ++i) {
-                if (files[i].isPrimary && files[i].versionType === "release") {
-                    root.selectedFile = files[i]; break
-                }
-            }
-            if (!root.selectedFile.id)
-                root.selectedFile = (files.length > 0) ? files[0] : {}
+            // 不自动选中，由用户点击文件行再触发弹窗
         }
     }
 
@@ -198,7 +176,7 @@ Item {
                 anchors.margins: 16
                 spacing: 12
 
-                // Header: icon + info (same as ModDetailPage)
+                // Header: icon + info
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -262,85 +240,15 @@ Item {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: palette.mid; opacity: 0.3 }
 
-                // ── Version support list ─────────────────────────────────────────
-                Text {
-                    text: I18n.tr("searchResource.supportedVersions")
-                    font.pixelSize: 13
-                    color: palette.placeholderText
-                    visible: root.hasVersionData
+                // Loading indicator
+                BusyIndicator {
+                    Layout.alignment: Qt.AlignHCenter
+                    running: true
+                    visible: root.loading
+                    implicitWidth: 28; implicitHeight: 28
                 }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.hasVersionData
-                            ? Math.min(root.versionGroups.length * 26, 200)
-                            : 0
-                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-                    radius: Theme.shapeMedium
-                    color: Theme.surfaceContainer
-                    clip: true
-                    visible: root.hasVersionData
-
-                    ListView {
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        spacing: 2
-                        clip: true
-                        model: root.versionGroups
-
-                        ScrollBar.vertical: OverlayScrollBar {
-                            followAlways: true
-                            policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
-                            width: 8
-                        }
-
-                        delegate: Item {
-                            width: ListView.view.width
-                            height: modelData.type === "header" ? 26 : 26
-
-                            // Group header
-                            Rectangle {
-                                anchors.fill: parent
-                                visible: modelData.type === "header"
-                                radius: Theme.shapeSmall
-                                color: vhArea.containsMouse ? Qt.alpha(Theme.primary, 0.06) : "transparent"
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: 10
-                                    text: (root.versionGroupsCollapsed ? "\u25b8" : "\u25be") + "  " + modelData.primary
-                                          + "  (" + modelData.count + ")"
-                                    font.pixelSize: 12
-                                    font.weight: Font.DemiBold
-                                    color: Theme.primary
-                                }
-
-                                MouseArea {
-                                    id: vhArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.versionGroupsCollapsed = !root.versionGroupsCollapsed
-                                }
-                            }
-
-                            // Version item
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.left: parent.left
-                                anchors.leftMargin: modelData.type === "item" ? 24 : 10
-                                text: modelData.type === "item" ? modelData.ver : ""
-                                font.pixelSize: 12
-                                color: palette.text
-                                elide: Text.ElideRight
-                                visible: modelData.type === "item" && !root.versionGroupsCollapsed
-                            }
-                        }
-                    }
-                }
-
-                // ── File list (with download URLs) ───────────────────────────────
+                // ── File list (点击弹出下载弹窗，同模组详情卡片风格) ─────────────
                 Text {
                     text: I18n.tr("modDetail.versionFiles")
                     font.pixelSize: 13
@@ -351,7 +259,8 @@ Item {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.loading ? 0 : Math.min(root.files.length * 44 + 12, 200)
+                    Layout.preferredHeight: root.loading ? 0 : (root.files.length > 0 ? root.files.length * 44 + 24 : 0)
+                    Layout.maximumHeight: 480
                     Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     radius: Theme.shapeMedium
                     color: Theme.surfaceContainer
@@ -364,6 +273,7 @@ Item {
                         spacing: 2
                         clip: true
                         model: root.files
+                        currentIndex: 0
 
                         ScrollBar.vertical: OverlayScrollBar {
                             followAlways: true
@@ -425,7 +335,29 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.selectedFile = modelData
+                                onClicked: {
+                                    root.selectedFile = modelData
+                                    if (root.downloadDialog) {
+                                        var selInst = kernel.instanceManager.getSelectedInstance()
+                                        root.downloadDialog.file = modelData
+                                        root.downloadDialog.name = root.result.name || root.result.fileName || ""
+                                        root.downloadDialog.type = root.type
+                                        // 查找选中实例在列表中的索引
+                                        var insts = kernel.instanceManager.instances || []
+                                        var instIdx = -1
+                                        for (var i = 0; i < insts.length; ++i) {
+                                            if (insts[i].id === selInst?.id && insts[i].rootDir === selInst?.rootDir) {
+                                                instIdx = i
+                                                break
+                                            }
+                                        }
+                                        root.downloadDialog.selectedInstIndex = instIdx
+                                        root.downloadDialog.targetDir = selInst && selInst.rootDir
+                                            ? kernel.gameDirFor(selInst.rootDir, selInst.id)
+                                            : kernel.mcDir
+                                        root.downloadDialog.open()
+                                    }
+                                }
                             }
                         }
                     }
@@ -433,6 +365,83 @@ Item {
 
                 Item { Layout.fillHeight: true }
             }
+        }
+
+        // ── 下载进度面板 ──────────────────────────────────────────────────
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.filteredTasks.length > 0
+            spacing: 4
+
+            Text {
+                text: I18n.tr("searchResource.installTitle")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: palette.text
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Repeater {
+                    model: root.filteredTasks
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        radius: Theme.shapeSmall
+                        color: Theme.surfaceContainer
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.name || modelData.fileName
+                                font.pixelSize: 12
+                                color: palette.text
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                text: {
+                                    var s = modelData.status
+                                    if (s === "success")     return I18n.tr("status.success")
+                                    if (s === "failed")      return I18n.tr("status.failed")
+                                    if (s === "cancelled")   return I18n.tr("status.cancelled")
+                                    if (s === "downloading") return I18n.tr("status.downloading").arg(Math.round(modelData.progress * 100))
+                                    return I18n.tr("status.queued")
+                                }
+                                font.pixelSize: 11
+                                color: modelData.status === "success" ? "#4CAF50"
+                                     : modelData.status === "failed" ? "#F44336"
+                                     : palette.placeholderText
+                            }
+
+                            Button {
+                                text: I18n.tr("cancel")
+                                font.weight: Font.Normal
+                                flat: true
+                                visible: modelData.status === "downloading" || modelData.status === "queued"
+                                onClicked: kernel.searchManager.cancelTask(modelData.index)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 安装状态提示 ──────────────────────────────────────────────────
+        Text {
+            id: installStatus
+            text: ""
+            font.pixelSize: 12
+            color: palette.placeholderText
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
+            visible: text !== ""
         }
     }
 }

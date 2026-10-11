@@ -421,8 +421,8 @@ Item {
                 // stuck invisible-but-clickable after a back navigation).
                 pushEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -431,8 +431,8 @@ Item {
                 }
                 popEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -458,8 +458,8 @@ Item {
 
                 pushEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -468,8 +468,8 @@ Item {
                 }
                 popEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -490,13 +490,14 @@ Item {
                 initialItem: SearchResourcePage {
                     type: "resourcepack"
                     stackView: resourceStack
+                    downloadDialog: searchDownloadDialog
                 }
                 focus: true
 
                 pushEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -505,8 +506,8 @@ Item {
                 }
                 popEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -527,13 +528,14 @@ Item {
                 initialItem: SearchResourcePage {
                     type: "shader"
                     stackView: shaderStack
+                    downloadDialog: searchDownloadDialog
                 }
                 focus: true
 
                 pushEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -542,8 +544,8 @@ Item {
                 }
                 popEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -564,13 +566,14 @@ Item {
                 initialItem: SearchResourcePage {
                     type: "datapack"
                     stackView: dataPackStack
+                    downloadDialog: searchDownloadDialog
                 }
                 focus: true
 
                 pushEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 160 }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 pushExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -579,8 +582,8 @@ Item {
                 }
                 popEnter: Transition {
                     enabled: Theme.animationsEnabled
-                    NumberAnimation { property: "x"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                    NumberAnimation { property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: item.width; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 }
                 popExit: Transition {
                     enabled: Theme.animationsEnabled
@@ -607,6 +610,12 @@ Item {
 
     ModpackInstallDialog {
         id: modpackInstallDialog
+        onOpened: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
+        onClosed: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
+    }
+
+    SearchDownloadDialog {
+        id: searchDownloadDialog
         onOpened: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
         onClosed: { root._hoveredItemIndex = -1; root._hoveredCategoryIndex = -1 }
     }

@@ -71,9 +71,14 @@ Rectangle {
         onClicked: function(mouse) { mouse.accepted = true }
     }
 
-    // --- mod task helpers ---
-    readonly property real modRowHeight: 58
-    readonly property real modListHeight: Math.min(4, root.modTasks.length) * root.modRowHeight
+    // --- task list helpers ---
+    // Cards render in their full (non-dense) form so the footer actions — the
+    // ✕ cancel / ↻ retry icons — stay visible. The lists therefore size
+    // themselves to the delegates' real height (the old fixed 58/36 row
+    // heights clipped the footer, which is why the ✕ never showed up).
+    readonly property real maxListHeight: 300
+    readonly property real modListHeight: Math.min(taskListView.contentHeight, root.maxListHeight)
+    readonly property real searchListHeight: Math.min(searchTaskListView.contentHeight, root.maxListHeight)
 
     readonly property int activeModCount: {
         var n = 0
@@ -242,14 +247,17 @@ Rectangle {
 
         // ================= separator =================
         Rectangle {
+            id: sectionSeparator
             Layout.fillWidth: true
             height: 1
             color: palette.mid
             opacity: 0.3
-            visible: (root.dlBusy && (root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy))
-                     || (root.modTasks.length > 0 && (root.packBusy || root.installBusy || root.updBusy))
-                     || (root.packBusy && (root.installBusy || root.updBusy))
-                     || (root.installBusy && root.updBusy)
+            readonly property int lowerCount: (root.searchTasks.length > 0 ? 1 : 0)
+                                              + (root.modTasks.length > 0 ? 1 : 0)
+                                              + (root.packBusy ? 1 : 0)
+                                              + (root.installBusy ? 1 : 0)
+            visible: ((root.dlBusy || root.updBusy) && sectionSeparator.lowerCount > 0)
+                     || sectionSeparator.lowerCount > 1
         }
 
         // ================= Search tasks (resource/shader/datapack) =================
@@ -280,8 +288,8 @@ Rectangle {
             ListView {
                 id: searchTaskListView
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(root.searchTasks.length * 36, 144)
-                implicitHeight: Math.min(root.searchTasks.length * 36, 144)
+                Layout.preferredHeight: root.searchListHeight
+                implicitHeight: root.searchListHeight
                 clip: true
                 model: root.searchTasks
                 spacing: 2
@@ -304,6 +312,7 @@ Rectangle {
                     statusText: root.statusText(modelData.status, modelData.progress, modelData.received, modelData.total)
                     statusColor: root.statusColor(modelData.status)
                     showCancel: modelData.status === "queued" || modelData.status === "downloading"
+                                || modelData.status === "cancelling"
                     showRetry: modelData.status === "failed" || modelData.status === "cancelled"
                     onCancelRequested: kernel.searchManager.cancelTask(index)
                     onRetryRequested: kernel.searchManager.retryTask(index)

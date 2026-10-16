@@ -80,19 +80,6 @@ Item {
     property var selectedFile: ({})
     property bool loading: true
 
-    // Filtered tasks: only show downloads for this page's type
-    // 只显示进行中或队列中的任务，完成/失败/取消的自动隐藏
-    readonly property var filteredTasks: {
-        var list = []
-        var all = kernel.searchManager.tasks
-        for (var i = 0; i < all.length; ++i) {
-            var t = all[i]
-            if (t.type === root.type && (t.status === "downloading" || t.status === "queued"))
-                list[list.length] = t
-        }
-        return list
-    }
-
     Component.onCompleted: {
         kernel.searchManager.getFiles(root.result.id, root.type)
     }
@@ -364,72 +351,6 @@ Item {
                 }
 
                 Item { Layout.fillHeight: true }
-            }
-        }
-
-        // ── 下载进度面板 ──────────────────────────────────────────────────
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: root.filteredTasks.length > 0
-            spacing: 4
-
-            Text {
-                text: I18n.tr("searchResource.installTitle")
-                font.pixelSize: 13
-                font.weight: Font.Medium
-                color: palette.text
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-
-                Repeater {
-                    model: root.filteredTasks
-                    delegate: Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 36
-                        radius: Theme.shapeSmall
-                        color: Theme.surfaceContainer
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 8
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: modelData.name || modelData.fileName
-                                font.pixelSize: 12
-                                color: palette.text
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                text: {
-                                    var s = modelData.status
-                                    if (s === "success")     return I18n.tr("status.success")
-                                    if (s === "failed")      return I18n.tr("status.failed")
-                                    if (s === "cancelled")   return I18n.tr("status.cancelled")
-                                    if (s === "downloading") return I18n.tr("status.downloading").arg(Math.round(modelData.progress * 100))
-                                    return I18n.tr("status.queued")
-                                }
-                                font.pixelSize: 11
-                                color: modelData.status === "success" ? "#4CAF50"
-                                     : modelData.status === "failed" ? "#F44336"
-                                     : palette.placeholderText
-                            }
-
-                            Button {
-                                text: I18n.tr("cancel")
-                                font.weight: Font.Normal
-                                flat: true
-                                visible: modelData.status === "downloading" || modelData.status === "queued"
-                                onClicked: kernel.searchManager.cancelTask(modelData.index)
-                            }
-                        }
-                    }
-                }
             }
         }
 

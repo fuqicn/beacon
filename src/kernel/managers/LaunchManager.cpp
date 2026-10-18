@@ -188,6 +188,7 @@ void LaunchManager::launch()
     if (m_mcDir.isEmpty()) m_mcDir = QDir::homePath() + "/.minecraft";
 
     m_cancelRequested = false;
+    m_userStopRequested = false;
     m_verifying = true;
     m_verifyProgress = 0.0;
     m_verifyTask = "正在验证文件...";
@@ -1384,7 +1385,12 @@ void LaunchManager::doLaunch()
         m_running = false;
         emit runningChanged();
         emit processFinished();
-        emit errorOccurred("进程启动失败: " + (m_process ? m_process->errorString() : QString("unknown")));
+        const QString errMsg = m_process ? m_process->errorString() : QStringLiteral("unknown");
+        // A failure to even create the process (e.g. invalid Java path) is
+        // surfaced as its own signal so the crash dialog can explain it.
+        if (err == QProcess::FailedToStart)
+            emit launchFailed(QStringLiteral("进程启动失败: ") + errMsg);
+        emit errorOccurred(QStringLiteral("进程启动失败: ") + errMsg);
         if (m_process) {
             m_process->deleteLater();
             m_process = nullptr;
@@ -1417,6 +1423,9 @@ void LaunchManager::doLaunch()
 
 void LaunchManager::stop()
 {
+    // Any explicit stop is treated as user-initiated so the crash detector
+    // does not pop a dialog for a deliberate shutdown.
+    m_userStopRequested = true;
     if (m_process && m_process->state() != QProcess::NotRunning) {
         // Try graceful exit first (Minecraft can save world, close cleanly);
         // fall back to forceful kill if it ignores the SIGTERM.

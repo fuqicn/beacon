@@ -74,6 +74,10 @@ public:
     Q_INVOKABLE void stop();
     Q_INVOKABLE void setCancelRequested(bool v);
     bool cancelRequested() const { return m_cancelRequested; }
+    // True when the user explicitly asked to stop the running game (kill button
+    // / cancel). Used to suppress the automatic crash dialog: a user-requested
+    // stop is not a crash even though the process may exit non-zero.
+    bool userStopRequested() const { return m_userStopRequested; }
 
 signals:
     void runningChanged();
@@ -91,6 +95,10 @@ signals:
     void memoryChanged();
     void launchStarted();
     void launchCompleted(int exitCode);
+    // Emitted when the game process could not be created at all (bad Java
+    // path, missing runtime, blocked by antivirus, ...). Distinct from a crash
+    // after start-up: no crash report exists, so the message is the diagnosis.
+    void launchFailed(const QString &message);
     void logLine(const QString &line);
     void errorOccurred(const QString &message);
 
@@ -148,6 +156,7 @@ private:
     qreal m_verifyProgress = 0.0;
     QString m_verifyTask;
     bool m_cancelRequested = false;
+    bool m_userStopRequested = false;
     QProcess *m_process = nullptr;
     QFile *m_gameLog = nullptr;
 };

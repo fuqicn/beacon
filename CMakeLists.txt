@@ -183,6 +183,7 @@ set(QML_SOURCES
     src/qml/components/SearchDownloadDialog.qml
     src/qml/components/OverlayScrollBar.qml
     src/qml/components/UpdatePopup.qml
+    src/qml/components/CrashDialog.qml
 )
 
 # Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged

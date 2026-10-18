@@ -50,6 +50,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QFileInfoList>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QProcess>
@@ -298,6 +299,16 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
                              bridge->m_instanceManager->scanInstances();
                          }
                      });
+
+    // Crash detection: when a launched game exits abnormally, parse the crash
+    // report / JVM fatal error log / game output log and surface a structured
+    // diagnosis that the QML crash dialog presents to the player.
+    QObject::connect(s_instance->m_launchManager, &LaunchManager::launchCompleted,
+                     s_instance, &KernelBridge::analyzeGameResult);
+    // Process could not be created at all (invalid Java path, missing runtime,
+    // blocked by antivirus, ...) — no crash report, report it directly.
+    QObject::connect(s_instance->m_launchManager, &LaunchManager::launchFailed,
+                     s_instance, &KernelBridge::analyzeLaunchFailure);
 }
 
 void KernelBridge::shutdown()
@@ -1513,6 +1524,377 @@ QVariantList KernelBridge::diagnoseCrash(const QString &content) const
     return issues;
 }
 
+// ---------------------------------------------------------------------------
+// Crash analysis
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Package prefixes owned by the game, the JDK, common third-party libraries or
+// the mod loaders themselves. A stack frame under one of these is not "the
+// culprit mod", so it is skipped when guessing a suspect.
+bool isVanillaOrLibPackage(const QString &pkg)
+{
+    static const QStringList prefixes = {
+        QStringLiteral("net.minecraft"), QStringLiteral("com.mojang"),
+        QStringLiteral("java."), QStringLiteral("javax."),
+        QStringLiteral("jdk."), QStringLiteral("sun."),
+        QStringLiteral("com.sun."), QStringLiteral("org.lwjgl"),
+        QStringLiteral("org.apache"), QStringLiteral("com.google"),
+        QStringLiteral("it.unimi"), QStringLiteral("org.jetbrains"),
+        QStringLiteral("org.slf4j"), QStringLiteral("org.objectweb"),
+        QStringLiteral("oshi."), QStringLiteral("com.electronwill"),
+        QStringLiteral("org.commonmark"), QStringLiteral("io.netty"),
+        QStringLiteral("net.fabricmc.loader"), QStringLiteral("net.fabricmc.api"),
+        QStringLiteral("org.quiltmc.loader"), QStringLiteral("net.minecraftforge"),
+        QStringLiteral("net.neoforged"), QStringLiteral("cpw.mods"),
+        QStringLiteral("org.spongepowered"), QStringLiteral("com.github.")
+    };
+    for (const QString &p : prefixes)
+        if (pkg.startsWith(p))
+            return true;
+    return false;
+}
+
+// Matches a bare Java exception/error line, e.g.
+//   java.lang.NullPointerException: Cannot invoke ...
+//   net.minecraftforge.fml.ModLoadingException
+const QRegularExpression &exceptionLineRe()
+{
+    static const QRegularExpression re(QStringLiteral(
+        R"(^\s*((?:[A-Za-z_$][\w$]*\.)+[A-Za-z_$][\w$]*(?:Exception|Error|Throwable))(?::\s*(.*))?\s*$)"));
+    return re;
+}
+
+// The last exception printed to a plain log is usually the fatal one.
+QString lastExceptionLine(const QString &content)
+{
+    QString result;
+    const QStringList lines = content.split('\n');
+    for (const QString &l : lines) {
+        if (l.trimmed().startsWith(QStringLiteral("at ")))
+            continue;
+        const auto m = exceptionLineRe().match(l);
+        if (m.hasMatch())
+            result = m.captured(0).trimmed();
+    }
+    return result;
+}
+
+} // namespace
+
+QString KernelBridge::readTextFile(const QString &path, int maxBytes) const
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+    const QByteArray raw = f.read(maxBytes);
+    f.close();
+    return QString::fromUtf8(raw);
+}
+
+QString KernelBridge::findSessionCrashReport() const
+{
+    if (!m_launchManager)
+        return QString();
+    const QString gameDir = m_launchManager->gameDir();
+    if (gameDir.isEmpty())
+        return QString();
+
+    QDir dir(gameDir + "/crash-reports");
+    if (!dir.exists())
+        return QString();
+
+    // QDir::Time sorts newest first; only accept files written around or after
+    // this launch so a stale report from an earlier session is ignored.
+    const QFileInfoList infos =
+        dir.entryInfoList(QStringList() << QStringLiteral("crash-*.txt"),
+                          QDir::Files, QDir::Time);
+    for (const QFileInfo &fi : infos) {
+        if (m_launchStartMs <= 0
+            || fi.lastModified().toMSecsSinceEpoch() >= m_launchStartMs - 5000)
+            return fi.absoluteFilePath();
+    }
+    return QString();
+}
+
+QString KernelBridge::findSessionJvmErrorLog() const
+{
+    if (!m_launchManager)
+        return QString();
+    const QString gameDir = m_launchManager->gameDir();
+    if (gameDir.isEmpty())
+        return QString();
+
+    QDir dir(gameDir);
+    const QFileInfoList infos =
+        dir.entryInfoList(QStringList() << QStringLiteral("hs_err_pid*.log"),
+                          QDir::Files, QDir::Time);
+    for (const QFileInfo &fi : infos) {
+        if (m_launchStartMs <= 0
+            || fi.lastModified().toMSecsSinceEpoch() >= m_launchStartMs - 5000)
+            return fi.absoluteFilePath();
+    }
+    return QString();
+}
+
+QVariantMap KernelBridge::parseCrashReport(const QString &content) const
+{
+    QVariantMap out;
+    if (content.isEmpty())
+        return out;
+
+    const QStringList lines = content.split('\n');
+
+    QString description, mcVersion, modLauncher, fabricLoader;
+    QString excType, excMsg, causedBy;
+    QStringList frames;
+    bool tookException = false;
+
+    for (const QString &line : lines) {
+        const QString t = line.trimmed();
+
+        if (description.isEmpty() && t.startsWith(QStringLiteral("Description: "))) {
+            description = t.mid(13).trimmed();
+            continue;
+        }
+        if (mcVersion.isEmpty() && t.startsWith(QStringLiteral("Minecraft Version: "))) {
+            mcVersion = t.mid(19).trimmed();
+            continue;
+        }
+        if (modLauncher.isEmpty() && t.startsWith(QStringLiteral("Mod Launcher: "))) {
+            modLauncher = t.mid(14).trimmed();
+            continue;
+        }
+        if (fabricLoader.isEmpty() && t.startsWith(QStringLiteral("Fabric Loader: "))) {
+            fabricLoader = t.mid(15).trimmed();
+            continue;
+        }
+        if (causedBy.isEmpty() && t.startsWith(QStringLiteral("Caused by: ")))
+            causedBy = t.mid(11).trimmed();
+
+        if (t.startsWith(QStringLiteral("at "))) {
+            if (frames.size() < 24)
+                frames << t.mid(3);
+            continue;
+        }
+
+        // The primary exception is the first exception-looking, non-frame line
+        // (it sits right under the "Description:" header in a crash report).
+        if (!tookException && !t.startsWith(QStringLiteral("Caused by:"))
+            && !t.startsWith(QStringLiteral("--"))) {
+            const auto m = exceptionLineRe().match(line);
+            if (m.hasMatch()) {
+                excType = m.captured(1);
+                excMsg = m.captured(2);
+                tookException = true;
+            }
+        }
+    }
+
+    // Guess the culprit mod from the first non-vanilla stack frame.
+    QString suspect;
+    for (const QString &f : frames) {
+        const QString dotted = f.section('(', 0, 0).trimmed();
+        QStringList parts = dotted.split('.');
+        if (parts.size() < 3)
+            continue;
+        parts.removeLast();          // drop the method name
+        parts.removeLast();          // drop the class name
+        if (parts.isEmpty())
+            continue;
+        if (isVanillaOrLibPackage(parts.join('.')))
+            continue;
+        QStringList root = parts;
+        if (root.size() > 3)
+            root = root.mid(0, 3);
+        suspect = root.join('.');
+        break;
+    }
+
+    out["description"] = description;
+    out["minecraftVersion"] = mcVersion;
+    out["modLoader"] = !modLauncher.isEmpty()
+                           ? modLauncher
+                           : (!fabricLoader.isEmpty()
+                                  ? (QStringLiteral("Fabric ") + fabricLoader)
+                                  : QString());
+    out["exceptionType"] = excType;
+    out["exception"] = excType.isEmpty()
+                           ? QString()
+                           : (excMsg.isEmpty() ? excType
+                                               : (excType + QStringLiteral(": ") + excMsg));
+    out["causedBy"] = causedBy;
+    out["suspectedMod"] = suspect;
+    return out;
+}
+
+void KernelBridge::classifyCrash(QVariantMap &info, const QString &content) const
+{
+    const bool oom = content.contains("OutOfMemoryError")
+                     || content.contains("Java heap space")
+                     || content.contains("Not enough memory")
+                     || content.contains("unable to create new native thread")
+                     || content.contains("insufficient memory");
+    const bool javaVer = content.contains("UnsupportedClassVersionError")
+                         || content.contains("Unsupported major.minor version")
+                         || content.contains("class file has wrong version");
+    const bool mainClass = content.contains("Could not find or load main class")
+                           || content.contains("NoClassDefFoundError: net/minecraft/client/main/Main")
+                           || content.contains("Failed to find main class");
+    const bool graphics = content.contains("GLFW")
+                          || content.contains("OpenGL")
+                          || content.contains("Pixel format")
+                          || content.contains("Failed to create display")
+                          || content.contains("Failed to create window")
+                          || content.contains("WGL");
+    const bool native = info.value("source").toString() == QStringLiteral("hserr")
+                        || content.contains("EXCEPTION_ACCESS_VIOLATION")
+                        || content.contains("SIGSEGV")
+                        || content.contains("# A fatal error has been detected")
+                        || content.contains("# Problematic frame:");
+    const bool modIssue = content.contains("Mixin")
+                          || content.contains("mixin")
+                          || content.contains("NoSuchMethodError")
+                          || content.contains("NoClassDefFoundError")
+                          || content.contains("ClassNotFoundException")
+                          || content.contains("Incompatible mod")
+                          || content.contains("IllegalAccessError")
+                          || content.contains("Unable to make field");
+    const bool network = content.contains("java.net.ConnectException")
+                         || content.contains("UnknownHostException")
+                         || content.contains("SocketTimeoutException")
+                         || content.contains("java.net.SocketException");
+
+    QString category = QStringLiteral("unknown");
+    if (oom)                 category = QStringLiteral("out_of_memory");
+    else if (javaVer)        category = QStringLiteral("java_version");
+    else if (mainClass)      category = QStringLiteral("main_class");
+    else if (graphics)       category = QStringLiteral("graphics");
+    else if (native)         category = QStringLiteral("native");
+    else if (modIssue)       category = QStringLiteral("mod_issue");
+    else if (network)        category = QStringLiteral("network");
+
+    info["category"] = category;
+
+    // Fall back to the parsed exception as the headline description when the
+    // source was a plain log (no "Description:" header).
+    if (info.value("description").toString().isEmpty()) {
+        const QString ex = info.value("exception").toString();
+        if (!ex.isEmpty())
+            info["description"] = ex;
+    }
+}
+
+void KernelBridge::analyzeGameResult(int exitCode)
+{
+    if (!m_launchManager)
+        return;
+
+    // Already reported for this run (e.g. launchFailed fired first).
+    if (m_crashReported)
+        return;
+
+    // A deliberate stop (kill button / cancel / shutdown) is not a crash, even
+    // though the process may exit with a non-zero code.
+    if (m_launchManager->userStopRequested()) {
+        mc_info("[Crash] game stopped by user (exit=%d); skipping crash analysis", exitCode);
+        return;
+    }
+
+    const QString gameDir = m_launchManager->gameDir();
+    const QString logPath = gameDir.isEmpty() ? QString()
+                                              : (gameDir + "/game_output.log");
+    const QString reportPath = findSessionCrashReport();
+    const QString hsErrPath = findSessionJvmErrorLog();
+
+    QString source, content;
+    if (!reportPath.isEmpty()) {
+        source = QStringLiteral("report");
+        content = readTextFile(reportPath, 1024 * 1024);
+    } else if (!hsErrPath.isEmpty()) {
+        source = QStringLiteral("hserr");
+        content = readTextFile(hsErrPath, 256 * 1024);
+    } else if (exitCode != 0) {
+        source = QStringLiteral("log");
+        content = readFileTail(logPath, 800);
+    } else {
+        // Clean exit with no crash report -> a normal quit.
+        mc_info("[Crash] game exited normally (code 0); no crash detected");
+        return;
+    }
+
+    QVariantMap info;
+    info["crashed"] = true;
+    info["source"] = source;
+    info["exitCode"] = exitCode;
+    info["reportPath"] = reportPath;
+    info["hsErrPath"] = hsErrPath;
+    info["logPath"] = logPath;
+
+    if (source == QStringLiteral("report")) {
+        info.insert(parseCrashReport(content));
+    } else if (source == QStringLiteral("hserr")) {
+        info["exceptionType"] = QStringLiteral("JVM fatal error");
+        info["exception"] = QStringLiteral("JVM fatal error");
+        info["description"] = QStringLiteral("JVM fatal error");
+    } else {
+        const QString ex = lastExceptionLine(content);
+        info["exception"] = ex;
+        info["exceptionType"] = ex.section(':', 0, 0).trimmed();
+    }
+
+    classifyCrash(info, content);
+
+    m_lastCrash = info;
+    if (!reportPath.isEmpty())
+        m_lastCrashReportPath = reportPath;
+    else if (!hsErrPath.isEmpty())
+        m_lastCrashReportPath = hsErrPath;
+    else
+        m_lastCrashReportPath = logPath;
+
+    m_crashReported = true;
+
+    mc_info("[Crash] detected: category=%s exit=%d source=%s report=%s",
+            info.value("category").toString().toUtf8().constData(),
+            exitCode, source.toUtf8().constData(),
+            m_lastCrashReportPath.toUtf8().constData());
+
+    emit lastCrashChanged();
+    emit gameCrashed(info);
+}
+
+void KernelBridge::analyzeLaunchFailure(const QString &message)
+{
+    if (!m_launchManager)
+        return;
+    if (m_crashReported || m_launchManager->userStopRequested())
+        return;
+
+    const QString gameDir = m_launchManager->gameDir();
+    const QString logPath = gameDir.isEmpty() ? QString()
+                                              : (gameDir + "/game_output.log");
+
+    QVariantMap info;
+    info["crashed"] = true;
+    info["source"] = QStringLiteral("start");
+    info["category"] = QStringLiteral("launch_failed");
+    info["exception"] = message;
+    info["exceptionType"] = message;
+    info["description"] = message;
+    info["logPath"] = logPath;
+
+    m_lastCrash = info;
+    m_lastCrashReportPath = logPath;
+    m_crashReported = true;
+
+    mc_info("[Crash] launch failed: %s", message.toUtf8().constData());
+
+    emit lastCrashChanged();
+    emit gameCrashed(info);
+}
+
 QVariantList KernelBridge::listDir(const QString &path) const
 {
     QVariantList entries;
@@ -1558,6 +1940,11 @@ void KernelBridge::launchGame(int memory)
 
     m_launchMemory = memory;
     m_launchCancelled = false;
+    m_crashReported = false;
+    // Record when this launch attempt began so the crash detector can tell a
+    // crash report written by this run apart from stale files left by earlier
+    // sessions in the same game directory.
+    m_launchStartMs = QDateTime::currentMSecsSinceEpoch();
 
     // Read the global memory mode before applying per-instance overrides.
     QString memMode = m_settingsManager

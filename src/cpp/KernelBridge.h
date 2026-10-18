@@ -209,6 +209,15 @@ public:
     Q_INVOKABLE QString readFileTail(const QString &path, int maxLines = 400) const;
     Q_INVOKABLE QVariantList diagnoseCrash(const QString &content) const;
 
+    // Crash analysis: when a launched game exits abnormally, parse the
+    // generated crash report (crash-reports/crash-*.txt), the JVM fatal error
+    // log (hs_err_pid*.log) or the game output log and expose a structured,
+    // human-readable diagnosis for the automatic crash dialog.
+    Q_INVOKABLE QString readTextFile(const QString &path, int maxBytes = 262144) const;
+    Q_INVOKABLE QString lastCrashReportPath() const { return m_lastCrashReportPath; }
+    Q_PROPERTY(QVariantMap lastCrash READ lastCrash NOTIFY lastCrashChanged)
+    QVariantMap lastCrash() const { return m_lastCrash; }
+
     // File manager helpers
     Q_INVOKABLE QVariantList listDir(const QString &path) const;
     Q_INVOKABLE void revealInExplorer(const QString &path);
@@ -230,11 +239,25 @@ signals:
     void latestVersionChanged();
     void changeLogChanged();
     void updateStatsChanged();
+    // Emitted once per abnormal game exit with a structured, parsed diagnosis
+    // (title/detail/category/exception/suspected mod/...). The QML crash dialog
+    // listens to this to inform the player.
+    void gameCrashed(const QVariantMap &info);
+    void lastCrashChanged();
 
 private:
     void doAuthAndLaunch();
     void onJavaReady();
     void onJavaDownloaded(const QString &path, int ver);
+
+    // Crash detection/parsing helpers.
+    void analyzeGameResult(int exitCode);
+    // Process could not be created at all (no crash report available).
+    void analyzeLaunchFailure(const QString &message);
+    QString findSessionCrashReport() const;
+    QString findSessionJvmErrorLog() const;
+    QVariantMap parseCrashReport(const QString &content) const;
+    void classifyCrash(QVariantMap &info, const QString &content) const;
 
     int readRequiredJavaVersion(const QString &verId, const QString &mcDir) const;
     explicit KernelBridge(QObject *parent = nullptr);
@@ -284,6 +307,15 @@ private:
     QString m_updateDestPath;
     QNetworkReply *m_updateReply = nullptr;   // active transfer, owned by nam
     QNetworkAccessManager *m_updateNam = nullptr;
+    // Crash analysis state: structured diagnosis of the most recent crash and
+    // the wall-clock time of the current/last launch (used to find crash
+    // reports created during that session).
+    QVariantMap m_lastCrash;
+    QString m_lastCrashReportPath;
+    qint64 m_launchStartMs = 0;
+    // Guards against reporting the same failed run twice (e.g. a native crash
+    // emitting both errorOccurred and finished).
+    bool m_crashReported = false;
 };
 
 #endif

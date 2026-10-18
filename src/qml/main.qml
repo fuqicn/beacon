@@ -428,6 +428,13 @@ ApplicationWindow {
                               + (isCompact ? navBar.height + 8 : 0)
     }
 
+    // Automatic crash dialog: opens with a parsed diagnosis when a launched
+    // game exits abnormally (see kernel.gameCrashed).
+    CrashDialog {
+        id: crashDialog
+        onViewLogRequested: window.navigateToPage(6, I18n.tr("tools.logSub"))
+    }
+
     property bool mcRunning: false
 
     function refreshMcRunning() {
@@ -461,6 +468,9 @@ ApplicationWindow {
         target: kernel
         function onMinecraftRunningChanged() {
             refreshMcRunning()
+        }
+        function onGameCrashed(info) {
+            crashDialog.openWith(info)
         }
         function onPaletteChanged() {
             // Palette changed (theme switch): update the cached text color

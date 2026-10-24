@@ -63,6 +63,10 @@ class KernelBridge : public QObject
     Q_PROPERTY(bool javaDownloading READ javaDownloading NOTIFY javaDownloadingChanged)
     Q_PROPERTY(bool memOptimizing READ memOptimizing NOTIFY memOptimizingChanged)
     Q_PROPERTY(QString modSource READ modSource NOTIFY modSourceChanged)
+    // First launch after an update: the "what's new" dialog stays pending until
+    // the user dismisses it (main.qml binds the dialog to these properties).
+    Q_PROPERTY(bool showChangelog READ showChangelog NOTIFY showChangelogChanged)
+    Q_PROPERTY(QString changelogVersion READ changelogVersion NOTIFY showChangelogChanged)
 
 public:
     static KernelBridge *instance();
@@ -128,6 +132,12 @@ Q_INVOKABLE void setLanguage(const QString &lang);
     // Version management (used by auto-update)
     Q_INVOKABLE QString readVersion() const;
     Q_INVOKABLE void writeVersion(const QString &version);
+    // Changelog: set during initialize() when the shipped version differs from
+    // the last one the user acknowledged. dismissChangelog() persists it so the
+    // dialog is shown exactly once per update.
+    bool showChangelog() const { return m_showChangelog; }
+    QString changelogVersion() const { return m_changelogVersion; }
+    Q_INVOKABLE void dismissChangelog();
     // Race GitHub vs Gitee release APIs, pick the lower-latency source.
     Q_INVOKABLE void checkForUpdate();
     Q_INVOKABLE void downloadUpdate();
@@ -238,6 +248,7 @@ signals:
     void checkingUpdateChanged();
     void latestVersionChanged();
     void changeLogChanged();
+    void showChangelogChanged();
     void updateStatsChanged();
     // Emitted once per abnormal game exit with a structured, parsed diagnosis
     // (title/detail/category/exception/suspected mod/...). The QML crash dialog
@@ -294,6 +305,9 @@ private:
     bool m_checkingUpdate = false;
     QString m_latestVersion;
     QStringList m_changeLog;
+    // Pending "what's new" dialog (first launch after an update).
+    bool m_showChangelog = false;
+    QString m_changelogVersion;
     // Update transfer state (rendered by the download status panel)
     bool m_updateDownloading = false;
     qreal m_updateProgress = 0.0;

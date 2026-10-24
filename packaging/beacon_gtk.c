@@ -40,7 +40,7 @@
 #include <stdarg.h>
 #include <errno.h>
 
-#define BEACON_VERSION "1.0.2"
+#define BEACON_VERSION "1.0.3"
 #define BEACON_DIR "beacon"
 #define PAYLOAD_NAME "beacon-app.AppImage"
 #define VERSION_FILE "version.txt"

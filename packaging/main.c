@@ -35,7 +35,7 @@
 
 /* Bump this every release; it must match the version.txt written by the
    packaging script so an existing install knows it needs re-extracting. */
-#define BEACON_VERSION "1.0.2"
+#define BEACON_VERSION "1.0.3"
 
 /* User data that must survive an update: never delete or overwrite these. */
 static const char *kPreserveDirs[] = {

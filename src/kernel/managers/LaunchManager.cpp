@@ -1057,7 +1057,7 @@ void LaunchManager::doLaunch()
         s.replace("${library_directory}", QDir(m_mcDir).filePath("libraries"));
         s.replace("${classpath_separator}", QString(QDir::listSeparator()));
         s.replace("${launcher_name}", "beacon");
-        s.replace("${launcher_version}", "1.0.2");
+        s.replace("${launcher_version}", "1.0.3");
         s.replace("${resolution_width}", QString::number(m_resolutionW));
         s.replace("${resolution_height}", QString::number(m_resolutionH));
         return s;

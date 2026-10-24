@@ -150,6 +150,11 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
     QString launcherDir = s_launcherDir.isEmpty()
                               ? QCoreApplication::applicationDirPath()
                               : s_launcherDir;
+    // Remember whether this installation already had launcher settings. It is
+    // used to distinguish a fresh install (no changelog to show) from an update
+    // (settings survive, the executable version changed).
+    const bool hadSettings =
+        QFile::exists(launcherDir + QStringLiteral("/settings.ini"));
     s_instance->m_authManager->setLauncherDir(launcherDir);
     s_instance->m_authManager->refresh();
     s_instance->m_settingsManager->setLauncherDir(launcherDir);
@@ -175,6 +180,30 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
             s_instance->m_settingsManager->setValue("download/threads", 64);
         if (!s_instance->m_settingsManager->contains("download/source"))
             s_instance->m_settingsManager->setValue("download/source", "auto");
+    }
+
+    // Decide whether the "what's new" dialog is due. It is shown on the first
+    // launch after an update: settings.ini survived the upgrade but the stored
+    // version (app/lastVersion) no longer matches the version next to the
+    // executable. Upgrades from builds that predate this feature have no stored
+    // version at all, which also counts as an update. A fresh install records
+    // the current version silently so the dialog does not appear a launch later.
+    {
+        const QString curVersion = s_instance->readVersion();
+        if (!curVersion.isEmpty()) {
+            const QString lastVersion =
+                s_instance->m_settingsManager->globalValue("app/lastVersion").toString();
+            if (!hadSettings) {
+                s_instance->m_settingsManager->setGlobalValue("app/lastVersion", curVersion);
+            } else if (curVersion != lastVersion) {
+                s_instance->m_changelogVersion = curVersion;
+                s_instance->m_showChangelog = true;
+                mc_info("[Changelog] update detected: last=%s current=%s",
+                        lastVersion.isEmpty() ? "unknown"
+                                              : lastVersion.toUtf8().constData(),
+                        curVersion.toUtf8().constData());
+            }
+        }
     }
 
     // Apply download concurrency from settings.
@@ -347,6 +376,18 @@ void KernelBridge::writeVersion(const QString &version)
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         f.write((version + "\n").toUtf8());
     mc_info("[Update] wrote version: %s", version.toUtf8().constData());
+}
+
+void KernelBridge::dismissChangelog()
+{
+    // Persist the acknowledged version only when the dialog is actually closed,
+    // so quitting early keeps it pending for the next launch.
+    if (!m_changelogVersion.isEmpty() && m_settingsManager)
+        m_settingsManager->setGlobalValue("app/lastVersion", m_changelogVersion);
+    if (!m_showChangelog)
+        return;
+    m_showChangelog = false;
+    emit showChangelogChanged();
 }
 
 QString KernelBridge::readVersion() const

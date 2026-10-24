@@ -66,6 +66,10 @@ ApplicationWindow {
         // Auto update check honours the user's setting (default: on).
         if (kernel.settingsManager.value("update/auto", true))
             kernel.checkForUpdate()
+        // First launch after an update: show the release notes once the window
+        // has been laid out so the popup can centre itself correctly.
+        if (kernel.showChangelog)
+            Qt.callLater(function() { changelogDialog.open() })
     }
     readonly property string _uiFont: Qt.platform.os === "osx" ? "PingFang SC" : Qt.platform.os === "linux" ? "Noto Sans CJK SC" : "Microsoft YaHei"
     font.family: _uiFont
@@ -433,6 +437,13 @@ ApplicationWindow {
     CrashDialog {
         id: crashDialog
         onViewLogRequested: window.navigateToPage(6, I18n.tr("tools.logSub"))
+    }
+
+    // First launch after an update: summarize what changed in this release.
+    // Closing persists the version, so it is shown once per update.
+    ChangelogDialog {
+        id: changelogDialog
+        version: kernel.changelogVersion
     }
 
     property bool mcRunning: false

@@ -34,6 +34,11 @@ public:
 
     Q_INVOKABLE QVariant value(const QString &key, const QVariant &defaultValue = QVariant()) const;
     Q_INVOKABLE void setValue(const QString &key, const QVariant &value);
+    // Launcher-wide values that must always live in the global settings file,
+    // even while an instance settings group is active (e.g. the version whose
+    // changelog has already been shown).
+    Q_INVOKABLE QVariant globalValue(const QString &key, const QVariant &defaultValue = QVariant()) const;
+    Q_INVOKABLE void setGlobalValue(const QString &key, const QVariant &value);
     Q_INVOKABLE void sync();
     Q_INVOKABLE void beginGroup(const QString &prefix);
     Q_INVOKABLE void endGroup();

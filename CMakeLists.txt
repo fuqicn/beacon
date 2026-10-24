@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Beacon VERSION 1.0.2 LANGUAGES CXX)
+project(Beacon VERSION 1.0.3 LANGUAGES CXX)
 
 # 启用 C 语言支持（用于编译自解压 launcher）
 enable_language(C)
@@ -127,8 +127,8 @@ elseif(APPLE)
     set_target_properties(Beacon PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.beacon.launcher"
         MACOSX_BUNDLE_BUNDLE_NAME "Beacon"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.2"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.2")
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.3"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.3")
 else()
     qt_add_executable(Beacon ${MANAGER_SRC})
 endif()
@@ -184,6 +184,7 @@ set(QML_SOURCES
     src/qml/components/OverlayScrollBar.qml
     src/qml/components/UpdatePopup.qml
     src/qml/components/CrashDialog.qml
+    src/qml/components/ChangelogDialog.qml
 )
 
 # Preserve the qrc:/qml/... resource layout so runtime URLs stay unchanged

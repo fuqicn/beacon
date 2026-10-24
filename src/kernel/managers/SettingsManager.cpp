@@ -54,6 +54,19 @@ void SettingsManager::setValue(const QString &key, const QVariant &value)
     m_active->sync();
 }
 
+QVariant SettingsManager::globalValue(const QString &key, const QVariant &defaultValue) const
+{
+    return m_launcherSettings ? m_launcherSettings->value(key, defaultValue)
+                              : defaultValue;
+}
+
+void SettingsManager::setGlobalValue(const QString &key, const QVariant &value)
+{
+    if (!m_launcherSettings) return;
+    m_launcherSettings->setValue(key, value);
+    m_launcherSettings->sync();
+}
+
 void SettingsManager::sync()
 {
     if (m_active) m_active->sync();

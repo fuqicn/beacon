@@ -32,6 +32,16 @@ Rectangle {
     readonly property var modTasks: kernel.modManager.tasks || []
     readonly property bool packBusy: kernel.modpackManager.busy
     readonly property bool installBusy: kernel.installManager.busy
+    // Loader installs that need a JVM (Forge) resolve/download Java before the
+    // worker starts. During that phase the install progress is still 0, so show
+    // the Java download's own progress instead of a frozen indeterminate bar.
+    readonly property bool javaPrepBusy: root.installBusy
+                                         && kernel.installManager.status === "preparingJava"
+                                         && kernel.javaManager.downloadBusy
+    // Last loader-install error, kept visible for a while after the install
+    // worker stops so a failure is not silently swallowed (the install dialog
+    // closes as soon as the install starts).
+    property string installError: ""
     readonly property bool updBusy: kernel.updateDownloading
     // 搜索任务（资源包/光影包/数据包）
     readonly property var searchTasks: kernel.searchManager.tasks || []
@@ -50,7 +60,7 @@ Rectangle {
         }
         return false
     }
-    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy || root.searchBusy
+    readonly property bool anyVisible: root.dlBusy || root.modTasks.length > 0 || root.packBusy || root.installBusy || root.updBusy || root.searchBusy || root.installError !== ""
 
     height: root.anyVisible ? content.implicitHeight + 32 : 0
     radius: Theme.shapeExtraLarge
@@ -171,6 +181,28 @@ Rectangle {
                 // 下载完成时立即清除已完成的任务
                 kernel.searchManager.clearFinished()
             }
+        }
+    }
+
+    // Loader install failures: hide the error card automatically after a while.
+    Timer {
+        id: installErrorTimer
+        interval: 12000
+        repeat: false
+        onTriggered: root.installError = ""
+    }
+
+    Connections {
+        target: kernel.installManager
+        function onBusyChanged() {
+            if (kernel.installManager.busy) {
+                root.installError = ""
+                installErrorTimer.stop()
+            }
+        }
+        function onErrorOccurred(message) {
+            root.installError = message
+            installErrorTimer.restart()
         }
     }
 
@@ -403,13 +435,34 @@ Rectangle {
         // ================= Loader install =================
         DownloadCard {
             Layout.fillWidth: true
-            visible: root.installBusy
+            visible: root.installBusy || root.installError !== ""
             title: I18n.tr("status.loaderInstall")
-            subtitle: kernel.installManager.status
-            progress: kernel.installManager.progress
-            statusText: Math.round(kernel.installManager.progress * 100) + "%"
-            statusColor: Theme.primary
-            onCancelRequested: kernel.installManager.cancelAll()
+            subtitle: !root.installBusy
+                      ? root.installError
+                      : (kernel.installManager.status === "preparingJava"
+                         ? I18n.tr("install.preparingJava")
+                         : kernel.installManager.status)
+            progress: !root.installBusy
+                      ? 0
+                      : (root.javaPrepBusy
+                         ? kernel.javaManager.downloadProgress
+                         : kernel.installManager.progress)
+            indeterminate: root.installBusy && !root.javaPrepBusy
+                           && kernel.installManager.progress <= 0.01
+            statusText: !root.installBusy
+                        ? I18n.tr("status.failed")
+                        : Math.round((root.javaPrepBusy
+                                      ? kernel.javaManager.downloadProgress
+                                      : kernel.installManager.progress) * 100) + "%"
+            statusColor: root.installBusy ? Theme.primary : "#F44336"
+            onCancelRequested: {
+                if (root.installBusy) {
+                    kernel.installManager.cancelAll()
+                } else {
+                    installErrorTimer.stop()
+                    root.installError = ""
+                }
+            }
         }
     }
 }

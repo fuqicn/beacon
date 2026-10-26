@@ -56,6 +56,21 @@ public:
     Q_INVOKABLE void downloadJava(int majorVersion);
     Q_INVOKABLE void cancelDownloadJava();
 
+    // Bounded, cheap scan of the places a JVM normally lives (the bundled
+    // runtime directory, JAVA_HOME, PATH, Program Files\Java, Adoptium, …).
+    // Every candidate is probed with `java -version`, so the returned path is
+    // guaranteed to be a working JVM.
+    //
+    //   exactMajor > 0  → first JVM whose major version matches, or "" on a miss.
+    //   exactMajor <= 0 → the best usable JVM (highest major, JDK over JRE),
+    //                     or "" when nothing is installed.
+    //
+    // Unlike mc_java_find_all(), which walks %LOCALAPPDATA% six levels deep and
+    // can take seconds, this returns in well under a second and is safe to call
+    // from the GUI thread. Callers that can afford to wait should still use it
+    // from a worker thread.
+    static QString findInstalledJava(const QString &runtimeDir, int exactMajor = -1);
+
     bool downloadBusy() const { return m_downloadBusy; }
     qreal downloadProgress() const { return m_downloadProgress; }
     QString downloadTask() const { return m_downloadTask; }

@@ -66,7 +66,7 @@ void JavaDownloadWorker::run()
 
     // Emit a status update so the UI shows "fetching manifest" instead of appearing stuck
     emit subTaskChanged(QStringLiteral("Fetching Java %1 manifest...").arg(m_majorVersion));
-    emit progressChanged(0.01, QStringLiteral("Fetching manifest..."));
+    emit progressChanged(0.0, QStringLiteral("Fetching manifest..."));
 
     bool manifestOk = false;
     emit subTaskChanged(QStringLiteral("Connecting to mirror..."));
@@ -77,7 +77,6 @@ void JavaDownloadWorker::run()
             return;
         }
         emit subTaskChanged(QStringLiteral("Mirror 1 timeout, trying mirror 2..."));
-        emit progressChanged(0.02, QStringLiteral("Mirror 1"));
         mc_info("[DL-J] primary mirror failed, trying bmclapi...");
         if (!mc_java_download_manifest(m_majorVersion, "bmclapi", &list)) {
             if (m_cancelled.load()) {
@@ -86,7 +85,6 @@ void JavaDownloadWorker::run()
                 return;
             }
             emit subTaskChanged(QStringLiteral("Mirror 2 timeout, trying mirror 3..."));
-            emit progressChanged(0.03, QStringLiteral("Mirror 2"));
             mc_info("[DL-J] bmclapi failed, trying mojang...");
             manifestOk = mc_java_download_manifest(m_majorVersion, "mojang", &list);
         } else {
@@ -162,13 +160,15 @@ void JavaDownloadWorker::run()
 
     int okFiles = completed;
     if (!pending.empty()) {
-        const int chunkSize = 64;
-        int n = static_cast<int>(pending.size());
+        const int n = static_cast<int>(pending.size());
         std::vector<int> results(n, 0);
 
-        emit progressChanged(0.0, QStringLiteral("Downloading Java %1...").arg(m_majorVersion));
+        // Resumed downloads already have some files on disk: report that
+        // immediately instead of starting the bar at zero.
+        emit progressChanged(total > 0 ? static_cast<qreal>(completed) / total : 0.0,
+                             QStringLiteral("Downloading Java %1...").arg(m_majorVersion));
 
-        for (int chunkStart = 0; chunkStart < n; chunkStart += chunkSize) {
+        for (int chunkStart = 0; chunkStart < n; ) {
             // Cancel check between chunks so the user can abort a long download
             if (m_cancelled.load()) {
                 mc_info("[DL-J] Java %d cancelled at chunk %d/%d", m_majorVersion,
@@ -176,8 +176,11 @@ void JavaDownloadWorker::run()
                 break;
             }
 
-            int chunkEnd = std::min(chunkStart + chunkSize, n);
-            int chunkCount = chunkEnd - chunkStart;
+            // A small first chunk puts a real percentage on screen within a few
+            // seconds on a slow link; later chunks use the full pool width.
+            const int chunkSize = (chunkStart == 0 && n > 16) ? 16 : 64;
+            const int chunkEnd = std::min(chunkStart + chunkSize, n);
+            const int chunkCount = chunkEnd - chunkStart;
 
             emit subTaskChanged(QStringLiteral("%1-%2 / %3")
                                     .arg(chunkStart + 1).arg(chunkEnd).arg(n));
@@ -206,7 +209,7 @@ void JavaDownloadWorker::run()
                 items.push_back(it);
             }
 
-            mc_qt_download_batch_ex(items.data(), chunkCount, 20000, &results[chunkStart]);
+            mc_qt_download_batch_ex(items.data(), chunkCount, 60000, &results[chunkStart]);
 
             for (int i = chunkStart; i < chunkEnd; ++i) {
                 if (results[i])
@@ -215,6 +218,8 @@ void JavaDownloadWorker::run()
             emit completedFilesChanged(okFiles);
             emit progressChanged(static_cast<qreal>(okFiles) / total,
                                  QStringLiteral("Downloading Java %1...").arg(m_majorVersion));
+
+            chunkStart = chunkEnd;
         }
     }
 

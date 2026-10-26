@@ -21,6 +21,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 
+// Version install dialog. It only collects the options (directory, instance
+// name, loader) — starting either a download or a loader install closes it
+// immediately. Progress and cancellation live in the bottom-right
+// DownloadStatusPanel, which is always present, so nothing here needs to stay
+// on screen while the job runs.
 Popup {
     id: root
 
@@ -28,10 +33,6 @@ Popup {
     property string versionType: ""
     property string downloadDir: ""
     property string customName: ""
-
-    // True while downloading post-install files (libraries + assets)
-    property bool postInstallDownload: false
-    property string installedLoaderVersionId: ""
 
     onOpened: {
         root.downloadDir = kernel.instanceManager.currentRootDir || kernel.mcDir
@@ -48,7 +49,7 @@ Popup {
 
     modal: true
     focus: true
-    closePolicy: postInstallDownload ? Popup.NoAutoClose : Popup.CloseOnEscape
+    closePolicy: Popup.CloseOnEscape
     x: Math.round((parent.width - width) / 2)
     y: Math.round((parent.height - height) / 2)
     width: Math.min(parent.width - 64, 500)
@@ -67,27 +68,22 @@ Popup {
         spacing: 20
 
         Text {
-            text: postInstallDownload
-                  ? I18n.tr("download.title").replace("%1", root.installedLoaderVersionId)
-                   : I18n.tr("download.title").replace("%1", root.versionId)
+            text: I18n.tr("download.title").replace("%1", root.versionId)
             font.pixelSize: 22
             font.weight: Font.Bold
             color: palette.text
         }
 
         Text {
-            text: postInstallDownload
-                  ? I18n.tr("download.typeLabel").replace("%1", root.versionType !== "" ? root.versionType : "loader")
-                   : I18n.tr("download.typeLabel").replace("%1", root.versionType)
+            text: I18n.tr("download.typeLabel").replace("%1", root.versionType)
             font.pixelSize: 13
             color: palette.placeholderText
-            visible: text !== "" && !postInstallDownload
+            visible: text !== ""
         }
 
         // Download directory picker
         RowLayout {
             spacing: 12
-            visible: !postInstallDownload
 
             Text {
                 text: I18n.tr("download.dirLabel")
@@ -114,7 +110,6 @@ Popup {
         // Install mode UI (loader selection)
         ColumnLayout {
             spacing: 12
-            visible: !postInstallDownload
 
             // Custom instance name
             RowLayout {
@@ -244,68 +239,6 @@ Popup {
             }
         }
 
-        // Status area (both install and download modes)
-        Text {
-            id: installStatus
-            text: ""
-            font.pixelSize: 12
-            color: palette.placeholderText
-            visible: text !== ""
-        }
-
-        BusyIndicator {
-            id: installSpinner
-            width: 20; height: 20
-            visible: false
-            Layout.alignment: Qt.AlignHCenter
-        }
-
-        // Download progress bar (visible during post-install download)
-        ColumnLayout {
-            spacing: 6
-            visible: postInstallDownload
-            Layout.fillWidth: true
-
-            Rectangle {
-                id: progressTrack
-                Layout.fillWidth: true
-                height: 6
-                radius: Theme.shapeExtraSmall
-                color: Qt.alpha(Theme.primary, 0.12)
-                clip: true
-
-                Rectangle {
-                    id: progressBar
-                    width: parent.width * Math.min(downloadProgress, 1.0)
-                    height: parent.height
-                    radius: Theme.shapeExtraSmall
-                    color: Theme.primary
-                    Behavior on width { SmoothedAnimation { duration: 300; velocity: 200 } }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
-
-                Text {
-                    text: Math.round(downloadProgress * 100) + "%"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    color: palette.text
-                }
-
-                Text {
-                    text: downloadTotal > 0
-                          ? I18n.tr("download.files").replace("%1", String(downloadCompleted)).replace("%2", String(downloadTotal))
-                          : ""
-                    font.pixelSize: 11
-                    color: palette.placeholderText
-                    Layout.fillWidth: true
-                }
-            }
-        }
-
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
@@ -314,46 +247,38 @@ Popup {
 
             Button {
                 id: cancelBtn
-                text: postInstallDownload ? I18n.tr("download.close") : I18n.tr("download.cancel")
+                text: I18n.tr("download.cancel")
                 font.weight: Font.Normal
-                enabled: !postInstallDownload || !kernel.downloadManager.busy
-                onClicked: {
-                    if (postInstallDownload && kernel.downloadManager.busy)
-                        kernel.downloadManager.cancelAll()
-                    root.close()
-                }
+                onClicked: root.close()
             }
 
             Button {
                 id: downloadBtn
-                text: postInstallDownload ? I18n.tr("download.downloading") : I18n.tr("download.start")
+                text: I18n.tr("download.start")
                 font.weight: Font.Normal
-                highlighted: !postInstallDownload
-                enabled: !postInstallDownload
-                visible: !postInstallDownload
+                highlighted: true
                 onClicked: {
                     var loader = loaderCombo.model.get(loaderCombo.currentIndex).loader
+                    var lver = ""
+                    if (loader !== ""
+                            && loaderVersionCombo.currentIndex >= 0
+                            && loaderVersionCombo.currentIndex < loaderVersionCombo.model.count)
+                        lver = loaderVersionCombo.model.get(loaderVersionCombo.currentIndex).value
+                    // The bottom-right status panel owns the progress UI for both
+                    // paths (loader install → libraries/assets download), so this
+                    // dialog is only a form: close it before the job starts, which
+                    // also keeps the UI responsive while Forge prepares Java.
+                    root.close()
                     if (loader === "") {
                         kernel.downloadManager.startDownload(root.versionId, root.downloadDir)
-                        root.close()
                     } else {
-                        var lver = ""
-                        if (loaderVersionCombo.currentIndex >= 0 && loaderVersionCombo.currentIndex < loaderVersionCombo.model.count)
-                            lver = loaderVersionCombo.model.get(loaderVersionCombo.currentIndex).value
-                        downloadBtn.enabled = false
-                        cancelBtn.enabled = false
-                        installSpinner.visible = true
-                        installStatus.text = I18n.tr("download.installing").replace("%1", loader)
-                        kernel.installManager.installLoader(root.versionId, loader, lver, "", root.downloadDir, root.customName)
+                        kernel.installManager.installLoader(
+                                    root.versionId, loader, lver, "", root.downloadDir, root.customName)
                     }
                 }
             }
         }
     }
-
-    readonly property real downloadProgress: kernel.downloadManager.progress
-    readonly property int downloadTotal: kernel.downloadManager.totalFiles
-    readonly property int downloadCompleted: kernel.downloadManager.completedFiles
 
     Connections {
         target: kernel.installManager
@@ -372,53 +297,6 @@ Popup {
                 loaderVersionCombo.model.append({ text: I18n.tr("download.fetchFailed"), value: "" })
                 loaderVersionCombo.currentIndex = 0
                 retryVersionsBtn.visible = true
-            }
-        }
-        function onInstallCompleted(versionId) {
-            installStatus.text = I18n.tr("download.installComplete")
-            installSpinner.visible = false
-            downloadBtn.enabled = true
-            cancelBtn.enabled = true
-            root.installedLoaderVersionId = versionId
-            root.postInstallDownload = true
-            kernel.downloadManager.startDownload(versionId, root.downloadDir)
-        }
-        function onErrorOccurred(msg) {
-            installStatus.text = I18n.tr("download.error").replace("%1", msg)
-            installSpinner.visible = false
-            downloadBtn.enabled = true
-            cancelBtn.enabled = true
-        }
-        function onProgressChanged(p) {
-            installStatus.text = kernel.installManager.status
-        }
-        function onStatusChanged(s) {
-            installStatus.text = s
-        }
-    }
-
-    Connections {
-        target: kernel.downloadManager
-        function onAllCompleted(success) {
-            // Register the download target as an instance root and refresh the list
-            if (root.downloadDir.length > 0)
-                kernel.instanceManager.addRootDir(root.downloadDir)
-            if (root.postInstallDownload) {
-                if (success)
-                    installStatus.text = I18n.tr("download.downloadComplete")
-                else
-                    installStatus.text = I18n.tr("download.partialFail")
-                root.postInstallDownload = false
-                root.close()
-            }
-        }
-        function onProgressChanged(p, task) {
-            if (root.postInstallDownload)
-                installStatus.text = task
-        }
-        function onErrorOccurred(msg) {
-            if (root.postInstallDownload) {
-                installStatus.text = I18n.tr("download.downloadError").replace("%1", msg)
             }
         }
     }

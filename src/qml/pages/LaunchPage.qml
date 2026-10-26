@@ -72,13 +72,25 @@ property string selectedVersion: ""
             return
         }
         if (kernel.javaDownloading) {
-            launchStatus.text = I18n.tr("launch.downloadingJava")
+            // Java phase: "preparing" while the runtime is being located or
+            // its manifest fetched, then a live percentage of the download.
+            // Only trust the percentage while a download is actually running,
+            // otherwise a finished download's 100% would flash on the next launch.
+            var jm = kernel.javaManager
+            var pct = (jm && jm.downloadBusy)
+                    ? Math.round((jm.downloadProgress || 0) * 100) : 0
+            launchStatus.text = pct > 0
+                    ? I18n.tr("launch.downloadingJavaProgress").arg(pct)
+                    : I18n.tr("launch.fetchingJava")
             return
         }
         if (kernel.authManager.loggingIn) {
             launchStatus.text = I18n.tr("account.loggingIn")
             return
         }
+        // Nothing in flight any more: drop a stale Java/progress line instead
+        // of leaving the last percentage on screen (e.g. after a failure).
+        launchStatus.text = ""
     }
 
 Component.onCompleted: {
@@ -116,6 +128,18 @@ Component.onCompleted: {
         target: kernel
         function onJavaDownloadingChanged() {
             updateStatus()
+        }
+    }
+
+    Connections {
+        target: kernel.javaManager
+        function onDownloadProgressChanged() {
+            if (kernel.javaDownloading)
+                updateStatus()
+        }
+        function onDownloadBusyChanged() {
+            if (kernel.javaDownloading)
+                updateStatus()
         }
     }
 

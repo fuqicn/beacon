@@ -49,6 +49,10 @@ public:
     bool busy() const { return m_busy; }
     QString status() const { return m_status; }
     qreal progress() const { return m_progress; }
+    // Target directory of the most recent loader install. Used by KernelBridge
+    // to continue with the vanilla libraries/assets download once the loader
+    // profile has been written.
+    QString targetDir() const { return m_targetDir; }
 
     Q_INVOKABLE void installLoader(const QString &mcVersion, const QString &loader,
                                     const QString &loaderVer, const QString &javaPath,
@@ -68,12 +72,36 @@ signals:
 
 private:
     void setBusy(bool b);
+    // Dispatches the install worker. Forge needs a JVM resolved first, so the
+    // caller either passes one or goes through resolveForgeJava().
+    void startInstallWorker(const QString &mcVersion, const QString &loader,
+                            const QString &loaderVer, const QString &javaPath,
+                            const QString &dir, const QString &customName);
+    // Finds a JVM for the official Forge installer without blocking the GUI
+    // thread (bounded scan, then the kernel's deep scan on a low-priority
+    // worker). Continues with startInstallWorker() or downloadJavaForForge().
+    void resolveForgeJava(const QString &mcVersion, const QString &loader,
+                          const QString &loaderVer, const QString &dir,
+                          const QString &customName, quint64 token);
+    // Makes sure a Java runtime exists for the Forge installer, reusing a
+    // download that is already in flight and starting Java 17 when needed.
+    void downloadJavaForForge(const QString &mcVersion, const QString &loader,
+                              const QString &loaderVer, const QString &dir,
+                              const QString &customName, quint64 token);
 
     bool m_busy = false;
     QString m_status;
     qreal m_progress = 0.0;
+    QString m_targetDir;
     QThread *m_workerThread = nullptr;
     InstallWorker *m_worker = nullptr;
+    // True once the worker has been dispatched for the current install attempt
+    // (the Java preparation phase runs before it).
+    bool m_installStarted = false;
+    // Bumped for every install attempt. Java preparation completes
+    // asynchronously, and a callback that lands after a cancel or a newer
+    // install must be dropped instead of starting a stale worker.
+    quint64 m_installToken = 0;
 };
 
 #endif

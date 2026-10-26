@@ -293,6 +293,25 @@ void KernelBridge::initialize(const QString &lang, const QString &mcDir)
             kb->m_instanceManager->addRootDir(dir);
     });
 
+    // A loader install writes the version profile/libraries and then still needs
+    // the vanilla libraries and assets. Kick that download off here (not in the
+    // dialog) so the whole install → download pipeline survives the dialog being
+    // closed immediately, and both phases show in the status panel.
+    QObject::connect(s_instance->m_installManager, &InstallManager::installCompleted,
+                     s_instance, [bridge = s_instance](const QString &versionId) {
+                         if (versionId.isEmpty()) return;
+                         if (bridge->m_downloadManager->busy()) {
+                             mc_error("[Install] %s ready but a download is already "
+                                      "running; post-install files not queued",
+                                      versionId.toUtf8().constData());
+                             return;
+                         }
+                         const QString dir = bridge->m_installManager->targetDir();
+                         mc_info("[Install] %s ready, downloading libraries/assets into %s",
+                                 versionId.toUtf8().constData(), dir.toUtf8().constData());
+                         bridge->m_downloadManager->startDownload(versionId, dir);
+                     });
+
     // Defer instance scan to after UI is shown
     QTimer::singleShot(0, s_instance, []() {
         s_instance->m_instanceManager->scanInstances();
@@ -884,13 +903,22 @@ void KernelBridge::setDownloadSource(const QString &source)
     QString type = source.trimmed().toLower();
     if (type.isEmpty())
         type = QStringLiteral("auto");
-    if (type == QStringLiteral("official"))
-        type = QStringLiteral("mojang");
+
+    // The combo box persists "official"/"mirror"/"auto", but the kernel only
+    // understands real mirror types. "mirror" is NOT an entry in mirrors.json,
+    // so URL translation silently failed and the UI's 镜像 option actually
+    // went straight to Mojang. Map it to the primary config mirror.
+    QString kernelType = type;
+    if (kernelType == QStringLiteral("official"))
+        kernelType = QStringLiteral("mojang");
+    else if (kernelType == QStringLiteral("mirror"))
+        kernelType = QStringLiteral("bmclapi");
 
     m_settingsManager->setValue("download/source", type);
-    mc_download_set_mirror(type.toUtf8().constData());
-    mc_mod_set_mirror(type.toUtf8().constData());
-    mc_info("[Bridge] download source -> %s", type.toUtf8().constData());
+    mc_download_set_mirror(kernelType.toUtf8().constData());
+    mc_mod_set_mirror(kernelType.toUtf8().constData());
+    mc_info("[Bridge] download source -> %s (kernel: %s)",
+            type.toUtf8().constData(), kernelType.toUtf8().constData());
 
     // Warm the mirror decision (Mojang probe + Modrinth comparison) in the
     // background so the first mod search / cover load never blocks on it.
@@ -2033,12 +2061,24 @@ void KernelBridge::launchGame(int memory)
 
     setJavaDownloading(true);
 
-    int requiredJava = readRequiredJavaVersion(
+    const int requiredJava = readRequiredJavaVersion(
         m_launchManager->versionId(), m_launchManager->mcDir());
+
+    const QString runtimeDir = s_launcherDir.isEmpty()
+                                   ? QCoreApplication::applicationDirPath() + "/.runtime"
+                                   : s_launcherDir + "/.runtime";
+    // JVM resolved by a previous launch: verifying it is one cheap QProcess
+    // probe, so a returning user never pays for a directory scan at all.
+    const QString cachedJava = m_settingsManager
+        ? m_settingsManager->globalValue("java/foundPath").toString()
+        : QString();
+    const int cachedMajor = m_settingsManager
+        ? m_settingsManager->globalValue("java/foundMajor", 0).toInt()
+        : 0;
 
     // Run Java detection on background thread to prevent UI freeze
     QPointer<KernelBridge> guard(this);
-    std::thread([this, guard, requiredJava]() {
+    std::thread([this, guard, requiredJava, runtimeDir, cachedJava, cachedMajor]() {
         mc_info("Java detection: need version %d", requiredJava);
 
         // Helper: verify the actual major version of a java executable.
@@ -2064,56 +2104,58 @@ void KernelBridge::launchGame(int memory)
             return -1;
         };
 
-        // 1. Check bundled runtime for exact version match.
-        // First verify the path exists AND the binary is actually the right version.
-        QString runtimeDir = s_launcherDir.isEmpty()
-                                     ? QCoreApplication::applicationDirPath() + "/.runtime"
-                                     : s_launcherDir + "/.runtime";
-        QString bundledPath;
-#ifdef Q_OS_WIN
-        bundledPath = runtimeDir + QString("/java-%1/bin/java.exe").arg(requiredJava);
-#else
-        bundledPath = runtimeDir + QString("/java-%1/bin/java").arg(requiredJava);
-#endif
-
-        int bundledMajor = verifyJavaVersion(bundledPath, requiredJava);
-        if (bundledMajor == requiredJava) {
-            // Also check jlink sibling to confirm full JDK install
-            QString javaBinDir = QFileInfo(bundledPath).path();
-#ifdef Q_OS_WIN
-            QString jlinkPath = javaBinDir + "/jlink.exe";
-#else
-            QString jlinkPath = javaBinDir + "/jlink";
-#endif
-            if (QFile::exists(jlinkPath)) {
-                mc_info("Found bundled Java %d: %s", requiredJava, bundledPath.toUtf8().constData());
-                if (!guard) return;
-                QMetaObject::invokeMethod(this, [this, bundledPath]() {
+        // Hand a resolved JVM back to the GUI thread, remember it for the next
+        // launch and continue with the normal launch handshake.
+        auto acceptJava = [this, guard, requiredJava](const QString &path) {
+            if (!guard) return;
+            QMetaObject::invokeMethod(this, [this, path, requiredJava]() {
+                if (m_launchCancelled) {
                     setJavaDownloading(false);
-                    if (m_launchCancelled) return;
-                    m_launchManager->setJavaPath(bundledPath);
-                    doAuthAndLaunch();
-                }, Qt::QueuedConnection);
-                return;
-            }
+                    return;
+                }
+                if (m_settingsManager) {
+                    m_settingsManager->setGlobalValue("java/foundPath", path);
+                    m_settingsManager->setGlobalValue("java/foundMajor", requiredJava);
+                }
+                m_launchManager->setJavaPath(path);
+                setJavaDownloading(false);
+                onJavaReady();
+            }, Qt::QueuedConnection);
+        };
+
+        // 0. JVM resolved on a previous launch.
+        if (cachedMajor == requiredJava && !cachedJava.isEmpty()
+            && verifyJavaVersion(cachedJava, requiredJava) == requiredJava) {
+            mc_info("Found cached Java %d: %s", requiredJava,
+                    cachedJava.toUtf8().constData());
+            acceptJava(cachedJava);
+            return;
         }
 
-        // 2. Scan system Java via mc_java_find_all for an exact version match.
-        // This runs a lightweight QProcess probe per candidate — we cache the
-        // result in a small local buffer rather than the full runtime list.
+        // 1. Bounded probe shared with the Forge-install path: our own runtime
+        //    directory first (verified to be a complete JDK), then JAVA_HOME,
+        //    PATH and the usual vendor install roots. Returns in well under a
+        //    second on a typical machine and covers almost every real install.
+        const QString quickJava = JavaManager::findInstalledJava(runtimeDir, requiredJava);
+        if (!quickJava.isEmpty()) {
+            mc_info("Found system Java %d (bounded scan): %s", requiredJava,
+                    quickJava.toUtf8().constData());
+            acceptJava(quickJava);
+            return;
+        }
+
+        // 2. Exhaustive kernel scan as a last resort. It walks the user profile
+        //    several levels deep, so drop this thread below normal priority to
+        //    keep the UI (and the rest of the desktop) responsive while it runs.
+        mc_info("Java quick scan found nothing, running full scan...");
+#ifdef Q_OS_WIN
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#endif
         McJavaRuntime runtimes[128];
-        int count = mc_java_find_all(runtimes, 128);
+        const int count = mc_java_find_all(runtimes, 128);
         for (int i = 0; i < count; ++i) {
             if (runtimes[i].major_version != requiredJava) continue;
-            QString path = QString::fromUtf8(runtimes[i].path);
-            mc_info("Found system Java %d: %s", requiredJava, path.toUtf8().constData());
-            if (!guard) return;
-            QMetaObject::invokeMethod(this, [this, path]() {
-                setJavaDownloading(false);
-                if (m_launchCancelled) return;
-                m_launchManager->setJavaPath(path);
-                doAuthAndLaunch();
-            }, Qt::QueuedConnection);
+            acceptJava(QString::fromUtf8(runtimes[i].path));
             return;
         }
 
@@ -2121,9 +2163,10 @@ void KernelBridge::launchGame(int memory)
         mc_info("No Java %d found, downloading...", requiredJava);
         if (!guard) return;
         QMetaObject::invokeMethod(this, [this, requiredJava]() {
-            // Reset downloading flag before starting the async download so
-            // the UI can reflect search/progress updates from JavaManager.
-            setJavaDownloading(false);
+            // javaDownloading intentionally stays true: the launch page keeps
+            // showing the Java phase (now with a live percentage) until the
+            // runtime is ready. It is cleared in onJavaDownloaded() or in the
+            // failure handler below.
             m_javaManager->downloadJava(requiredJava);
             connect(m_javaManager, &JavaManager::javaDownloaded,
                     this, &KernelBridge::onJavaDownloaded, Qt::SingleShotConnection);
@@ -2157,7 +2200,10 @@ void KernelBridge::cancelLaunch()
     if (m_javaDownloading) {
         mc_info("[Bridge] cancelLaunch: cancelling Java download");
         m_launchCancelled = true;
-        m_downloadManager->cancelAll();
+        if (m_javaManager && m_javaManager->downloadBusy())
+            m_javaManager->cancelDownloadJava();
+        else
+            m_downloadManager->cancelAll();
         return;
     }
     if (m_launchManager->verifying()) {

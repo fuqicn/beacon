@@ -38,6 +38,7 @@
 #include <QTimer>
 #include <QThread>
 #include <cstdlib>
+#include <array>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <shellapi.h>
@@ -729,9 +730,26 @@ void LaunchManager::downloadMissingFiles()
         }
     }
 
-    mc_qt_download_batch(cUrls.data(), cPaths.data(), cSha1s.data(),
-                         allSizes.data(), count, 20000, results.data(),
-                         nullptr, nullptr);
+    // Two ordered sources per file (mirror first, official second) so a dead
+    // mirror only costs that file, and a 120 s idle budget so a slow-but-alive
+    // source is not cut off mid-transfer (the old 20 s cap produced wholesale
+    // "failures" that then serialised into a slow per-file retry pass).
+    std::vector<std::array<const char *, 2>> srcs(count);
+    std::vector<McQtBatchItem> items(count);
+    for (int i = 0; i < count; ++i) {
+        if (cOrig[i] && cOrig[i][0] && strcmp(cOrig[i], cUrls[i]) != 0) {
+            srcs[i] = { cUrls[i], cOrig[i] };
+            items[i].url_count = 2;
+        } else {
+            srcs[i] = { cUrls[i], nullptr };
+            items[i].url_count = 1;
+        }
+        items[i].urls = srcs[i].data();
+        items[i].path = cPaths[i];
+        items[i].sha1 = cSha1s[i];
+        items[i].size = (i < allSizes.size()) ? allSizes[i] : 0;
+    }
+    mc_qt_download_batch_ex(items.data(), count, 120000, results.data());
 
     int okCount = 0;
     for (int i = 0; i < count; ++i) okCount += results[i];
@@ -768,21 +786,41 @@ void LaunchManager::downloadMissingFiles()
     };
     postVerify("Post-verify");
 
-    // Retry failed files with fallback pattern
+    // Retry failed files as one parallel batch (source order flipped)
     okCount = 0;
     for (int i = 0; i < count; ++i) okCount += results[i];
     if (okCount < count) {
-        mc_info("[Verify] Retrying %d failed downloads...", count - okCount);
-        for (int i = 0; i < count; ++i) {
-            if (!results[i]) {
-                bool rOk = false;
-                const char *rUrls[2] = {cOrig[i], cUrls[i]};
-                for (int r = 0; r < 4 && !rOk; ++r) {
-                    QThread::msleep(300 + (std::rand() % (200 + r * 300)));
-                    rOk = mc_qt_download_file_multi(rUrls, 2, cPaths[i], cSha1s[i], 0, 120000);
-                }
-                mc_info("[Verify] Retry %s: %s", rOk ? "OK" : "FAIL", cPaths[i]);
+        std::vector<int> failed;
+        failed.reserve((size_t)(count - okCount));
+        for (int i = 0; i < count; ++i)
+            if (!results[i]) failed.push_back(i);
+        mc_info("[Verify] Retrying %d failed downloads in parallel...", (int)failed.size());
+
+        std::vector<std::array<const char *, 2>> retrySrcs(failed.size());
+        std::vector<McQtBatchItem> retryItems(failed.size());
+        std::vector<int> retryResults(failed.size(), 0);
+        for (size_t k = 0; k < failed.size(); ++k) {
+            int i = failed[k];
+            if (cOrig[i] && cOrig[i][0] && strcmp(cOrig[i], cUrls[i]) != 0) {
+                retrySrcs[k] = { cOrig[i], cUrls[i] };
+                retryItems[k].url_count = 2;
+            } else if (cOrig[i] && cOrig[i][0]) {
+                retrySrcs[k] = { cOrig[i], nullptr };
+                retryItems[k].url_count = 1;
+            } else {
+                retrySrcs[k] = { cUrls[i], nullptr };
+                retryItems[k].url_count = 1;
             }
+            retryItems[k].urls = retrySrcs[k].data();
+            retryItems[k].path = cPaths[i];
+            retryItems[k].sha1 = cSha1s[i];
+            retryItems[k].size = (i < allSizes.size()) ? allSizes[i] : 0;
+        }
+        mc_qt_download_batch_ex(retryItems.data(), (int)failed.size(), 120000,
+                                retryResults.data());
+        for (size_t k = 0; k < failed.size(); ++k) {
+            results[failed[k]] = retryResults[k];
+            mc_info("[Verify] Retry %s: %s", retryResults[k] ? "OK" : "FAIL", cPaths[failed[k]]);
         }
         // Post-verify retried files too
         int bad = postVerify("Retry-verify");

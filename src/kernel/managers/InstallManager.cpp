@@ -27,6 +27,7 @@
 #include <mc_hash.h>
 #include <mc_str.h>
 #include <mc_version.h>
+#include <mc_java.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -37,9 +38,11 @@
 #include <QCoreApplication>
 #include <QThread>
 #include <QProcess>
-#include <QEventLoop>
+#include <QPointer>
+#include <QSharedPointer>
 #include <QXmlStreamReader>
 #include <cstdlib>
+#include <array>
 #include <functional>
 #include <algorithm>
 #include "KernelBridge.h"
@@ -414,23 +417,30 @@ static QJsonObject forgeProfileFromInstaller(const QByteArray &jarData)
     return QJsonObject();
 }
 
-// Locate a usable JVM for the official Forge installer: bundled runtimes first,
-// then JAVA_HOME. Returns an empty string if none is available.
+// Locate a usable JVM for the official Forge installer: the launcher's bundled
+// runtimes and the usual system install locations (shared bounded scan), then
+// the kernel's deep scan as a fallback. Returns an empty string if none exists.
 static QString findJavaForInstall(const QString &mcDir)
 {
-    QStringList candidates;
-    candidates << QDir(mcDir).filePath("../.runtime/java-17/bin/java.exe")
-               << QDir(mcDir).filePath("../.runtime/java-11/bin/java.exe")
-               << QDir(mcDir).filePath("../.runtime/java-21/bin/java.exe")
-               << QDir(mcDir).filePath("../.runtime/java-8/bin/java.exe");
-    const char *jh = getenv("JAVA_HOME");
-    if (jh && jh[0])
-        candidates << QString::fromUtf8(jh) + "/bin/java.exe";
-    for (const QString &c : candidates) {
-        QFileInfo fi(c);
-        if (fi.exists() && fi.isFile() && fi.size() > 0)
-            return QDir::cleanPath(c);
+    const QString runtimeDir = QDir(mcDir).absoluteFilePath("../.runtime");
+    QString java = JavaManager::findInstalledJava(runtimeDir, -1);
+    if (!java.isEmpty())
+        return java;
+
+    McJavaRuntime runtimes[128];
+    const int count = mc_java_find_all(runtimes, 128);
+    int best = -1;
+    for (int i = 0; i < count; ++i) {
+        if (runtimes[i].major_version < 8)
+            continue;
+        if (best < 0
+            || runtimes[i].major_version > runtimes[best].major_version
+            || (runtimes[i].major_version == runtimes[best].major_version
+                && runtimes[i].is_jdk && !runtimes[best].is_jdk))
+            best = i;
     }
+    if (best >= 0)
+        return QString::fromUtf8(runtimes[best].path);
     return QString();
 }
 
@@ -819,10 +829,31 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
             }
         }
 
-        mc_info("[Install] Calling mc_qt_download_batch (count=%d)...", count);
-        mc_qt_download_batch(cUrls.data(), cPaths.data(), cSha1s.data(),
-                             sizes.data(), count, 20000, results.data(),
-                             nullptr, nullptr);
+        // Per-file ordered sources: mirror first, official second. The batch
+        // API used to get a single URL, so one throttled/dead mirror cost the
+        // whole file and forced the sequential retry pass below.
+        std::vector<std::array<const char *, 2>> srcs(count);
+        std::vector<McQtBatchItem> items(count);
+        for (int i = 0; i < count; ++i) {
+            if (cOrig[i] && cOrig[i][0] && strcmp(cOrig[i], cUrls[i]) != 0) {
+                srcs[i] = { cUrls[i], cOrig[i] };
+                items[i].url_count = 2;
+            } else {
+                srcs[i] = { cUrls[i], nullptr };
+                items[i].url_count = 1;
+            }
+            items[i].urls = srcs[i].data();
+            items[i].path = cPaths[i];
+            items[i].sha1 = cSha1s[i];
+            items[i].size = sizes[i];
+        }
+
+        // 120 s idle budget (same as the standalone kernel downloader). The
+        // timer restarts on every received chunk, so it only kills stalled
+        // sources; the old 20 s cap produced ~70 % false failures under
+        // 64-way concurrency, each of which then cost a serial retry.
+        mc_info("[Install] Calling mc_qt_download_batch_ex (count=%d, timeout=120000ms)...", count);
+        mc_qt_download_batch_ex(items.data(), count, 120000, results.data());
 
         int ok = 0;
         for (int i = 0; i < count; ++i) ok += results[i];
@@ -858,27 +889,56 @@ bool installLoaderSync(const QString &mcVersion, const QString &loader,
         };
         postVerify("Post-verify");
 
-        // Retry failed files individually with fallback URLs
+        // Retry the failures as one parallel batch instead of one file at a
+        // time: with 64 pool threads a failed-file burst (60-85 of them) used
+        // to serialise into ~1 minute of dead time plus random sleeps.
         ok = 0;
         for (int i = 0; i < count; ++i) ok += results[i];
         if (ok < count) {
-            mc_info("[Install] Retrying %d failed downloads individually...", count - ok);
-            for (int i = 0; i < count; ++i) {
-                if (!results[i]) {
-                    bool retryOk = false;
-                    const char *retryUrls[2] = {cOrig[i], cUrls[i]};
-                    for (int r = 0; r < 4 && !retryOk; ++r) {
-                        QThread::msleep(300 + (std::rand() % (200 + r * 300)));
-                        retryOk = mc_qt_download_file_multi(
-                            retryUrls, 2, cPaths[i], cSha1s[i], 0, 120000);
-                    }
-                    if (!retryOk) {
-                        mc_info("[Install] Retry FAIL: %s", cPaths[i]);
-                    } else {
-                        mc_info("[Install] Retry OK: %s", cPaths[i]);
-                    }
+            std::vector<int> failed;
+            failed.reserve((size_t)(count - ok));
+            for (int i = 0; i < count; ++i)
+                if (!results[i]) failed.push_back(i);
+
+            mc_info("[Install] Retrying %d failed downloads in parallel...", (int)failed.size());
+
+            // Flip the source order: the mirror already timed out once, so the
+            // official URL gets the first slot for this pass.
+            std::vector<std::array<const char *, 2>> retrySrcs(failed.size());
+            std::vector<McQtBatchItem> retryItems(failed.size());
+            std::vector<int> retryResults(failed.size(), 0);
+            for (size_t k = 0; k < failed.size(); ++k) {
+                int i = failed[k];
+                if (cOrig[i] && cOrig[i][0] && strcmp(cOrig[i], cUrls[i]) != 0) {
+                    retrySrcs[k] = { cOrig[i], cUrls[i] };
+                    retryItems[k].url_count = 2;
+                } else if (cOrig[i] && cOrig[i][0]) {
+                    retrySrcs[k] = { cOrig[i], nullptr };
+                    retryItems[k].url_count = 1;
+                } else {
+                    retrySrcs[k] = { cUrls[i], nullptr };
+                    retryItems[k].url_count = 1;
+                }
+                retryItems[k].urls = retrySrcs[k].data();
+                retryItems[k].path = cPaths[i];
+                retryItems[k].sha1 = cSha1s[i];
+                retryItems[k].size = sizes[i];
+            }
+
+            mc_qt_download_batch_ex(retryItems.data(), (int)failed.size(), 120000,
+                                    retryResults.data());
+
+            int retryOk = 0;
+            for (size_t k = 0; k < failed.size(); ++k) {
+                results[failed[k]] = retryResults[k];
+                if (retryResults[k]) {
+                    retryOk++;
+                } else {
+                    mc_info("[Install] Retry FAIL: %s", cPaths[failed[k]]);
                 }
             }
+            mc_info("[Install] Retry pass recovered %d/%d", retryOk, (int)failed.size());
+
             // Post-verify retried files too (retry has no SHA1/size check for bare libraries)
             int bad = postVerify("Retry-verify");
             if (bad)
@@ -1292,6 +1352,18 @@ void InstallManager::cancelAll()
         m_worker->deleteLater();
         m_worker = nullptr;
     }
+    // Invalidate any pending Java-preparation callback: it runs on a worker
+    // thread (scan) or on a queued signal (download) and must not start a new
+    // worker after the user cancelled.
+    ++m_installToken;
+    const bool javaPrepPending = m_busy && !m_installStarted;
+    m_installStarted = false;
+    if (javaPrepPending) {
+        if (JavaManager *jm = KernelBridge::instance() ? KernelBridge::instance()->javaManager() : nullptr) {
+            if (jm->downloadBusy())
+                jm->cancelDownloadJava();
+        }
+    }
     if (m_busy) {
         m_busy = false;
         emit busyChanged();
@@ -1321,8 +1393,11 @@ void InstallManager::installLoader(const QString &mcVersion, const QString &load
         m_worker = nullptr;
     }
 
+    ++m_installToken;
+    m_installStarted = false;
     m_busy = true;
     m_progress = 0.0;
+    m_targetDir = dir;
     m_status = QString("Installing %1...").arg(loader);
     emit busyChanged();
     emit progressChanged(0.0);
@@ -1330,38 +1405,41 @@ void InstallManager::installLoader(const QString &mcVersion, const QString &load
 
     mc_info("[Install] Creating worker thread for %s %s", loader.toUtf8().constData(), mcVersion.toUtf8().constData());
 
-    // The official Forge installer needs a real JVM; make sure one is available
-    // (bundled auto-download, same as the launch path) before dispatching.
-    QString effectiveJava = javaPath;
-    if (loader == "forge" && effectiveJava.isEmpty()) {
-        if (JavaManager *jm = KernelBridge::instance()->javaManager()) {
-            QVariantMap best = jm->findBest();
-            if (!best.isEmpty()) {
-                effectiveJava = best["path"].toString();
-            } else {
-                mc_info("[Install] No Java found; downloading Java 17 for the Forge installer");
-                m_status = QString("正在准备 Java 17 (Forge 安装器需要)…");
-                emit statusChanged(m_status);
-                QEventLoop loop;
-                auto c1 = QObject::connect(jm, &JavaManager::javaDownloaded, &loop,
-                                           [&](const QString &path, int) { effectiveJava = path; loop.quit(); });
-                auto c2 = QObject::connect(jm, &JavaManager::javaDownloadFailed, &loop,
-                                           [&](int) { loop.quit(); });
-                jm->downloadJava(17);
-                loop.exec();
-                QObject::disconnect(c1);
-                QObject::disconnect(c2);
-            }
-        }
+    // The official Forge installer needs a real JVM, so make sure one is
+    // available (bundled auto-download, same as the launch path) before
+    // dispatching. The lookup and the download both run off the GUI thread:
+    // a full JVM scan walks the user profile and used to freeze the launcher
+    // (a nested event loop here also re-entered QML while the dialog closed).
+    if (loader == "forge" && javaPath.isEmpty()) {
+        // Sentinel status; the status panel renders it through I18n.
+        m_status = "preparingJava";
+        emit statusChanged(m_status);
+        resolveForgeJava(mcVersion, loader, loaderVer, dir, customName, m_installToken);
+        return;
     }
+
+    startInstallWorker(mcVersion, loader, loaderVer, javaPath, dir, customName);
+}
+
+void InstallManager::startInstallWorker(const QString &mcVersion, const QString &loader,
+                                        const QString &loaderVer, const QString &javaPath,
+                                        const QString &dir, const QString &customName)
+{
+    // Java preparation is asynchronous and may resolve after the user
+    // cancelled (or started a different instance).
+    if (m_installStarted || !m_busy) {
+        mc_info("[Install] Worker already started or install cancelled; ignoring");
+        return;
+    }
+    m_installStarted = true;
 
     m_worker = new InstallWorker;
     m_workerThread = new QThread(this);
     m_workerThread->setStackSize(16 * 1024 * 1024);
     m_worker->moveToThread(m_workerThread);
 
-    connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, effectiveJava, dir, customName]() {
-        w->doInstall(mcVersion, loader, loaderVer, effectiveJava, dir, customName);
+    connect(m_workerThread, &QThread::started, m_worker, [w = m_worker, mcVersion, loader, loaderVer, javaPath, dir, customName]() {
+        w->doInstall(mcVersion, loader, loaderVer, javaPath, dir, customName);
     }, Qt::DirectConnection);
 
     connect(m_worker, &InstallWorker::progressReported, this, [this](qreal p, const QString &s) {
@@ -1400,6 +1478,147 @@ void InstallManager::installLoader(const QString &mcVersion, const QString &load
 
     m_workerThread->start();
     mc_info("[Install] Worker thread started");
+}
+
+void InstallManager::resolveForgeJava(const QString &mcVersion, const QString &loader,
+                                      const QString &loaderVer, const QString &dir,
+                                      const QString &customName, quint64 token)
+{
+    JavaManager *jm = KernelBridge::instance() ? KernelBridge::instance()->javaManager() : nullptr;
+    const QString runtimeDir = jm ? jm->runtimeDir() : QString();
+
+    QPointer<InstallManager> guard(this);
+    QThread *thread = QThread::create([guard, token, runtimeDir, mcVersion, loader,
+                                       loaderVer, dir, customName]() {
+        // Cheap bounded scan first (bundled runtimes + the usual install
+        // locations). The deep kernel scan walks the user profile, so keep the
+        // whole lookup off the GUI thread and below normal priority.
+        QThread::currentThread()->setPriority(QThread::LowPriority);
+        QString java = JavaManager::findInstalledJava(runtimeDir, -1);
+
+        if (java.isEmpty()) {
+            mc_info("[Install] Bounded Java scan found nothing, running full scan...");
+            McJavaRuntime runtimes[128];
+            const int count = mc_java_find_all(runtimes, 128);
+            int best = -1;
+            for (int i = 0; i < count; ++i) {
+                if (runtimes[i].major_version < 8)
+                    continue;
+                if (best < 0
+                    || runtimes[i].major_version > runtimes[best].major_version
+                    || (runtimes[i].major_version == runtimes[best].major_version
+                        && runtimes[i].is_jdk && !runtimes[best].is_jdk))
+                    best = i;
+            }
+            if (best >= 0)
+                java = QString::fromUtf8(runtimes[best].path);
+        }
+
+        if (!guard)
+            return;
+        QMetaObject::invokeMethod(guard.data(), [guard, token, java, mcVersion, loader,
+                                                 loaderVer, dir, customName]() {
+            if (!guard || guard->m_installToken != token || !guard->m_busy)
+                return;
+            if (!java.isEmpty()) {
+                mc_info("[Install] Java for the loader installer: %s",
+                        java.toUtf8().constData());
+                guard->startInstallWorker(mcVersion, loader, loaderVer, java, dir, customName);
+            } else {
+                guard->downloadJavaForForge(mcVersion, loader, loaderVer, dir,
+                                            customName, token);
+            }
+        }, Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
+void InstallManager::downloadJavaForForge(const QString &mcVersion, const QString &loader,
+                                          const QString &loaderVer, const QString &dir,
+                                          const QString &customName, quint64 token)
+{
+    JavaManager *jm = KernelBridge::instance() ? KernelBridge::instance()->javaManager() : nullptr;
+    if (!jm) {
+        // No Java plumbing at all: let the worker try its own fallback lookup.
+        startInstallWorker(mcVersion, loader, loaderVer, QString(), dir, customName);
+        return;
+    }
+
+    // Shared by the connections below so a single completion disconnects the
+    // rest (nothing leaks between install attempts).
+    struct Wait {
+        QMetaObject::Connection ok;
+        QMetaObject::Connection failed;
+        QMetaObject::Connection searching;
+    };
+    auto state = QSharedPointer<Wait>::create();
+    auto cleanup = [state]() {
+        QObject::disconnect(state->ok);
+        QObject::disconnect(state->failed);
+        QObject::disconnect(state->searching);
+        state->ok = QMetaObject::Connection();
+        state->failed = QMetaObject::Connection();
+        state->searching = QMetaObject::Connection();
+    };
+
+    // A missing JVM is not fatal for the install itself: the worker skips the
+    // official Forge installer step and logs a warning (same as before). So a
+    // failed download still continues with an empty path instead of aborting.
+    auto deliver = [this, cleanup, token, mcVersion, loader, loaderVer, dir,
+                    customName](const QString &path) {
+        cleanup();
+        if (m_installToken != token || !m_busy)
+            return;
+        if (path.isEmpty())
+            mc_warn("[Install] Java preparation failed; the Forge installer step may be skipped");
+        startInstallWorker(mcVersion, loader, loaderVer, path, dir, customName);
+    };
+
+    m_status = "preparingJava";
+    emit statusChanged(m_status);
+
+    if (jm->downloadBusy()) {
+        // Reuse the download that is already running (e.g. started by a launch).
+        mc_info("[Install] Reusing the Java download already in progress");
+        state->ok = connect(jm, &JavaManager::javaDownloaded, this,
+                            [deliver](const QString &path, int) { deliver(path); });
+        state->failed = connect(jm, &JavaManager::javaDownloadFailed, this,
+                                [deliver](int) { deliver(QString()); });
+        return;
+    }
+
+    if (jm->searching()) {
+        // A Java *scan* is in progress; JavaManager's busy guard would drop a
+        // downloadJava() call right now, so retry when the scan is done.
+        mc_info("[Install] Waiting for the Java scan to finish before downloading");
+        state->searching = connect(jm, &JavaManager::searchingChanged, this,
+                                   [this, jm, state, mcVersion, loader, loaderVer, dir,
+                                    customName, token]() {
+            if (jm->searching())
+                return;
+            QObject::disconnect(state->searching);
+            QObject::disconnect(state->ok);
+            QObject::disconnect(state->failed);
+            if (m_installToken != token || !m_busy)
+                return;
+            downloadJavaForForge(mcVersion, loader, loaderVer, dir, customName, token);
+        });
+        state->ok = connect(jm, &JavaManager::javaDownloaded, this,
+                            [deliver](const QString &path, int) { deliver(path); });
+        state->failed = connect(jm, &JavaManager::javaDownloadFailed, this,
+                                [deliver](int) { deliver(QString()); });
+        return;
+    }
+
+    mc_info("[Install] No Java found; downloading Java 17 for the Forge installer");
+    state->ok = connect(jm, &JavaManager::javaDownloaded, this,
+                        [deliver](const QString &path, int) { deliver(path); },
+                        Qt::SingleShotConnection);
+    state->failed = connect(jm, &JavaManager::javaDownloadFailed, this,
+                            [deliver](int) { deliver(QString()); },
+                            Qt::SingleShotConnection);
+    jm->downloadJava(17);
 }
 
 // Synchronous version list fetch (runs on worker thread)

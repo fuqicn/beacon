@@ -79,10 +79,11 @@ int DownloadWorker::batchDownloadWithRetry(QStringList &urls, QStringList &paths
                                             QStringList &sha1s, QList<long> &sizes,
                                             int timeoutMs, QStringList *fallbackUrls)
 {
-    const int chunkSize = 512;
+    const int chunkSize = 1024;
     int count = urls.size();
 
-    m_totalFiles += count;
+    // The caller (stepDownloadAll) already accounted these files in
+    // m_totalFiles; adding them again made the progress bar stall below 100%.
     emit totalFilesChanged(m_totalFiles);
     m_lastEmit.start();
 
@@ -92,6 +93,7 @@ int DownloadWorker::batchDownloadWithRetry(QStringList &urls, QStringList &paths
     // Single pass: every file carries its own ordered sources
     // ([mirror, official]) so a failed source only affects that file.
     int failures = 0;
+    std::vector<int> failedIdx;
     int chunkStart = 0;
     while (chunkStart < count) {
         if (m_cancelled) return count - chunkStart;
@@ -151,7 +153,7 @@ int DownloadWorker::batchDownloadWithRetry(QStringList &urls, QStringList &paths
                 m_completedFiles++;
                 m_bytesDone += items[i - chunkStart].size;
             } else {
-                m_totalFiles--;
+                failedIdx.push_back(i);
                 failures++;
             }
         }
@@ -159,9 +161,68 @@ int DownloadWorker::batchDownloadWithRetry(QStringList &urls, QStringList &paths
         // chunk 间更新进度，让 UI 有实时反馈
         emit completedFilesChanged(m_completedFiles);
         emit totalFilesChanged(m_totalFiles);
-        qreal chunkProgress = (qreal)m_completedFiles / qMax(1, m_totalFiles + failures);
-        emit progressChanged(chunkProgress, m_currentTask);
+        emit progressChanged((qreal)m_completedFiles / qMax(1, m_totalFiles), m_currentTask);
         chunkStart = chunkEnd;
+    }
+
+    // One parallel retry pass for the stragglers, with the source order
+    // flipped (the mirror already failed once). Previously every failed file
+    // aborted the whole attempt, forcing a full re-scan + re-hash restart.
+    if (failures > 0 && !m_cancelled) {
+        int n = (int)failedIdx.size();
+        mc_info("[DL-W]   retrying %d failed files in one parallel batch", n);
+        setSubTask(QString("Retrying %1 files").arg(n));
+
+        std::vector<std::vector<QByteArray>> rSrcBa(n);
+        std::vector<std::vector<const char *>> rSrc(n);
+        std::vector<QByteArray> rPathBa(n), rShaBa(n);
+        std::vector<McQtBatchItem> rItems(n);
+        for (int k = 0; k < n; ++k) {
+            int i = failedIdx[k];
+
+            QStringList sources;
+            if (fallbackUrls && i < fallbackUrls->size() && !fallbackUrls->at(i).isEmpty())
+                sources << fallbackUrls->at(i);
+            if (!sources.contains(urls[i])) sources << urls[i];
+
+            rPathBa[k] = paths[i].toUtf8();
+            auto &sb = rSrcBa[k];
+            for (const auto &s : sources) sb.push_back(s.toUtf8());
+            auto &sl = rSrc[k];
+            sl.reserve(sb.size());
+            for (const auto &b : sb) sl.push_back(b.constData());
+
+            const char *sha = nullptr;
+            if (!sha1s[i].isEmpty()) {
+                rShaBa[k] = sha1s[i].toUtf8();
+                sha = rShaBa[k].constData();
+            }
+
+            McQtBatchItem it{};
+            it.urls = sl.data();
+            it.url_count = (int)sl.size();
+            it.path = rPathBa[k].constData();
+            it.sha1 = sha;
+            it.size = (i < sizes.size()) ? sizes[i] : 0;
+            rItems[k] = it;
+        }
+
+        std::vector<int> rResults(n, 0);
+        mc_qt_download_batch_ex(rItems.data(), n, timeoutMs, rResults.data());
+
+        for (int k = 0; k < n; ++k) {
+            if (rResults[k]) {
+                m_completedFiles++;
+                m_bytesDone += rItems[k].size;
+                failures--;
+            } else {
+                mc_info("[DL-W]   retry FAIL: %s", paths[failedIdx[k]].toUtf8().constData());
+            }
+        }
+        updateSpeed();
+        emit completedFilesChanged(m_completedFiles);
+        emit totalFilesChanged(m_totalFiles);
+        emit progressChanged((qreal)m_completedFiles / qMax(1, m_totalFiles), m_currentTask);
     }
 
     return failures;
@@ -549,6 +610,7 @@ void DownloadWorker::stepDownloadAll()
     setProgress(0.35, "Scanning assets...");
     McAssetIndex idx;
     memset(&idx, 0, sizeof(idx));
+    int assetExisting = 0;
     if (mc_asset_index_fetch(&idx, &m_ver, m_mcDir)) {
         for (int i = 0; i < idx.count; ++i) {
             auto &obj = idx.objects[i];
@@ -558,8 +620,7 @@ void DownloadWorker::stepDownloadAll()
 
             QFileInfo fi(QString::fromUtf8(objPath));
             if (fi.exists() && fi.size() == obj.size) {
-                m_totalFiles++;
-                m_completedFiles++;
+                assetExisting++;
                 continue;
             }
 
@@ -573,7 +634,11 @@ void DownloadWorker::stepDownloadAll()
         }
         mc_asset_index_free(&idx);
     }
-    m_totalFiles = okCount + dlPaths.size();
+    // Count existing assets in BOTH totals: they used to be added to
+    // m_completedFiles but dropped from the reset total, so the progress bar
+    // overshot (completed > total) whenever assets were already present.
+    m_totalFiles = okCount + assetExisting + dlPaths.size();
+    m_completedFiles = okCount + assetExisting;
     emit totalFilesChanged(m_totalFiles);
     emit completedFilesChanged(m_completedFiles);
 
@@ -582,7 +647,7 @@ void DownloadWorker::stepDownloadAll()
     // ── 5. Download everything in one batch ────────────────────
     if (!dlPaths.isEmpty()) {
         setProgress(0.5, "Downloading libraries & assets...");
-        int failed = batchDownloadWithRetry(dlUrls, dlPaths, dlSha1s, dlSizes, 30000, &dlOriginalUrls);
+        int failed = batchDownloadWithRetry(dlUrls, dlPaths, dlSha1s, dlSizes, 60000, &dlOriginalUrls);
         if (failed > 0) {
             mc_info("[DL-W]   %d/%d files failed to download", failed, dlPaths.size());
             retryOrFinish(false);
@@ -599,7 +664,7 @@ void DownloadWorker::stepDownloadLogging()
     mc_info("[DL-W] Step 5: enter");
     if (m_cancelled) { finish(false); return; }
 
-    setProgress(0.9, "Downloading logging config...");
+    setProgress(qMax(m_progress, (qreal)0.9), "Downloading logging config...");
     setSubTask("Logging config");
 
     if (!m_ver.logging_client_url[0]) {
@@ -637,7 +702,7 @@ void DownloadWorker::stepDownloadLogging()
     item.sha1 = m_ver.logging_client_sha1[0] ? m_ver.logging_client_sha1 : nullptr;
     item.size = 0;
     int ok = 0;
-    mc_qt_download_batch_ex(&item, 1, 30000, &ok);
+    mc_qt_download_batch_ex(&item, 1, 60000, &ok);
     mc_info("[DL-W]   result=%d", ok);
 
     if (ok) {

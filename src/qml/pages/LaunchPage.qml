@@ -183,7 +183,7 @@ Component.onCompleted: {
                 color: {
                     if (kernel.authManager.currentAccountIndex === index)
                         return Qt.alpha(Theme.primary, 0.12)
-                    return maus.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer
+                    return rowHover.hovered ? Theme.surfaceContainerHigh : Theme.surfaceContainer
                 }
                 border.color: kernel.authManager.currentAccountIndex === index
                              ? Qt.alpha(Theme.primary, 0.3)
@@ -289,13 +289,10 @@ Component.onCompleted: {
                     }
                 }
 
-                MouseArea {
-                    id: maus
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                    z: -1
-                }
+                // HoverHandler on the row itself: a backdrop MouseArea would lose
+                // hover as soon as the pointer moves onto the switch/delete
+                // buttons (only the topmost MouseArea receives hover events).
+                HoverHandler { id: rowHover }
             }
         }
 

@@ -565,13 +565,21 @@ void KernelBridge::checkForUpdate()
         if (guard) {
             m_checkingUpdate = false;
             emit checkingUpdateChanged();
-            if (!newVer.isEmpty() && newVer != curVer) {
-                m_latestVersion = newVer;
+            // Release tags look like "v-1.0.3" or "v1.0.3"; compare the bare
+            // version, otherwise a freshly installed build offers to update to
+            // the version it is already running.
+            QString ver = newVer;
+            if (ver.startsWith(QLatin1String("v")))
+                ver = ver.mid(1);
+            if (ver.startsWith(QLatin1String("-")))
+                ver = ver.mid(1);
+            if (!ver.isEmpty() && ver != curVer) {
+                m_latestVersion = ver;
                 m_updateAvailable = true;
                 emit latestVersionChanged();
                 emit updateAvailableChanged();
                 mc_info("[Update] new release %s (source=%s)",
-                        qPrintable(newVer), qPrintable(m_updateSource));
+                        qPrintable(ver), qPrintable(m_updateSource));
             }
         }
     };

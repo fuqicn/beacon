@@ -311,6 +311,11 @@ Item {
                             model: filteredVersions
                             clip: true
 
+                            // Hover isn't re-evaluated while delegates slide
+                            // under a stationary pointer; drop the highlight so
+                            // it can't stick to a different row after scrolling.
+                            onContentYChanged: root._hoveredItemIndex = -1
+
                             ScrollBar.vertical: OverlayScrollBar {
                                 followAlways: true
                                 policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded

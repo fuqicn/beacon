@@ -59,6 +59,14 @@ Popup {
             ]
         },
         {
+            title: I18n.tr("changelog.section.launch.title"),
+            items: [
+                I18n.tr("changelog.section.launch.item1"),
+                I18n.tr("changelog.section.launch.item2"),
+                I18n.tr("changelog.section.launch.item3")
+            ]
+        },
+        {
             title: I18n.tr("changelog.section.crash.title"),
             items: [
                 I18n.tr("changelog.section.crash.item1"),
@@ -71,7 +79,8 @@ Popup {
             items: [
                 I18n.tr("changelog.section.ui.item1"),
                 I18n.tr("changelog.section.ui.item2"),
-                I18n.tr("changelog.section.ui.item3")
+                I18n.tr("changelog.section.ui.item3"),
+                I18n.tr("changelog.section.ui.item4")
             ]
         }
     ]

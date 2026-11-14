@@ -126,6 +126,16 @@ Item {
                            ? Qt.alpha(Theme.primary, 0.18)
                            : Qt.alpha(Theme.primary, 0.1)
 
+                    // Declared before the Row so the ✕ hit area inside it stays
+                    // on top (hover/click are only seen by the topmost MouseArea).
+                    MouseArea {
+                        id: maDir
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: kernel.instanceManager.setCurrentRootDir(modelData)
+                    }
+
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -158,14 +168,6 @@ Item {
                         text: modelData
                         delay: 300
                     }
-
-                    MouseArea {
-                        id: maDir
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: kernel.instanceManager.setCurrentRootDir(modelData)
-                    }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -188,6 +190,11 @@ Item {
             model: kernel.instanceManager.instances
             spacing: 8
 
+            // Hover isn't re-evaluated when delegates slide under a stationary
+            // pointer, so clear the tracked index whenever the list scrolls.
+            onContentYChanged: root.hoveredIndex = -1
+            onCountChanged: root.hoveredIndex = -1
+
             ScrollBar.vertical: OverlayScrollBar {
                 followAlways: true
                 policy: Theme.alwaysScrollbars ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
@@ -195,16 +202,26 @@ Item {
             }
 
             delegate: Rectangle {
+                id: instanceDelegate
                 width: listView.width
                 height: 72
                 radius: Theme.shapeLarge
                 color: modelData.id === kernel.instanceManager.selectedId
                        ? Qt.alpha(Theme.primary, 0.12)
-                       : (mainHover.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceContainer)
+                       : (rowHover.hovered ? Theme.surfaceContainerHigh : Theme.surfaceContainer)
                 border.color: modelData.id === kernel.instanceManager.selectedId
                               ? Qt.alpha(Theme.primary, 0.3)
                               : "transparent"
                 border.width: 1
+
+                // HoverHandler instead of a full-size MouseArea: hover events are
+                // only delivered to the topmost MouseArea, so an overlay would
+                // swallow the gear/trash buttons' hover. A handler on the row
+                // item keeps the whole row (and its children) hovered.
+                HoverHandler {
+                    id: rowHover
+                    onHoveredChanged: root.hoveredIndex = rowHover.hovered ? index : -1
+                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -310,18 +327,6 @@ Item {
                     }
                 }
 
-                // Background hover detector (main area only)
-                MouseArea {
-                    id: mainHover
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.right: parent.right
-                    anchors.rightMargin: 88
-                    acceptedButtons: Qt.NoButton
-                    hoverEnabled: true
-                }
-
                 // Hover action buttons
                 Row {
                     id: hoverButtons
@@ -329,6 +334,10 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.rightMargin: 16
                     spacing: 8
+                    // Keep the (opacity-0) buttons from receiving clicks when
+                    // the row is not hovered. The row handler above re-enables
+                    // them as soon as the pointer enters the row.
+                    enabled: root.hoveredIndex === index
                     opacity: root.hoveredIndex === index ? 1.0 : 0.0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
 
@@ -385,15 +394,6 @@ window.navigateToPage(5, I18n.tr("instances.settingsSubTitle"))
                             }
                         }
                     }
-                }
-
-                // Hover overlay (full-size — keeps buttons visible)
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.NoButton
-                    hoverEnabled: true
-                    onEntered: root.hoveredIndex = index
-                    onExited: root.hoveredIndex = -1
                 }
             }
         }

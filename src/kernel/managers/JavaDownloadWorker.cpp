@@ -248,10 +248,28 @@ void JavaDownloadWorker::run()
 #ifdef Q_OS_WIN
     javaPath = QDir(javaDir).filePath("bin/java.exe");
 #else
+    // First try the flat layout (Mojar/Microsoft bundles): <dir>/bin/java
     javaPath = QDir(javaDir).filePath("bin/java");
+    // Fall back to Adoptium/Oracle bundle layouts where the binary lives inside
+    // a .bundle or .jdk wrapper: <dir>/*.bundle/Contents/Home/bin/java
+    // or <dir>/*.jdk/Contents/Home/bin/java
+    if (!QFile::exists(javaPath)) {
+        const QDir dir(javaDir);
+        const QStringList bundles = dir.entryList(
+            QStringList() << "*.bundle" << "*.jdk",
+            QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString &b : bundles) {
+            const QString candidate = dir.filePath(b + "/Contents/Home/bin/java");
+            if (QFile::exists(candidate)) {
+                javaPath = candidate;
+                break;
+            }
+        }
+    }
 #endif
 
-    mc_info("[DL-J] Java %d done: %d/%d files ok (%lldms)",
-            m_majorVersion, okFiles, total, (long long)timer.elapsed());
+    mc_info("[DL-J] Java %d done: %d/%d files ok, javaPath=%s (%lldms)",
+            m_majorVersion, okFiles, total,
+            javaPath.toUtf8().constData(), (long long)timer.elapsed());
     emit finished(true, javaPath, m_majorVersion);
 }

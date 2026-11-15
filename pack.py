@@ -1246,8 +1246,43 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
         macdeployqt = qt_root / "bin" / "macdeployqt"
         if macdeployqt.is_file():
             log("--- Deploying Qt runtime (macdeployqt) ---")
-            run([str(macdeployqt), str(staging / "Beacon.app"),
-                 "-always-overwrite"])
+            app = staging / "Beacon.app"
+            # -qmldir 是必须的：它让 macdeployqt 运行 qmlimportscanner，把
+            # QML 模块（QtQuick、QtQuick.Controls 及其各 style 插件、
+            # Layouts/Dialogs/impl…）复制到 Contents/Resources/qml，并把
+            # qt.conf 的 Qml2Imports 指向那里。不做这一步时只有框架和普通
+            # 插件被复制，运行时会报 “module QtQuick.Controls is not
+            # installed / quickcontrols2 plugin not found”，整个界面空白。
+            run([str(macdeployqt), str(app), "-always-overwrite",
+                 "-qmldir=%s" % (ROOT / "src" / "qml")])
+            # 校验：QML 模块没部署成功就直接失败，避免产出打不开的 .app。
+            qml_root = None
+            for cand in (app / "Contents" / "Resources" / "qml",
+                         app / "Contents" / "PlugIns" / "qml"):
+                if (cand / "QtQuick" / "Controls" / "qmldir").is_file():
+                    qml_root = cand
+                    break
+            if qml_root is None:
+                raise PackError(
+                    "macdeployqt did not deploy the Qt QML modules "
+                    "(QtQuick/Controls missing in %s)" % app)
+            ctrl_dir = qml_root / "QtQuick" / "Controls"
+            ctrl_plugin = list(ctrl_dir.glob("*qtquickcontrols2plugin*"))
+            if not ctrl_plugin:
+                raise PackError(
+                    "QtQuick.Controls native plugin missing in %s; the app "
+                    "would start with an empty window" % ctrl_dir)
+            ctrl_submodules = sorted(
+                p.name for p in ctrl_dir.iterdir()
+                if p.is_dir() and (p / "qmldir").is_file())
+            log("QML modules deployed to %s (plugin: %s, Controls sub-modules: %s)"
+                % (qml_root, ctrl_plugin[0].name,
+                   ", ".join(ctrl_submodules) or "none"))
+            # QQuickStyle::setStyle("macOS") 在运行时选样式，import scanner
+            # 看不到该依赖；macOS style 模块缺失时界面会退回 Basic 样式。
+            if not any(s.lower() == "macos" for s in ctrl_submodules):
+                log("WARNING: QtQuick.Controls macOS style not deployed; "
+                    "the app will fall back to the Basic style")
         else:
             log("WARNING: macdeployqt not found at %s" % macdeployqt)
     else:

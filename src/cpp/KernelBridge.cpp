@@ -417,6 +417,12 @@ QString KernelBridge::readVersion() const
     // asking it alone yielded an empty version and "Beacon/" as the UA.
     const QStringList candidates{
         QCoreApplication::applicationDirPath() + QStringLiteral("/version.txt"),
+#ifdef Q_OS_MACOS
+        // A packaged .app ships version.txt in Contents/Resources (pack.py
+        // writes it there); the executable dir inside the bundle never has it.
+        QCoreApplication::applicationDirPath()
+            + QStringLiteral("/../Resources/version.txt"),
+#endif
         s_launcherDir + QStringLiteral("/version.txt"),
 #ifdef Q_OS_LINUX
         QStringLiteral("/usr/share/beacon/version.txt"),

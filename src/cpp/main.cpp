@@ -1776,12 +1776,18 @@ return 0;
 #endif
 
     // Load mirror configuration from mirrors.json in the launcher data dir.
-    // Packaged Linux installs ship the config under the system data dir
-    // (/usr/share/beacon/) since the user XDG dir starts out empty.
+    // Packaged installs ship the config next to the app instead, since the
+    // per-user data dir starts out empty: /usr/share/beacon/ on Linux,
+    // Contents/Resources/ inside the .app on macOS.
     QString mirrorPath = resolveLauncherDir() + "/mirrors.json";
 #ifdef Q_OS_LINUX
     if (!QFile::exists(mirrorPath))
         mirrorPath = QStringLiteral("/usr/share/beacon/mirrors.json");
+#endif
+#ifdef Q_OS_MACOS
+    if (!QFile::exists(mirrorPath))
+        mirrorPath = QCoreApplication::applicationDirPath()
+                     + QStringLiteral("/../Resources/mirrors.json");
 #endif
     if (QFile::exists(mirrorPath))
         mc_mirror_load_config(mirrorPath.toUtf8().constData());
@@ -1921,6 +1927,16 @@ return 0;
     QQmlApplicationEngine engine;
     engine.addImportPath("qrc:/qml");
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
+#ifdef Q_OS_MACOS
+    // A deployed .app keeps the Qt QML modules in Contents/Resources/qml
+    // (macdeployqt -qmldir output). Qt's qt.conf usually maps them already,
+    // but pointing at the bundle explicitly keeps the app working even when
+    // the generated qt.conf is missing.
+    const QString bundleQml = QCoreApplication::applicationDirPath()
+                              + QStringLiteral("/../Resources/qml");
+    if (QFileInfo::exists(bundleQml + QStringLiteral("/QtQuick/qmldir")))
+        engine.addImportPath(bundleQml);
+#endif
     // Qt 6.5+ embeds the Qt QML modules' qmldir/type-info under
     // qrc:/qt-project.org/imports, which shadows the installed Qt's qml dir in
     // the import path order. That embedded copy carries no native plugins

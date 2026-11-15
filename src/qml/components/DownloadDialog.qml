@@ -36,6 +36,7 @@ Popup {
 
     onOpened: {
         root.downloadDir = kernel.instanceManager.currentRootDir || kernel.mcDir
+        Qt.callLater(function() { dirCombo.currentIndex = dirCombo._findDirIndex(root.downloadDir) })
     }
 
     FolderDialog {
@@ -81,7 +82,7 @@ Popup {
             visible: text !== ""
         }
 
-        // Download directory picker
+        // Download directory picker — ComboBox of known dirs + "Other..."
         RowLayout {
             spacing: 12
 
@@ -91,19 +92,38 @@ Popup {
                 color: palette.placeholderText
             }
 
-            Text {
-                id: downloadDirText
-                text: root.downloadDir
+            ComboBox {
+                id: dirCombo
                 Layout.fillWidth: true
-                elide: Text.ElideMiddle
-                font.pixelSize: 13
-                color: palette.text
-            }
+                model: _dirModel
+                currentIndex: _findDirIndex(root.downloadDir)
+                onCurrentIndexChanged: {
+                    if (currentIndex >= 0 && currentIndex < model.length - 1)
+                        root.downloadDir = model[currentIndex]
+                }
 
-            Button {
-                text: I18n.tr("download.browse")
-                font.weight: Font.Normal
-                onClicked: dirDialog.open()
+                // Model: known rootDirs followed by "Other..." sentinel
+                readonly property var _dirModel: {
+                    var arr = []
+                    var dirs = kernel.instanceManager.rootDirs || []
+                    for (var i = 0; i < dirs.length; ++i)
+                        arr.push(dirs[i])
+                    arr.push(I18n.tr("download.otherDir"))
+                    return arr
+                }
+
+                function _findDirIndex(path) {
+                    var dirs = kernel.instanceManager.rootDirs || []
+                    for (var i = 0; i < dirs.length; ++i) {
+                        if (dirs[i] === path) return i
+                    }
+                    return dirs.length  // "Other..." row
+                }
+
+                onActivated: {
+                    if (index === model.length - 1)
+                        dirDialog.open()
+                }
             }
         }
 

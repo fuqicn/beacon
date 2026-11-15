@@ -51,8 +51,8 @@
   "download.noVersions": "Aucune version dans cette catégorie",
   "download.title": "Télécharger %1",
   "download.typeLabel": "Type : %1",
-  "download.dirLabel": "Répertoire de téléchargement",
-  "download.browse": "Parcourir...",
+  "download.dirLabel": "Dossier Minecraft",
+  "download.browse": "Sélectionner...",
   "download.installType": "Type d'installation",
   "download.typeVanilla": "Vanilla",
   "download.fetching": "Récupération...",
@@ -244,7 +244,7 @@
   "searchResource.versionNotFound": "Version d'instance introuvable, continuer le téléchargement ?",
   "searchResource.continueDownload": "Continuer",
   "searchResource.sharedModsDir": "Répertoire Mods partagé",
-  "searchResource.instances": "Répertoires Minecraft",
+  "searchResource.instances": "Dossiers Minecraft",
   "searchResource.downloadDir": "Télécharger dans le répertoire Minecraft",
   "searchResource.noInstances": "Aucun répertoire ajouté",
   "download.cancel": "Annuler",
@@ -281,5 +281,12 @@
   "crash.cat.launchFailed.title": "Échec du lancement du jeu",
   "crash.cat.launchFailed.detail": "Le lanceur n'a pas pu créer le processus du jeu : chemin Java invalide, runtime Java requis manquant, ou blocage par un antivirus. Vérifiez le chemin Java dans les paramètres, ou réinstallez le runtime depuis le gestionnaire Java.",
   "changelog.section.ui.item5": "Correction du balayage des instances sur Windows lorsque le chemin contient une barre oblique en début (par exemple /E:/...). Les anciennes entrées style PCL2 sont maintenant corrigées et reconnues.",
-  "changelog.section.ui.item6": "macOS : l'icône Beacon s'affiche désormais dans le Dock et le Finder grâce à la ressource .icns intégrée, au lieu d'un icône générique par défaut."
+  "changelog.section.ui.item6": "macOS : l'icône Beacon s'affiche désormais dans le Dock et le Finder grâce à la ressource .icns intégrée, au lieu d'un icône générique par défaut.",
+  "download.otherDir": "Autre...",
+  "modDownload.dirLabel": "Dossier cible",
+  "modDownload.browse": "Sélectionner...",
+  "modDownload.otherDir": "Autre...",
+  "modpackInstall.dirLabel": "Dossier cible",
+  "modpackInstall.otherDir": "Autre...",
+  "searchResource.otherDir": "Autre..."
 }

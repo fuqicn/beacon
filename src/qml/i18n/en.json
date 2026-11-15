@@ -193,8 +193,8 @@
   "download.noVersions": "No versions in this category",
   "download.title": "Download %1",
   "download.typeLabel": "Type: %1",
-  "download.dirLabel": "Download directory",
-  "download.browse": "Browse...",
+  "download.dirLabel": "Minecraft directory",
+  "download.browse": "Select...",
   "download.installType": "Install type",
   "download.typeVanilla": "Vanilla",
   "download.fetching": "Fetching...",
@@ -255,8 +255,8 @@
   "modDetail.loading": "Loading...",
   "modDownload.loading": "Loading version info...",
   "modDownload.title": "Download %1",
-  "modDownload.dirLabel": "Download directory",
-  "modDownload.browse": "Browse...",
+  "modDownload.dirLabel": "Target directory",
+  "modDownload.browse": "Select...",
   "modDownload.hint": "The mod will be installed to the mods folder in the selected directory",
   "modDownload.cancel": "Cancel",
   "modDownload.download": "Download",
@@ -407,5 +407,10 @@
   "crash.cat.launchFailed.title": "Game failed to launch",
   "crash.cat.launchFailed.detail": "The launcher could not create the game process — the Java path is invalid, the required Java runtime is missing, or security software blocked it. Check the Java path in the settings, or reinstall the runtime from the Java manager.",
   "changelog.section.ui.item5": "Fixed instance scanning on Windows when paths contain a leading slash (e.g. /E:/...). Paths are now normalized so legacy PCL2-style entries point at the correct directory.",
-  "changelog.section.ui.item6": "macOS: the Dock and Finder now show the proper Beacon icon via the bundled .icns resource, instead of a generic placeholder."
+  "changelog.section.ui.item6": "macOS: the Dock and Finder now show the proper Beacon icon via the bundled .icns resource, instead of a generic placeholder.",
+  "download.otherDir": "Other...",
+  "modDownload.otherDir": "Other...",
+  "modpackInstall.dirLabel": "Target directory",
+  "modpackInstall.otherDir": "Other...",
+  "searchResource.otherDir": "Other..."
 }

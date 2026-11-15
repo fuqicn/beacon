@@ -108,6 +108,7 @@ Popup {
                 visible: text !== ""
             }
 
+            // Target directory — ComboBox of known dirs + "Other..."
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -118,19 +119,37 @@ Popup {
                     color: palette.placeholderText
                 }
 
-                Text {
-                    id: dirLabel
+                ComboBox {
+                    id: dirCombo
                     Layout.fillWidth: true
-                    text: root.targetDir
-                    font.pixelSize: 12
-                    color: palette.text
-                    elide: Text.ElideMiddle
-                }
+                    model: _dirModel
+                    currentIndex: _findDirIndex(root.targetDir)
+                    onCurrentIndexChanged: {
+                        if (currentIndex >= 0 && currentIndex < model.length - 1)
+                            root.targetDir = model[currentIndex]
+                    }
 
-                Button {
-                    text: I18n.tr("modDownload.browse")
-                    font.weight: Font.Normal
-                    onClicked: dirDialog.open()
+                    readonly property var _dirModel: {
+                        var arr = []
+                        var dirs = kernel.instanceManager.rootDirs || []
+                        for (var i = 0; i < dirs.length; ++i)
+                            arr.push(dirs[i])
+                        arr.push(I18n.tr("modDownload.otherDir"))
+                        return arr
+                    }
+
+                    function _findDirIndex(path) {
+                        var dirs = kernel.instanceManager.rootDirs || []
+                        for (var i = 0; i < dirs.length; ++i) {
+                            if (dirs[i] === path) return i
+                        }
+                        return dirs.length
+                    }
+
+                    onActivated: {
+                        if (index === model.length - 1)
+                            dirDialog.open()
+                    }
                 }
             }
 

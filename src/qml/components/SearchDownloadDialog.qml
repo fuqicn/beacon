@@ -154,26 +154,40 @@ Popup {
                 ComboBox {
                     id: instCombo
                     Layout.fillWidth: true
-                    model: kernel.instanceManager.rootDirs.length > 0
-                           ? kernel.instanceManager.rootDirs
-                           : [kernel.mcDir]
+                    model: _dirModel
                     currentIndex: _findCurrentIndex()
                     enabled: true
 
+                    // Known dirs + "Other..." sentinel at the end
+                    readonly property var _dirModel: {
+                        var arr = []
+                        var dirs = kernel.instanceManager.rootDirs || []
+                        for (var i = 0; i < dirs.length; ++i)
+                            arr.push(dirs[i])
+                        arr.push(I18n.tr("searchResource.otherDir"))
+                        return arr
+                    }
+
                     function _findCurrentIndex() {
-                        var dirs = model || []
-                        var current = kernel.instanceManager.currentRootDir || kernel.mcDir
+                        var dirs = kernel.instanceManager.rootDirs || []
+                        var current = root.targetDir || kernel.instanceManager.currentRootDir || kernel.mcDir
                         for (var i = 0; i < dirs.length; ++i) {
                             if (dirs[i] === current) return i
                         }
-                        return 0
+                        return dirs.length  // "Other..." row
                     }
 
                     onCurrentIndexChanged: {
-                        if (currentIndex >= 0 && currentIndex < model.length) {
+                        if (currentIndex >= 0 && currentIndex < model.length - 1) {
                             root.targetDir = model[currentIndex]
                             root.selectedInstIndex = currentIndex
                         }
+                    }
+
+                    onActivated: {
+                        // Last item is "Other..." — open folder picker
+                        if (index === model.length - 1)
+                            dirDialog.open()
                     }
                 }
             }

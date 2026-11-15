@@ -194,7 +194,7 @@
   "download.noVersions": "该分类暂无版本",
   "download.title": "下载 %1",
   "download.typeLabel": "类型: %1",
-  "download.dirLabel": "下载目录",
+  "download.dirLabel": "Minecraft 目录",
   "download.browse": "选择...",
   "download.installType": "安装类型",
   "download.typeVanilla": "原版",
@@ -256,7 +256,7 @@
   "modDetail.loading": "加载中...",
   "modDownload.loading": "正在加载版本信息...",
   "modDownload.title": "下载 %1",
-  "modDownload.dirLabel": "下载目录",
+  "modDownload.dirLabel": "目标目录",
   "modDownload.browse": "选择...",
   "modDownload.hint": "模组将安装到所选目录的 mods 文件夹",
   "modDownload.cancel": "取消",
@@ -409,5 +409,10 @@
   "crash.cat.launchFailed.title": "游戏启动失败",
   "crash.cat.launchFailed.detail": "启动器无法创建游戏进程，通常是 Java 路径无效、所需 Java 运行时缺失，或被杀毒/安全软件拦截。请在设置中检查 Java 路径，或通过 Java 管理重新安装运行时。",
   "changelog.section.ui.item5": "修复 Windows 下实例扫描路径异常问题：当文件夹路径含前导斜杠（如 /E:/...）时，原先无法识别；现在会自动修正。",
-  "changelog.section.ui.item6": "macOS：Dock 与 Finder 现在显示正确的 Beacon 图标（通过打包的 .icns 资源），不再显示默认占位符。"
+  "changelog.section.ui.item6": "macOS：Dock 与 Finder 现在显示正确的 Beacon 图标（通过打包的 .icns 资源），不再显示默认占位符。",
+  "download.otherDir": "其他...",
+  "modDownload.otherDir": "其他...",
+  "modpackInstall.dirLabel": "目标目录",
+  "modpackInstall.otherDir": "其他...",
+  "searchResource.otherDir": "其他..."
 }

@@ -51,8 +51,8 @@
   "download.noVersions": "このカテゴリにバージョンがありません",
   "download.title": "%1 をダウンロード",
   "download.typeLabel": "タイプ: %1",
-  "download.dirLabel": "ダウンロード先",
-  "download.browse": "参照...",
+  "download.dirLabel": "Minecraftディレクトリ",
+  "download.browse": "選択...",
   "download.installType": "インストールタイプ",
   "download.typeVanilla": "バニラ",
   "download.fetching": "取得中...",
@@ -281,5 +281,12 @@
   "crash.cat.launchFailed.title": "ゲームの起動に失敗",
   "crash.cat.launchFailed.detail": "ゲームプロセスを作成できませんでした。Javaパスが無効、必要なJavaランタイムが存在しない、またはセキュリティソフトにブロックされている可能性があります。設定でJavaパスを確認するか、Java管理からランタイムを再インストールしてください。",
   "changelog.section.ui.item5": "Windowsでインスタンススキャン時のパス処理を修正。先頭に/が付く形式（例: /E:/...）のレガシーPCL2スタイルエントリも正しく認識・スキャンされるようになりました。",
-  "changelog.section.ui.item6": "macOS: DockとFinderにBeaconアイコンが表示されるようになりました（バンドルされた.icnsリソースを使用）。以前は汎用のプレースホルダーが表示されていました。"
+  "changelog.section.ui.item6": "macOS: DockとFinderにBeaconアイコンが表示されるようになりました（バンドルされた.icnsリソースを使用）。以前は汎用のプレースホルダーが表示されていました。",
+  "download.otherDir": "その他...",
+  "modDownload.dirLabel": "ターゲットディレクトリ",
+  "modDownload.browse": "選択...",
+  "modDownload.otherDir": "その他...",
+  "modpackInstall.dirLabel": "ターゲットディレクトリ",
+  "modpackInstall.otherDir": "その他...",
+  "searchResource.otherDir": "その他..."
 }

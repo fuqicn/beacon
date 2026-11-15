@@ -19,6 +19,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Popup {
     id: root
@@ -32,6 +33,20 @@ Popup {
     property string customName: ""
 
     signal installed(string message)
+
+    FolderDialog {
+        id: dirDialog
+        currentFolder: "file:///" + (root.targetDir || kernel.mcDir)
+        onAccepted: {
+            if (selectedFolder)
+                root.targetDir = kernel.localPathFromUrl(selectedFolder)
+        }
+    }
+
+    onOpened: {
+        root.targetDir = kernel.instanceManager.currentRootDir || kernel.mcDir
+        Qt.callLater(function() { dirCombo.currentIndex = dirCombo._findDirIndex(root.targetDir) })
+    }
 
     readonly property bool fileReady: !root.loading && root.file
                                      && root.file.fileName
@@ -108,6 +123,51 @@ Popup {
                 color: palette.placeholderText
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
+            }
+
+            // Target directory — ComboBox of known dirs + "Other..."
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: I18n.tr("modpackInstall.dirLabel")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
+                }
+
+                ComboBox {
+                    id: dirCombo
+                    Layout.fillWidth: true
+                    model: _dirModel
+                    currentIndex: _findDirIndex(root.targetDir)
+                    onCurrentIndexChanged: {
+                        if (currentIndex >= 0 && currentIndex < model.length - 1)
+                            root.targetDir = model[currentIndex]
+                    }
+
+                    readonly property var _dirModel: {
+                        var arr = []
+                        var dirs = kernel.instanceManager.rootDirs || []
+                        for (var i = 0; i < dirs.length; ++i)
+                            arr.push(dirs[i])
+                        arr.push(I18n.tr("modpackInstall.otherDir"))
+                        return arr
+                    }
+
+                    function _findDirIndex(path) {
+                        var dirs = kernel.instanceManager.rootDirs || []
+                        for (var i = 0; i < dirs.length; ++i) {
+                            if (dirs[i] === path) return i
+                        }
+                        return dirs.length
+                    }
+
+                    onActivated: {
+                        if (index === model.length - 1)
+                            dirDialog.open()
+                    }
+                }
             }
 
             // Custom instance name

@@ -666,11 +666,13 @@ Item {
         modal: true
         focus: true
         closePolicy: Popup.NoAutoClose
-        // Match DownloadDialog's sizing pattern: explicit width + height from content
-        width: Math.min(window.width - 64, 420)
+        // Use parent (ApplicationWindow) for centre — `window` is sometimes
+        // unavailable inside deeply-nested pages; parent is always the Popup's
+        // parent item, which is the root ApplicationWindow here.
+        width: Math.min(parent.width - 64, 420)
         height: restartContentColumn.implicitHeight + 64
-        x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
 
         background: Rectangle {
             radius: Theme.shapeLarge

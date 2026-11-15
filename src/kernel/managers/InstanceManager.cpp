@@ -40,6 +40,17 @@ static QString localizeDir(const QString &dir)
             if (!local.isEmpty()) return local;
         }
     }
+#ifdef Q_OS_WIN
+    // QML folder pickers used to hand us url.toString() with the scheme
+    // stripped, leaving "/E:/dir". QDir resolves that relative to the current
+    // drive, so the scan silently found nothing. Repair such paths (they are
+    // still stored in instances.json for users who added a folder earlier).
+    if (d.size() > 2 && d.at(0) == QLatin1Char('/')
+        && d.at(2) == QLatin1Char(':')
+        && d.at(1).isLetter()) {
+        d = d.mid(1);
+    }
+#endif
     return d;
 }
 

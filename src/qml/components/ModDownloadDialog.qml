@@ -39,7 +39,7 @@ Popup {
         currentFolder: "file:///" + (root.targetDir || kernel.mcDir)
         onAccepted: {
             if (selectedFolder)
-                root.targetDir = selectedFolder.toString().replace(/^file:\/\//, "")
+                root.targetDir = kernel.localPathFromUrl(selectedFolder)
         }
     }
 

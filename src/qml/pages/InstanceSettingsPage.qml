@@ -786,7 +786,7 @@ Item {
                    : [I18n.tr("instance.javaFilterUnix"), I18n.tr("instances.allFiles")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            var p = selectedFile.toString().replace(/^file:\/\//, "")
+            var p = kernel.localPathFromUrl(selectedFile)
             javaField.text = p
             root.writeInstanceSetting("launch/javaPath", p)
         }

@@ -32,7 +32,7 @@ Item {
         currentFolder: "file:///" + (kernel.instanceManager.currentRootDir || kernel.mcDir)
         onAccepted: {
             if (selectedFolder)
-                kernel.instanceManager.addRootDir(selectedFolder.toString().replace(/^file:\/\//, ""))
+                kernel.instanceManager.addRootDir(kernel.localPathFromUrl(selectedFolder))
         }
     }
 
@@ -42,7 +42,7 @@ Item {
         nameFilters: [I18n.tr("instances.modpackFilter"), I18n.tr("instances.allFiles")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            var src = selectedFile.toString().replace(/^file:\/\//, "")
+            var src = kernel.localPathFromUrl(selectedFile)
             kernel.modpackManager.installFromFile(
                 src, kernel.instanceManager.currentRootDir)
         }

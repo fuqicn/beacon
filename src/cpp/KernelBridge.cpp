@@ -2000,6 +2000,13 @@ QVariantList KernelBridge::listDir(const QString &path) const
     return entries;
 }
 
+QString KernelBridge::localPathFromUrl(const QUrl &url) const
+{
+    if (url.isLocalFile())
+        return url.toLocalFile();
+    return url.toString();
+}
+
 void KernelBridge::revealInExplorer(const QString &path)
 {
     const QString native = QDir::toNativeSeparators(path);

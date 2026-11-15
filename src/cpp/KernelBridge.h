@@ -22,6 +22,7 @@
 #include <QObject>
 #include <QString>
 #include <QDir>
+#include <QUrl>
 #include <QPalette>
 
 #include "VersionManager.h"
@@ -232,6 +233,11 @@ public:
     // File manager helpers
     Q_INVOKABLE QVariantList listDir(const QString &path) const;
     Q_INVOKABLE void revealInExplorer(const QString &path);
+    // Folder pickers hand QML a url. Converting it in QML via
+    // url.toString().replace(/^file:\/\//, "") keeps a leading "/E:/..." on
+    // Windows, which QDir cannot resolve (instances/installs silently land
+    // nowhere). Always round-trip through QUrl::toLocalFile().
+    Q_INVOKABLE QString localPathFromUrl(const QUrl &url) const;
 
     bool javaDownloading() const { return m_javaDownloading; }
     void setJavaDownloading(bool v);

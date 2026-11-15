@@ -53,7 +53,10 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: parent.radius
-        color: ma.pressed ? Theme.pressedOverlay : (ma.hovered ? Theme.hoverOverlay : "transparent")
+        // Use parent.hovered (the Button/FAB itself) so the overlay colour is
+        // not re-evaluated when this sub-Rectangle gains/loses its own hover
+        // state — which would otherwise cause visible flicker on macOS.
+        color: rootMa.pressed ? Theme.pressedOverlay : (rootMa.hovered ? Theme.hoverOverlay : "transparent")
         Behavior on color { ColorAnimation { duration: 150 } }
     }
 
@@ -77,7 +80,7 @@ Rectangle {
     }
 
     MouseArea {
-        id: ma
+        id: rootMa
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor

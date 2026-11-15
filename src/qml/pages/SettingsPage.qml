@@ -666,6 +666,11 @@ Item {
         modal: true
         focus: true
         closePolicy: Popup.NoAutoClose
+        // Smooth open/close animation (opacity + scale from centre).
+        opacity: visible ? 1 : 0
+        scale: visible ? 1 : 0.92
+        Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+        Behavior on scale  { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
         // Use parent (ApplicationWindow) for centre — `window` is sometimes
         // unavailable inside deeply-nested pages; parent is always the Popup's
         // parent item, which is the root ApplicationWindow here.

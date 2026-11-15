@@ -26,6 +26,10 @@ Win32/
 *.pdb
 *.ilk
 *.log
+.txt
+
+# Temporary test files
+.tmp/
 *.txt
 
 # Runtime outputs

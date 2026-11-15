@@ -44,6 +44,14 @@ Popup {
         id: versionNotFoundDialog
         parent: root
         modal: true
+    // Smooth open/close animation (opacity + scale from centre).
+    // Gated by Theme.animationsEnabled so users who disable animations in
+    // settings still get instant switches.
+    opacity: visible ? 1 : 0
+    scale: visible ? 1 : 0.92
+    Behavior on opacity { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+    Behavior on scale  { enabled: Theme.animationsEnabled; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
         title: I18n.tr("searchResource.versionNotFound").replace("%1", "")
         standardButtons: Dialog.Cancel | Dialog.Ok
         closePolicy: Popup.CloseOnEscape

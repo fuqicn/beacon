@@ -26,7 +26,7 @@ jobs:
         include:
           - distro: debian
             container: null           # native runner (has dpkg)
-            cache-path: launcher/build-deb
+            cache-path: build-deb
             artifact-name: BeaconLauncher-deb-amd64
             artifact-path: dist/BeaconLauncher-deb-amd64.deb
             extra-artifacts:
@@ -34,12 +34,12 @@ jobs:
                 path: dist/beacon-*.linux-x86_64.tar.gz
           - distro: fedora
             container: fedora:40
-            cache-path: launcher/build-rpm
+            cache-path: build-rpm
             artifact-name: BeaconLauncher-redhat-x86_64
             artifact-path: dist/BeaconLauncher-redhat-x86_64.rpm
           - distro: arch
             container: archlinux:latest
-            cache-path: launcher/build-arch
+            cache-path: build-arch
             artifact-name: BeaconLauncher-arch-x86_64
             artifact-path: dist/BeaconLauncher-arch-x86_64.pkg.tar.zst
     container: ${{ matrix.container }}
@@ -100,12 +100,12 @@ jobs:
         distro: [debian, fedora]
         include:
           - distro: debian
-            cache-path: launcher/build-deb-arm
+            cache-path: build-deb-arm
             artifact-name: BeaconLauncher-deb-arm64
             artifact-path: dist/BeaconLauncher-deb-arm64.deb
           - distro: fedora
             container: fedora:40
-            cache-path: launcher/build-rpm-arm
+            cache-path: build-rpm-arm
             artifact-name: BeaconLauncher-redhat-aarch64
             artifact-path: dist/BeaconLauncher-redhat-aarch64.rpm
     container: ${{ matrix.container }}
@@ -174,7 +174,7 @@ jobs:
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-x86
 
       - name: Clean stale CMake cache (generator mismatch)
-        run: Remove-Item -Recurse -Force launcher/build -ErrorAction SilentlyContinue
+        run: Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 
       - name: Cache vcpkg
         uses: actions/cache@v4
@@ -223,7 +223,7 @@ jobs:
           cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
 
       - name: Clean stale CMake cache (generator mismatch)
-        run: Remove-Item -Recurse -Force launcher/build-arm -ErrorAction SilentlyContinue
+        run: Remove-Item -Recurse -Force build-arm -ErrorAction SilentlyContinue
 
       - name: Cache vcpkg
         uses: actions/cache@v4
@@ -246,25 +246,28 @@ jobs:
 
   # ---------------------------------------------------------------- macOS ARM64 (原生构建)
   macos-arm64:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8 (macOS ARM64)
+      - name: Install Qt 6.8.3 (macOS ARM64)
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.*'
+          version: '6.8.3'
           host: 'mac'
           target: 'desktop'
           arch: 'clang_64'
           cache: 'true'
-          cache-key-prefix: ${{ env.CACHE_PREFIX }}-arm
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}-mac-arm-683
 
       - name: Cache CMake build (ARM64)
         uses: actions/cache@v4
         with:
-          path: launcher/build-mac-arm64
+          path: build-mac-arm64
           key: ${{ runner.os }}-mac-arm-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Clean stale CMake cache (macOS ARM64)
+        run: rm -f build-mac-arm64/CMakeCache.txt
 
       - name: Build .app (macOS ARM64)
         run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-arm64 --osx-arch arm64 --mac-dist-dir dist-mac-arm64
@@ -276,25 +279,28 @@ jobs:
 
   # ---------------------------------------------------------------- macOS x86_64 (交叉编译)
   macos-intel:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8 (macOS x86_64 cross-compile)
+      - name: Install Qt 6.8.3 (macOS x86_64 cross-compile)
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.*'
+          version: '6.8.3'
           host: 'mac'
           target: 'desktop'
           arch: 'clang_64'
           cache: 'true'
-          cache-key-prefix: ${{ env.CACHE_PREFIX }}-intel
+          cache-key-prefix: ${{ env.CACHE_PREFIX }}-mac-intel-683
 
       - name: Cache CMake build (x86_64)
         uses: actions/cache@v4
         with:
-          path: launcher/build-mac-x86_64
+          path: build-mac-x86_64
           key: ${{ runner.os }}-mac-intel-build-${{ hashFiles('CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h', 'third_party/**/*') }}
+
+      - name: Clean stale CMake cache (macOS x86_64)
+        run: rm -f build-mac-x86_64/CMakeCache.txt
 
       - name: Build .app (macOS x86_64)
         run: QT_DIR=$QT_ROOT_DIR python3 pack.py --build-dir build-mac-x86_64 --osx-arch x86_64 --mac-dist-dir dist-mac-intel

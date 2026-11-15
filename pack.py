@@ -456,9 +456,13 @@ def configure_and_build(args, build_dir, qt_dir):
                         break
             if ninja_bin:
                 cfg.append("-DCMAKE_MAKE_PROGRAM=%s" % ninja_bin)
-    elif detect_platform() == "darwin" and getattr(args, 'osx_arch', None):
-        # Cross-compile for specific macOS architecture.
-        cfg.append("-DCMAKE_OSX_ARCHITECTURES=%s" % args.osx_arch)
+    elif detect_platform() == "darwin":
+        # macOS 12 (Monterey) is the minimum supported release; pass the value
+        # explicitly so a stale CMakeCache from an older SDK/Qt can't raise it.
+        cfg.append("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
+        if getattr(args, 'osx_arch', None):
+            # Cross-compile for specific macOS architecture.
+            cfg.append("-DCMAKE_OSX_ARCHITECTURES=%s" % args.osx_arch)
     if not build_dir.exists():
         run(cfg)
     else:

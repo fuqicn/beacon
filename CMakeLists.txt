@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
+
+# macOS 最低支持版本 12.0 (Monterey)，兼容 12/13/14/15。
+# 必须在 project()/enable_language() 之前设置，编译器检查与所有目标才会
+# 使用该部署目标；CI 使用的 Qt 6.8.3 官方二进制同样以 macOS 12 为下限。
+if(APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
+endif()
+
 project(Beacon VERSION 1.0.3 LANGUAGES CXX)
 
 # 启用 C 语言支持（用于编译自解压 launcher）
@@ -8,11 +16,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-
-# macOS 最低支持版本 12.0 (Monterey)，兼容 12/13/14
-if(APPLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
-endif()
 
 # Windows 下禁用 min/max 宏定义，避免与 std::min/std::max 冲突
 if(WIN32)

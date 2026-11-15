@@ -1288,8 +1288,10 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     else:
         log("WARNING: Qt root not found on macOS; frameworks may be incomplete")
 
-    # Copy runtime assets.
-    resources = staging / "Beacon.app" / "Resources"
+    # Copy runtime assets into the standard bundle path:
+    #   Beacon.app/Contents/Resources/  (NOT top-level, which is not a valid
+    #   location for a macOS app bundle and causes duplicate Resources dirs).
+    resources = staging / "Beacon.app" / "Contents" / "Resources"
     resources.mkdir(parents=True, exist_ok=True)
     copy_mirrors_json(resources / "mirrors.json")
     write_version_file(resources / "version.txt", version)

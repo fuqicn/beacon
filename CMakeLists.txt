@@ -113,6 +113,10 @@ set(MANAGER_SRC
 
 if(WIN32)
     list(APPEND MANAGER_SRC resources/app.rc)
+elseif(APPLE)
+    # Bundle icon used by Dock / Finder / LS. Packaged as ICNS (Apple's native
+    # container); QML/AppIcon.qml already falls back to the SVG for in-app use.
+    list(APPEND MANAGER_SRC resources/app.icns)
 endif()
 
 add_library(libmckernel STATIC ${KERNEL_SRC})
@@ -131,7 +135,8 @@ elseif(APPLE)
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.beacon.launcher"
         MACOSX_BUNDLE_BUNDLE_NAME "Beacon"
         MACOSX_BUNDLE_BUNDLE_VERSION "1.0.3"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.3")
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.3"
+        MACOSX_BUNDLE_ICON_FILE "app.icns")
 else()
     qt_add_executable(Beacon ${MANAGER_SRC})
 endif()

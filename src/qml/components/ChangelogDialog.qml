@@ -80,7 +80,9 @@ Popup {
                 I18n.tr("changelog.section.ui.item1"),
                 I18n.tr("changelog.section.ui.item2"),
                 I18n.tr("changelog.section.ui.item3"),
-                I18n.tr("changelog.section.ui.item4")
+                I18n.tr("changelog.section.ui.item4"),
+                I18n.tr("changelog.section.ui.item5"),
+                I18n.tr("changelog.section.ui.item6")
             ]
         }
     ]

@@ -1569,6 +1569,11 @@ return 0;
     // (_NET_WM_ICON under XWayland) plus a desktop file name for Wayland
     // app_id matching. Without these the dock shows a generic placeholder.
     QGuiApplication::setDesktopFileName(QStringLiteral("io.github.fuqicn.beacon"));
+#endif
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+    // macOS uses the bundle's app.icns (handled by MACOSX_BUNDLE_ICON_FILE).
+    // Setting a different runtime icon would also force SVG plugin loading
+    // which can break when deployed without QtSvg.
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/beacon.svg")));
 #endif
 

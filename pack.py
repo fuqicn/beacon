@@ -1293,6 +1293,14 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     resources.mkdir(parents=True, exist_ok=True)
     copy_mirrors_json(resources / "mirrors.json")
     write_version_file(resources / "version.txt", version)
+    # Bundle icon used by Dock / Finder.
+    icns_src = ROOT / "resources" / "app.icns"
+    if icns_src.is_file():
+        shutil.copy2(str(icns_src), str(resources / "app.icns"))
+        log("copied app.icns -> Contents/Resources/app.icns (%d bytes)" %
+            icns_src.stat().st_size)
+    else:
+        log("WARNING: resources/app.icns missing — Dock icon may not appear")
 
     # Final .app lives in dist/.
     final_app = dist / ("Beacon-%s.app" % arch_suffix)

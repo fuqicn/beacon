@@ -1022,8 +1022,29 @@ static QString resolveLauncherDir()
     // updates (beacon/ gets replaced, game/ is preserved).
     QString gameDir = QDir(QCoreApplication::applicationDirPath()).path()
                       + QLatin1String("/../game");
-    QDir().mkpath(gameDir);
-    return QDir(gameDir).canonicalPath();
+    // A standard user cannot create files under Program Files (or any other
+    // read-only location). Probe for write access and fall back to the
+    // per-user application data directory when the install dir is read-only.
+    if (QDir().mkpath(gameDir)) {
+        const QString probePath = gameDir + QLatin1String("/.write_probe");
+        QFile probe(probePath);
+        if (probe.open(QIODevice::WriteOnly)) {
+            probe.close();
+            probe.remove();
+            return QDir(gameDir).canonicalPath();
+        }
+        mc_info("[Dir] %s is not writable, falling back to per-user data dir",
+                qPrintable(gameDir));
+    } else {
+        mc_info("[Dir] cannot create %s, falling back to per-user data dir",
+                qPrintable(gameDir));
+    }
+    QString userDir = qEnvironmentVariable("LOCALAPPDATA");
+    userDir = userDir.isEmpty()
+                  ? QDir::homePath() + QLatin1String("/AppData/Local/Beacon")
+                  : userDir + QLatin1String("/Beacon");
+    QDir().mkpath(userDir);
+    return userDir;
 #elif defined(Q_OS_LINUX)
     QString xdg = QDir::homePath() + QLatin1String("/.local/share/beacon-launcher");
     QDir().mkpath(xdg);

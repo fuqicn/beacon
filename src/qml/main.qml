@@ -100,73 +100,177 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        // Navigation Rail (medium+ screens)
+        // Navigation rail (medium+ screens). Collapsed = 56 px, icons only;
+        // expanded = 200 px, icons + labels. Width goes through the layout
+        // attached properties so the page area reflows when it toggles.
         Rectangle {
+            id: navRail
             Layout.fillHeight: true
-            width: 72
-            visible: !isCompact
+            // preferredWidth is what Qt's layout engine uses for size negotiation;
+            // binding it directly plus adding a Behaviour ensures the parent RowLayout
+            // reflows its children during the animation — otherwise the right panel
+            // would stay at the expanded width until the animation completes.
+            Layout.preferredWidth: collapsed ? 56 : 200
+            visible: !window.isCompact
             color: "transparent"
+            clip: true
 
-            // Active-item pill that glides to the selected button with a
-            // non-linear easing instead of flashing into place instantly.
-            Rectangle {
-                id: navIndicator
-                x: 0
-                y: 16 + window.navIndex * 68
-                width: 72
-                height: 64
-                radius: Theme.shapeNavRail
-                color: Qt.alpha(Theme.primary, 0.14)
-                visible: window.navIndex >= 0
-                Behavior on y {
-                    enabled: Theme.animationsEnabled
-                    NumberAnimation { duration: 320; easing.type: Easing.OutBack }
+            property bool collapsed: false
+
+            Behavior on Layout.preferredWidth {
+                enabled: Theme.animationsEnabled
+                NumberAnimation { duration: 220; easing.type: Easing.InOutCubic }
+            }
+            // Keep actual width in sync with preferred so internal anchors line up.
+            Behavior on width {
+                enabled: Theme.animationsEnabled
+                NumberAnimation { duration: 220; easing.type: Easing.InOutCubic }
+            }
+
+            // ---- Header: brand mark + collapse/expand toggle --------------
+            Item {
+                id: navHeader
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 56
+
+                // Beacon logo — uses a plain Image so the SVG's native colours
+                // (gradient / multi-fill) render unchanged, bypassing the tint
+                // provider which would otherwise force a single solid colour.
+                Image {
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: 20
+                    width: 22; height: 22
+                    source: "qrc:/icons/beacon.svg"
+                    sourceSize.width: 22
+                    sourceSize.height: 22
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    asynchronous: true
+                    visible: !navRail.collapsed
+                }
+
+                Button {
+                    id: railToggle
+                    // Always anchored to the right edge — no x-calculation that
+                    // would shift during the width animation.
+                    anchors.right: parent.right
+                    anchors.rightMargin: navRail.collapsed ? 10 : 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 36
+                    height: 36
+                    padding: 0
+                    focusPolicy: Qt.NoFocus
+                    onClicked: navRail.collapsed = !navRail.collapsed
+
+                    contentItem: AppIcon {
+                        iconName: "bar"
+                        iconSize: 18
+                    }
+
+                    background: Rectangle {
+                        radius: Math.max(Theme.shapeSmall, 6)
+                        color: railToggle.hovered || railToggle.pressed
+                               ? Theme.hoverOverlay : "transparent"
+                        Behavior on color {
+                            enabled: Theme.animationsEnabled
+                            ColorAnimation { duration: 120 }
+                        }
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 400
+                    ToolTip.text: I18n.tr(navRail.collapsed ? "nav.expandRail"
+                                                           : "nav.collapseRail")
                 }
             }
 
-            Column {
-                anchors.fill: parent
-                anchors.topMargin: 16
-                spacing: 4
+            // ---- Nav items ------------------------------------------------
+            // Anchored on all four sides so the ListView always has a
+            // concrete height (a Layout-attached fill inside a plain Column
+            // resolves to zero and renders nothing).
+            ListView {
+                id: navList
+                anchors.top: navHeader.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.topMargin: 4
+                anchors.bottomMargin: 8
+                model: window.navModel
+                spacing: 2
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
 
-                Repeater {
-                    model: window.navModel
-                    delegate: ItemDelegate {
-                        id: navBtn
-                        width: 72
-                        height: 64
+                delegate: Item {
+                    id: navRow
+                    width: navList.width
+                    height: 44
 
-                        background: Rectangle {
-                            radius: Theme.shapeNavRail
-                            color: navBtn.hovered ? Qt.alpha(palette.placeholderText, 0.09) : "transparent"
-                            Behavior on color {
-                                enabled: Theme.animationsEnabled
-                                ColorAnimation { duration: 150 }
-                            }
+                    readonly property bool active: index === window.navIndex
+                    readonly property bool hovered: rowHover.hovered
+
+                    HoverHandler { id: rowHover }
+
+                    // Highlight layer — a single rounded rect. Active rows get a subtle
+                    // neutral grey base; hover adds a slightly stronger tint on top.
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        radius: Theme.shapeMedium
+                        color: {
+                            if (navRow.hovered) return Theme.hoverOverlay
+                            if (navRow.active)  return Qt.rgba(0.5, 0.5, 0.5, 0.07)
+                            return "transparent"
                         }
-
-                        contentItem: Column {
-                            spacing: 4
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            AppIcon {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                iconName: modelData.icon
-                                iconSize: 20
-                             }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: I18n.tr(modelData.labelKey)
-                                font.pixelSize: 11
-                                font.weight: index === window.navIndex ? Font.DemiBold : Font.Normal
-                                color: index === window.navIndex
-                                       ? Theme.primary
-                                       : palette.placeholderText
-                            }
+                        Behavior on color {
+                            enabled: Theme.animationsEnabled
+                            ColorAnimation { duration: 120 }
                         }
+                    }
 
-                        highlighted: index === window.navIndex
+                    // Accent stripe on the inner-left edge of the active row.
+                    Rectangle {
+                        x: 6
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 3
+                        height: 20
+                        radius: 1.5
+                        color: Theme.primary
+                        visible: navRow.active
+                    }
+
+                    // Icon is locked to the left — no horizontal repositioning so the
+                    // rail collapse animation is smooth without any jump.
+                    AppIcon {
+                        x: 20
+                        anchors.verticalCenter: parent.verticalCenter
+                        iconSize: 20
+                        iconName: modelData.icon
+                    }
+
+                    Text {
+                        x: 52
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: navRow.width - x - 12
+                        visible: !navRail.collapsed
+                        text: I18n.tr(modelData.labelKey)
+                        font.pixelSize: 13
+                        font.weight: navRow.active ? Font.DemiBold : Font.Normal
+                        // Active row uses the primary accent to match the left stripe;
+                        // inactive rows follow the neutral surface variant colour so
+                        // they adapt correctly between light and dark themes.
+                        color: navRow.active ? Theme.primary : Theme.onSurfaceVariant
+                        elide: Text.ElideRight
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: window.navigateTo(index)
                     }
                 }

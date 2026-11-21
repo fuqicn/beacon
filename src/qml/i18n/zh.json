@@ -338,6 +338,9 @@
   "changelog.section.launch.item1": "启动游戏时 Java 下载进度直接显示在启动状态栏，准备 Java 不再造成界面卡顿。",
   "changelog.section.launch.item2": "安装 Forge 等加载器时，Java 的检测与下载改为后台执行：安装弹窗立即关闭，进度统一显示在右下角下载卡片。",
   "changelog.section.launch.item3": "Java 下载失败时安装会停止并提示错误信息，不再卡在准备阶段。",
+  "changelog.section.launch.item4": "macOS / Linux：为解压出的游戏本地库补上可执行权限，macOS 上同时移除隔离属性，游戏不再因权限错误中断启动。",
+  "changelog.section.launch.item5": "macOS / Linux：下载的 Java 运行时会自动补上可执行权限；此前已下载的运行时会启动时自动修复，无需重新下载。",
+  "changelog.section.launch.item6": "Windows：当启动器所在目录不可写（如 Program Files）时，数据改存到当前用户的应用数据目录，普通用户账户也能正常启动游戏。",
   "changelog.section.crash.title": "崩溃诊断",
   "changelog.section.crash.item1": "游戏异常退出后自动读取 crash-report、JVM 错误日志和游戏输出。",
   "changelog.section.crash.item2": "智能识别内存不足、Java 版本不匹配、模组冲突、显卡驱动等常见原因。",
@@ -414,5 +417,8 @@
   "modDownload.otherDir": "其他...",
   "modpackInstall.dirLabel": "目标目录",
   "modpackInstall.otherDir": "其他...",
-  "searchResource.otherDir": "其他..."
+  "searchResource.otherDir": "其他...",
+  "nav.expandRail": "展开侧边栏",
+  "nav.collapseRail": "收起侧边栏",
+  "clear": "清除"
 }

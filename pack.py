@@ -1308,8 +1308,42 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     final_app = dist / ("Beacon-%s.app" % arch_suffix)
     if final_app.exists():
         shutil.rmtree(final_app)
-    shutil.move(str(staging / "Beacon.app"), str(final_app))
+    staging_dir = staging / "Beacon.app"
+    shutil.move(str(staging_dir), str(final_app))
     shutil.rmtree(staging, ignore_errors=True)
+
+    # Thin fat binaries to a single arch before reporting completion.
+    # CI builds often produce x86_64/arm64 universal binaries; thinning shrinks
+    # the bundle and avoids Gatekeeper/Apple notarisation warnings about mixed-
+    # arch runs on machines of one flavour. Requires lipo (Xcode command-line).
+    if shutil.which("lipo"):
+        candidates = []
+        bin_e = final_app / "MacOS" / BIN_NAME
+        if bin_e.is_file():
+            candidates.append(bin_e)
+        frameworks_dir = final_app / "Contents" / "Frameworks"
+        if frameworks_dir.is_dir():
+            candidates += list(frameworks_dir.glob("*.framework/Versions/*/Qt*"))
+        plugins_dir = final_app / "Contents" / "PlugIns"
+        if plugins_dir.is_dir():
+            candidates += list(plugins_dir.rglob("*.so")) + list(plugins_dir.rglob("*.dylib"))
+        qml_resources = final_app / "Contents" / "Resources" / "qml"
+        if qml_resources.is_dir():
+            candidates += list(qml_resources.rglob("*.so")) + list(qml_resources.rglob("*.dylib"))
+        thinned = 0
+        for p in candidates:
+            try:
+                out = run(["lipo", "-info", str(p)], capture=True, check=False)
+                if out and "arm64" in out and "x86_64" in out:
+                    run(["lipo", "-thin", arch_suffix, str(p), "-output", str(p)])
+                    log("thinned %s -> %s" % (p.name, arch_suffix))
+                    thinned += 1
+            except Exception as e:
+                log("WARNING: lipo failed for %s: %s" % (p.name, e))
+        if thinned:
+            log("thinned %d universal binary(s) to %s" % (thinned, arch_suffix))
+    else:
+        log("INFO: lipo not found — skipping thin (run on macOS or install Xcode CLT)")
 
     log("=== macOS package done ===")
     log("  %s (%d bytes)" % (final_app,

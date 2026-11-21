@@ -115,9 +115,13 @@ Item {
                 spacing: 12
 
                 Button {
-                    text: "\u2190  " + I18n.tr("back")
                     flat: true
                     font.weight: Font.Normal
+                    contentItem: RowLayout {
+                        spacing: 4
+                        AppIcon { iconName: "arrow-left-long"; iconSize: 18 }
+                        Text { text: I18n.tr("back"); elide: Text.ElideRight }
+                    }
                     onClicked: window.navigateToPage(4, I18n.tr("launch.manageInstances"))
                 }
 

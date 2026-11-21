@@ -209,7 +209,7 @@ Rectangle {
                 color: retryMa.containsMouse ? Qt.alpha(palette.placeholderText, 0.1) : "transparent"
                 visible: root.showRetry
 
-                AppIcon { anchors.centerIn: parent; iconName: "refresh"; iconSize: 12 }
+                AppIcon { anchors.centerIn: parent; iconName: "arrow-rotate-right"; iconSize: 12 }
 
                 MouseArea {
                     id: retryMa

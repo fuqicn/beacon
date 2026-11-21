@@ -25,6 +25,8 @@
 #include <mc_download_qt.h>
 
 #include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QSet>
 #include <QElapsedTimer>
@@ -38,6 +40,41 @@ JavaDownloadWorker::JavaDownloadWorker(int majorVersion, const QString &targetDi
     : QObject(parent), m_majorVersion(majorVersion), m_targetDir(targetDir)
 {
 }
+
+#ifndef Q_OS_WIN
+// The Mojang runtime manifest carries no file modes, so every downloaded file
+// is created mode 0644: exec'ing bin/java (and dlopen'ing the bundled libs)
+// then fails with "permission denied" on Linux and macOS. Restore the execute
+// bit recursively; java lives either in <dir>/bin or, on macOS/Linux bundles,
+// in <dir>/<name>.bundle/Contents/Home/bin.
+static void makeRuntimeExecutable(const QString &root)
+{
+    QDirIterator it(root, QDir::Files | QDir::NoSymLinks,
+                    QDirIterator::Subdirectories);
+    int fixed = 0;
+    while (it.hasNext()) {
+        const QString path = it.next();
+        const QFileInfo fi(path);
+        const bool inBinDir = fi.dir().dirName() == QLatin1String("bin");
+        const bool isLib = path.endsWith(QLatin1String(".dylib"), Qt::CaseInsensitive)
+                        || path.endsWith(QLatin1String(".so"), Qt::CaseInsensitive);
+        if (!inBinDir && !isLib) continue;
+
+        QFile f(path);
+        const QFile::Permissions perms = f.permissions();
+        if (perms & QFileDevice::ExeOwner) continue;
+
+        if (f.setPermissions(perms | QFileDevice::ExeOwner |
+                             QFileDevice::ExeGroup | QFileDevice::ExeOther))
+            ++fixed;
+        else
+            mc_warn("[DL-J] chmod +x failed: %s", path.toUtf8().constData());
+    }
+    if (fixed)
+        mc_info("[DL-J] set +x on %d runtime file(s) under %s",
+                fixed, root.toUtf8().constData());
+}
+#endif
 
 void JavaDownloadWorker::run()
 {
@@ -248,7 +285,13 @@ void JavaDownloadWorker::run()
 #ifdef Q_OS_WIN
     javaPath = QDir(javaDir).filePath("bin/java.exe");
 #else
-    // First try the flat layout (Mojar/Microsoft bundles): <dir>/bin/java
+    // POSIX: restore the execute bits the manifest does not carry, then drop
+    // the macOS quarantine attribute so Gatekeeper lets the JVM run.
+    makeRuntimeExecutable(javaDir);
+#ifdef Q_OS_MACOS
+    mc_remove_macos_quarantine(javaDir.toUtf8().constData());
+#endif
+    // First try the flat layout (Mojang/Microsoft bundles): <dir>/bin/java
     javaPath = QDir(javaDir).filePath("bin/java");
     // Fall back to Adoptium/Oracle bundle layouts where the binary lives inside
     // a .bundle or .jdk wrapper: <dir>/*.bundle/Contents/Home/bin/java

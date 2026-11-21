@@ -670,6 +670,9 @@ static int download_natives(McVersion *v, const char *mc_dir, DownloadPool &pool
 
     if (has_base) { mc_version_free(base_buf); free(base_buf); }
     mc_info("Natives extracted to %s (%d jars processed)", natives_dir, extracted);
+    // Set owner-execute bit on all .so/.dylib files so System.loadLibrary()
+    // does not fail with "permission denied" on Linux / macOS.
+    mc_path_set_natives_executable(natives_dir);
     return 1;
 }
 
@@ -809,6 +812,12 @@ static int cmd_java_download(int major_version, const char *mc_dir, int threads)
     int ok = 0, fail = 0;
     for (auto &w : works) { if (w.success) ok++; else fail++; }
     mc_info("Java runtime: %d ok, %d failed", ok, fail);
+    // On macOS, remove the com.apple.quarantine xattr from all native lib files
+    // so that Gatekeeper does not block System.loadLibrary() at runtime.
+#ifdef __APPLE__
+    if (!fail && mc_path_exists(base_dir))
+        mc_remove_macos_quarantine(base_dir);
+#endif
     return fail == 0 ? 0 : 1;
 }
 

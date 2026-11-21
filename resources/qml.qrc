@@ -29,6 +29,12 @@
         <file alias="trash.svg">../src/icons/trash.svg</file>
         <file alias="refresh.svg">../src/icons/refresh.svg</file>
         <file alias="power.svg">../src/icons/power.svg</file>
+        <file alias="bar.svg">../src/icons/bar.svg</file>
+        <file alias="arrow-left-long.svg">../src/icons/arrow-left-long.svg</file>
+        <file alias="arrow-rotate-right.svg">../src/icons/arrow-rotate-right.svg</file>
+        <file alias="backspace.svg">../src/icons/backspace.svg</file>
+        <file alias="collapse-sidebar.svg">../src/icons/collapse-sidebar.svg</file>
+        <file alias="expand-sidebar.svg">../src/icons/expand-sidebar.svg</file>
     </qresource>
     <qresource prefix="/i18n">
         <file alias="zh.json">../src/qml/i18n/zh.json</file>

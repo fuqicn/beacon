@@ -207,6 +207,9 @@
   "changelog.section.launch.item1": "起動時の Java ダウンロード進捗が起動ステータス行に表示され、Java の準備で UI が固まらなくなりました。",
   "changelog.section.launch.item2": "Forge などのローダーをインストールする際、Java の検出とダウンロードをバックグラウンドで実行します。インストールダイアログはすぐに閉じ、進捗は右下のダウンロードカードに表示されます。",
   "changelog.section.launch.item3": "Java のダウンロードに失敗した場合、準備段階で止まったままにせず、エラーメッセージを表示してインストールを終了します。",
+  "changelog.section.launch.item4": "macOS / Linux：展開したゲームのネイティブライブラリに実行権限を付与し、macOS では隔離属性も解除するため、権限エラーでゲームが起動できなくなる問題を修正しました。",
+  "changelog.section.launch.item5": "macOS / Linux：ダウンロードした Java ランタイムにも実行権限を付与します。以前にダウンロード済みのランタイムは起動時に自動修復されるため、再ダウンロードは不要です。",
+  "changelog.section.launch.item6": "Windows：ランチャーのフォルダーが書き込み不可（Program Files など）の場合、データを現在のユーザーのアプリデータフォルダーに保存し、標準ユーザーでも通常どおりゲームを起動できます。",
   "changelog.section.crash.title": "クラッシュ診断",
   "changelog.section.crash.item1": "ゲームが異常終了した際、クラッシュレポート・JVM エラーログ・ゲーム出力を自動で読み取ります。",
   "changelog.section.crash.item2": "メモリ不足、Java バージョンの不一致、Mod の競合、グラフィックドライバーなど一般的な原因を判別します。",
@@ -288,5 +291,8 @@
   "modDownload.otherDir": "その他...",
   "modpackInstall.dirLabel": "ターゲットディレクトリ",
   "modpackInstall.otherDir": "その他...",
-  "searchResource.otherDir": "その他..."
+  "searchResource.otherDir": "その他...",
+  "nav.expandRail": "サイドバーを開く",
+  "nav.collapseRail": "サイドバーを閉じる",
+  "clear": "クリア"
 }

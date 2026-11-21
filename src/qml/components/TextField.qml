@@ -42,7 +42,7 @@ Rectangle {
         id: input
         anchors.fill: parent
         anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.rightMargin: clearBtn.visible ? 44 : 16
         anchors.topMargin: 20
         anchors.bottomMargin: 8
         text: root.text
@@ -62,6 +62,28 @@ Rectangle {
             color: Theme.primary
             visible: root.outlined ? false : parent.activeFocus
         }
+    }
+
+    // Clear button — appears only when there is text and the field has focus
+    // or is hovered, giving a quick way to empty the search/input field.
+    AppIcon {
+        id: clearBtn
+        x: root.width - width - 10
+        y: (root.height - height) / 2
+        width: 24; height: 24
+        iconName: "backspace"
+        iconSize: 16
+        visible: root.text.length > 0 && input.activeFocus
+        opacity: hovered ? 1.0 : 0.6
+        Behavior on opacity { NumberAnimation { duration: 120 } }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: { input.text = ""; input.forceActiveFocus() }
+        }
+        ToolTip.visible: hovered
+        ToolTip.delay: 300
+        ToolTip.text: I18n.tr("clear")
     }
 
     Text {

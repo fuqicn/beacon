@@ -336,6 +336,9 @@
   "changelog.section.launch.item1": "Java downloads report their progress in the launch status line, so preparing Java no longer freezes the launcher.",
   "changelog.section.launch.item2": "When installing Forge and other loaders, Java detection and download run in the background: the install dialog closes immediately and progress moves to the download card in the bottom-right corner.",
   "changelog.section.launch.item3": "If the Java download fails, the installation stops with an error message instead of hanging at the preparation step.",
+  "changelog.section.launch.item4": "macOS / Linux: extracted native libraries are now given the execute permission, and on macOS the quarantine attribute is removed too, so the game no longer aborts with a permission error.",
+  "changelog.section.launch.item5": "macOS / Linux: downloaded Java runtimes are made executable as well, and a runtime downloaded earlier is repaired automatically at launch instead of having to be fetched again.",
+  "changelog.section.launch.item6": "Windows: when the launcher folder is not writable (for example under Program Files), data is stored in the current user's application data folder so that standard user accounts can still launch the game.",
   "changelog.section.crash.title": "Crash diagnosis",
   "changelog.section.crash.item1": "When the game exits abnormally, Beacon now reads the crash report, JVM error log and game output automatically.",
   "changelog.section.crash.item2": "It recognises common causes such as out-of-memory, wrong Java version, mod conflicts and graphics driver problems.",
@@ -412,5 +415,8 @@
   "modDownload.otherDir": "Other...",
   "modpackInstall.dirLabel": "Target directory",
   "modpackInstall.otherDir": "Other...",
-  "searchResource.otherDir": "Other..."
+  "searchResource.otherDir": "Other...",
+  "nav.expandRail": "Expand sidebar",
+  "nav.collapseRail": "Collapse sidebar",
+  "clear": "Clear"
 }

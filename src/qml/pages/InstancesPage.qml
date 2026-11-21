@@ -59,9 +59,13 @@ Item {
             spacing: 12
 
             Button {
-                text: "\u2190  " + I18n.tr("back")
                 flat: true
                 font.weight: Font.Normal
+                contentItem: RowLayout {
+                    spacing: 4
+                    AppIcon { iconName: "arrow-left-long"; iconSize: 18 }
+                    Text { text: I18n.tr("back"); elide: Text.ElideRight }
+                }
                 onClicked: window.navigateToPage(0, "")
             }
 
@@ -76,7 +80,7 @@ Item {
             Rectangle {
                 width: 32; height: 32; radius: Theme.shapeSmall
                 color: refHover.hovered ? Qt.alpha(Theme.primary, 0.15) : "transparent"
-                AppIcon { anchors.centerIn: parent; iconName: "refresh"; iconSize: 16 }
+                AppIcon { anchors.centerIn: parent; iconName: "arrow-rotate-right"; iconSize: 16 }
                 HoverHandler { id: refHover }
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor

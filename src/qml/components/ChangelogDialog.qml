@@ -63,7 +63,10 @@ Popup {
             items: [
                 I18n.tr("changelog.section.launch.item1"),
                 I18n.tr("changelog.section.launch.item2"),
-                I18n.tr("changelog.section.launch.item3")
+                I18n.tr("changelog.section.launch.item3"),
+                I18n.tr("changelog.section.launch.item4"),
+                I18n.tr("changelog.section.launch.item5"),
+                I18n.tr("changelog.section.launch.item6")
             ]
         },
         {

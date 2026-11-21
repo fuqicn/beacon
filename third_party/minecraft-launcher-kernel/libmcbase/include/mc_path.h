@@ -24,6 +24,18 @@ int mc_path_isdir(const char *path);
 int mc_path_mkdir(const char *path);
 int mc_path_mkdir_p(const char *path);
 int mc_path_rmdir_recursive(const char *path);
+
+// Recursively set the owner-execute bit on all .so/.dylib files under `dir`.
+// This mirrors HMCL's FileUtils.setExecutable() which is called after native
+// extraction so that System.loadLibrary() does not fail with "permission denied"
+// on Linux and macOS.
+void mc_path_set_natives_executable(const char *natives_dir);
+
+// Remove the com.apple.quarantine xattr from all regular files under `dir`.
+// Best-effort: returns 0 on success, non-zero if the operation fails
+// (e.g. no xattr present, or permission denied).  Only meaningful on macOS.
+int mc_remove_macos_quarantine(const char *dir);
+
 int mc_path_appdata(char *out, size_t out_size);
 int mc_path_temp(char *out, size_t out_size);
 int mc_path_exe_dir(char *out, size_t out_size);

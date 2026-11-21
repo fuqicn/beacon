@@ -7,6 +7,7 @@
  */
 #include "mc_path.h"
 #include "mc_str.h"
+#include <mc_log.h>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -17,6 +18,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStandardPaths>
+#include <QtCore/QProcess>
 
 int mc_path_join(const char *a, const char *b, char *out, size_t out_size) {
     if (!a || !b || !out || out_size == 0) return 0;
@@ -188,4 +190,83 @@ long mc_path_filesize(const char *path) {
     QFileInfo fi(QString::fromUtf8(path));
     if (!fi.exists()) return -1;
     return fi.size();
+}
+
+// ---- execute-bit helpers for native libraries ----
+
+static bool ends_with_dot_lib(const QString &name) {
+    return name.endsWith(".so", Qt::CaseInsensitive)
+        || name.endsWith(".dylib", Qt::CaseInsensitive);
+}
+
+void mc_path_set_natives_executable(const char *natives_dir) {
+    if (!natives_dir || natives_dir[0] == '\0') return;
+    QDir dir(QString::fromUtf8(natives_dir));
+    // Walk recursively through all subdirectories
+    QStringList dirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString &sub : dirs) {
+        QDir subdir(dir.path() + QDir::separator() + sub);
+        QStringList files = subdir.entryList(
+            QStringList() << "*.so" << "*.SO" << "*.dylib" << "*.DYLIB",
+            QDir::Files, QDir::Name);
+        for (const QString &f : files) {
+            QFile file(subdir.absoluteFilePath(f));
+            QFile::Permissions perms = file.permissions();
+            // Add owner-execute if not already present
+            if (!(perms & QFileDevice::ExeOwner)) {
+                perms |= QFileDevice::ExeOwner;
+                if (!file.setPermissions(perms))
+                    mc_warn("Failed to set executable bit: %s",
+                            f.toUtf8().constData());
+            }
+        }
+    }
+    // Also scan top-level directory
+    QStringList topFiles = dir.entryList(
+        QStringList() << "*.so" << "*.SO" << "*.dylib" << "*.DYLIB",
+        QDir::Files, QDir::Name);
+    for (const QString &f : topFiles) {
+        QFile file(dir.absoluteFilePath(f));
+        QFile::Permissions perms = file.permissions();
+        if (!(perms & QFileDevice::ExeOwner)) {
+            perms |= QFileDevice::ExeOwner;
+            if (!file.setPermissions(perms))
+                mc_warn("Failed to set executable bit: %s",
+                        f.toUtf8().constData());
+        }
+    }
+}
+
+int mc_remove_macos_quarantine(const char *dir) {
+#ifdef __APPLE__
+    if (!dir || dir[0] == '\0') return 0;
+    QDir qdir(QString::fromUtf8(dir));
+    QStringList allEntries = qdir.entryList(
+        QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString &entry : allEntries) {
+        QString fullPath = qdir.absoluteFilePath(entry);
+        QFileInfo fi(fullPath);
+        if (fi.isDir()) {
+            // Recurse into directories
+            mc_remove_macos_quarantine(fullPath.toUtf8().constData());
+            continue;
+        }
+        if (!ends_with_dot_lib(entry) && entry != "java" && entry != "javac")
+            continue;
+        // Try xattr -d com.apple.quarantine
+        QProcess proc;
+        proc.setProgram("xattr");
+        proc.setArguments(QStringList() << "-d" << "com.apple.quarantine"
+                                     << fullPath);
+        proc.start();
+        proc.waitForFinished(3000);
+        if (proc.exitCode() != 0)
+            mc_debug("xattr removal failed for %s (code=%d)",
+                     entry.toUtf8().constData(), proc.exitCode());
+    }
+    return 0;
+#else
+    (void)dir;
+    return 0;
+#endif
 }

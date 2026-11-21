@@ -207,6 +207,9 @@
   "changelog.section.launch.item1": "La progression du téléchargement de Java s'affiche dans la ligne d'état du lancement : la préparation de Java ne fige plus l'interface.",
   "changelog.section.launch.item2": "Lors de l'installation de Forge et d'autres loaders, la détection et le téléchargement de Java s'exécutent en arrière-plan : la fenêtre d'installation se ferme immédiatement et la progression apparaît dans la carte de téléchargement en bas à droite.",
   "changelog.section.launch.item3": "Si le téléchargement de Java échoue, l'installation s'arrête avec un message d'erreur au lieu de rester bloquée à l'étape de préparation.",
+  "changelog.section.launch.item4": "macOS / Linux : les bibliothèques natives extraites reçoivent désormais le droit d'exécution, et sous macOS l'attribut de quarantaine est également retiré : le jeu ne s'arrête plus sur une erreur de permission.",
+  "changelog.section.launch.item5": "macOS / Linux : les runtimes Java téléchargés sont eux aussi rendus exécutables, et un runtime déjà présent est réparé au lancement au lieu d'être retéléchargé.",
+  "changelog.section.launch.item6": "Windows : si le dossier du lanceur n'est pas accessible en écriture (par exemple Program Files), les données sont stockées dans le dossier de données de l'utilisateur courant, ce qui permet aux comptes utilisateur standard de lancer le jeu normalement.",
   "changelog.section.crash.title": "Diagnostic de plantage",
   "changelog.section.crash.item1": "Lorsqu'un jeu se termine anormalement, Beacon lit automatiquement le rapport de plantage, le journal d'erreur JVM et la sortie du jeu.",
   "changelog.section.crash.item2": "Il identifie les causes courantes : mémoire insuffisante, mauvaise version de Java, conflits de mods ou pilote graphique.",
@@ -288,5 +291,8 @@
   "modDownload.otherDir": "Autre...",
   "modpackInstall.dirLabel": "Dossier cible",
   "modpackInstall.otherDir": "Autre...",
-  "searchResource.otherDir": "Autre..."
+  "searchResource.otherDir": "Autre...",
+  "nav.expandRail": "Agrandir la barre latérale",
+  "nav.collapseRail": "Réduire la barre latérale",
+  "clear": "Effacer"
 }

@@ -877,6 +877,21 @@ void LaunchManager::doLaunch()
         return;
     }
 
+#ifndef Q_OS_WIN
+    // A runtime installed before the execute-bit fix is still mode 0644, and
+    // QProcess then fails with "permission denied". Repair it in place.
+    {
+        QFile jf(m_javaPath);
+        const QFile::Permissions perms = jf.permissions();
+        if (!(perms & QFileDevice::ExeOwner)
+            && jf.setPermissions(perms | QFileDevice::ExeOwner
+                                       | QFileDevice::ExeGroup
+                                       | QFileDevice::ExeOther))
+            mc_info("[Launch] restored execute bit: %s",
+                    m_javaPath.toUtf8().constData());
+    }
+#endif
+
     if (m_vs.ver.main_class[0] == '\0') {
         emit errorOccurred("版本 main_class 为空: " + m_versionId);
         return;
@@ -1071,6 +1086,18 @@ void LaunchManager::doLaunch()
         }
         if (mapped) f.unmap(const_cast<uchar *>(mapped));
     }
+
+#ifndef Q_OS_WIN
+    // POSIX has no attribute in the ZIP entries, so every freshly extracted
+    // native library lands with mode 0644 and dlopen()/System.loadLibrary()
+    // fails with "permission denied". Set the execute bit explicitly.
+    mc_path_set_natives_executable(nativesDir);
+#ifdef Q_OS_MACOS
+    // Files written by us (and previously downloaded archives) can carry the
+    // com.apple.quarantine attribute; Gatekeeper then refuses to map them.
+    mc_remove_macos_quarantine(nativesDir);
+#endif
+#endif
 
     QString nativesDirStr = shortenPath(QString::fromUtf8(nativesDir));
 

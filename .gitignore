@@ -56,6 +56,9 @@ Thumbs.db
 .DS_Store
 qtdebug.log
 
+# Local temp directory used for storing svg, new kernels, test assets before commit
+.tmp/
+
 action-wrong/
 
 

@@ -260,10 +260,10 @@ ApplicationWindow {
                         text: I18n.tr(modelData.labelKey)
                         font.pixelSize: 13
                         font.weight: navRow.active ? Font.DemiBold : Font.Normal
-                        // Active row uses the primary accent to match the left stripe;
-                        // inactive rows follow the neutral surface variant colour so
-                        // they adapt correctly between light and dark themes.
-                        color: navRow.active ? Theme.primary : Theme.onSurfaceVariant
+                        // Text colour is the same for active and inactive rows —
+                        // it only changes with the light/dark theme.  Selection is
+                        // indicated by the left accent bar and background tint only.
+                        color: Theme.onSurface
                         elide: Text.ElideRight
                     }
 

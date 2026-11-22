@@ -571,7 +571,7 @@ void KernelBridge::checkForUpdate()
         if (guard) {
             m_checkingUpdate = false;
             emit checkingUpdateChanged();
-            // Release tags look like "v-1.0.3" or "v1.0.3"; compare the bare
+            // Release tags look like "v-1.0.4" or "v1.0.4"; compare the bare
             // version, otherwise a freshly installed build offers to update to
             // the version it is already running.
             QString ver = newVer;
@@ -2146,7 +2146,7 @@ void KernelBridge::launchGame(int memory)
             proc.start();
             if (!proc.waitForFinished(5000)) return -1;
             QString output = QString::fromUtf8(proc.readAllStandardOutput());
-            // Match patterns like "17.0.1", "17.0.11", "25-ea", "21.0.3", etc.
+            // Match patterns like "17.0.1", "17.0.11", "25-ea", "21.0.4", etc.
             QRegularExpression re(R"(\b(\d+)\b)");
             auto it = re.globalMatch(output);
             if (it.hasNext()) {

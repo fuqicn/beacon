@@ -228,7 +228,7 @@
   "settings.languageLabel": "语言",
   "settings.chinese": "中文",
   "settings.japanese": "日本語",
-  "settings.version": "Launcher v1.0.3\n基于 Qt 6 的 Minecraft 启动器",
+  "settings.version": "Launcher v1.0.4\n基于 Qt 6 的 Minecraft 启动器",
   "tools.logSub": "日志查看",
   "launch.manageInstances": "实例管理",
   "launch.instanceSettings": "实例设置",

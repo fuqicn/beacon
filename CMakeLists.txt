@@ -7,7 +7,7 @@ if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
 endif()
 
-project(Beacon VERSION 1.0.3 LANGUAGES CXX)
+project(Beacon VERSION 1.0.4 LANGUAGES CXX)
 
 # 启用 C 语言支持（用于编译自解压 launcher）
 enable_language(C)
@@ -134,8 +134,8 @@ elseif(APPLE)
     set_target_properties(Beacon PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.beacon.launcher"
         MACOSX_BUNDLE_BUNDLE_NAME "Beacon"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.3"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.3"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.4"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.4"
         MACOSX_BUNDLE_ICON_FILE "app.icns")
 else()
     qt_add_executable(Beacon ${MANAGER_SRC})

@@ -228,7 +228,7 @@
   "settings.languageLabel": "Language",
   "settings.chinese": "中文",
   "settings.japanese": "日本語",
-  "settings.version": "Launcher v1.0.3\nMinecraft launcher based on Qt 6",
+  "settings.version": "Launcher v1.0.4\nMinecraft launcher based on Qt 6",
   "tools.logSub": "Log viewer",
   "launch.manageInstances": "Instance management",
   "launch.instanceSettings": "Instance settings",

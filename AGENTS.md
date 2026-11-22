@@ -4,7 +4,7 @@
 
 - **Do not commit or push** unless the user explicitly asks. "Make the change" is not
   permission to commit.
-- **Do not change the version number** (`1.0.3`) unless the user explicitly asks.
+- **Do not change the version number** (`1.0.4`) unless the user explicitly asks.
 - **Do not modify anything under `third_party/minecraft-launcher-kernel/`** unless the
   user explicitly asks. This includes editing kernel sources/headers, replacing or
   updating the kernel, and deleting files. Treat the kernel as read-only by default.
@@ -166,7 +166,7 @@ Keep these in sync when releasing:
 - `pack.py` reads the CMake project version by default (`--version` overrides it) and
   rewrites the version inside `packaging/main.c` / `packaging/beacon_gtk.c`
 
-Current version: `1.0.3`.
+Current version: `1.0.4`.
 
 ---
 
@@ -550,5 +550,5 @@ Remove-Item 'E:\projects\launcher\build\CMakeCache.txt' -Force -ErrorAction Sile
 
 ---
 
-*Last updated: 2026-11-22. Version: 1.0.3. Kernel: latest from
+*Last updated: 2026-11-22. Version: 1.0.4. Kernel: latest from
 https://github.com/fuqicn/minecraft-launcher-kernel.git*

@@ -228,7 +228,7 @@
   "settings.languageLabel": "Langue",
   "settings.chinese": "中文",
   "settings.japanese": "日本語",
-  "settings.version": "Lanceur v1.0.3\nLanceur Minecraft basé sur Qt 6",
+  "settings.version": "Lanceur v1.0.4\nLanceur Minecraft basé sur Qt 6",
   "tools.logSub": "Visionneur de logs",
   "launch.manageInstances": "Gestion des instances",
   "launch.instanceSettings": "Paramètres de l'instance",

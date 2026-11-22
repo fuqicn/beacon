@@ -44,7 +44,7 @@ constexpr const char *kJlinkName = "jlink";
 
 // Shallow probe of one install root: "<root>/<name>/bin/java" plus one nested
 // level ("<root>/<name>/<nested>/bin/java"), which covers layouts such as
-// "jdk-17", "jdk-17.0.2+8", "21.0.3-tem" and "jre/...". Deliberately bounded:
+// "jdk-17", "jdk-17.0.2+8", "21.0.4-tem" and "jre/...". Deliberately bounded:
 // nothing here recurses.
 void appendJavaFromRoot(QStringList *out, const QString &root)
 {

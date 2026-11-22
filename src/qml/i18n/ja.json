@@ -228,7 +228,7 @@
   "settings.languageLabel": "言語",
   "settings.chinese": "中文",
   "settings.japanese": "日本語",
-  "settings.version": "ランチャー v1.0.3\nQt 6 ベースの Minecraft ランチャー",
+  "settings.version": "ランチャー v1.0.4\nQt 6 ベースの Minecraft ランチャー",
   "tools.logSub": "ログビューア",
   "launch.manageInstances": "インスタンス管理",
   "launch.instanceSettings": "インスタンス設定",

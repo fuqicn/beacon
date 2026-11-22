@@ -35,6 +35,13 @@
         <file alias="backspace.svg">../src/icons/backspace.svg</file>
         <file alias="collapse-sidebar.svg">../src/icons/collapse-sidebar.svg</file>
         <file alias="expand-sidebar.svg">../src/icons/expand-sidebar.svg</file>
+        <file alias="circle-xmark.svg">../src/icons/circle-xmark.svg</file>
+        <file alias="arrows-rotate.svg">../src/icons/arrows-rotate.svg</file>
+        <file alias="nav-play.svg">../src/icons/nav-play.svg</file>
+        <file alias="nav-download.svg">../src/icons/nav-download.svg</file>
+        <file alias="nav-gear.svg">../src/icons/nav-gear.svg</file>
+        <file alias="nav-wrench.svg">../src/icons/nav-wrench.svg</file>
+        <file alias="nav-columns.svg">../src/icons/nav-columns.svg</file>
     </qresource>
     <qresource prefix="/i18n">
         <file alias="zh.json">../src/qml/i18n/zh.json</file>

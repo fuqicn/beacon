@@ -107,20 +107,31 @@ function selectCategory(index) {
         // Fixed tab widths (no implicitWidth timing) + a sliding pill so the
         // three buttons never overlap and switching reads as an animation.
         Item {
+            id: modeBar
             Layout.fillWidth: true
             Layout.leftMargin: 12
             height: 34
 
+            // Six tabs must fit side by side at the minimum window width, so
+            // the width is derived from the available space instead of being
+            // hard-coded (fixed 100 px tabs were clipped on narrow windows).
+            readonly property real tabWidth: Math.max(70, Math.min(100,
+                (width - 5 * 8) / 6))
+
             Rectangle {
                 id: modePill
-                x: root.modeIndex * 108
+                x: root.modeIndex * (modeBar.tabWidth + 8)
                 y: 0
-                width: 100
+                width: modeBar.tabWidth
                 height: 34
                 radius: Theme.shapeFull
                 color: Qt.alpha(Theme.primary, 0.15)
                 z: -1
                 Behavior on x {
+                    enabled: Theme.animationsEnabled
+                    NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+                }
+                Behavior on width {
                     enabled: Theme.animationsEnabled
                     NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
                 }
@@ -141,7 +152,7 @@ function selectCategory(index) {
                         { label: I18n.tr("download.tabDataPack") }
                     ]
                     delegate: Item {
-                        width: 100
+                        width: modeBar.tabWidth
                         height: 34
 
                         Rectangle {
@@ -159,8 +170,11 @@ function selectCategory(index) {
 
                         Text {
                             anchors.centerIn: parent
+                            width: parent.width - 8
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
                             text: modelData.label
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                             font.weight: index === root.modeIndex ? Font.Medium : Font.Normal
                             color: index === root.modeIndex ? Theme.primary : palette.placeholderText
                         }

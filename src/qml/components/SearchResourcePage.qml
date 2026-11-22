@@ -166,74 +166,94 @@ Item {
             }
         }
 
-        RowLayout {
+        // Filter controls wrap onto extra lines when the content pane is
+        // narrow, so nothing is clipped at the minimum window width.
+        Flow {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 12
 
-            Text {
-                text: I18n.tr("modSearch.sourceLabel")
-                font.pixelSize: 13
-                color: palette.placeholderText
-            }
+            Row {
+                spacing: 6
 
-            ComboBox {
-                id: sourceCombo
-                font.weight: Font.Medium
-                model: [
-                    { text: I18n.tr("modSearch.sourceAll"), key: "all" },
-                    { text: I18n.tr("modSearch.sourceModrinth"), key: "modrinth" },
-                    { text: I18n.tr("modSearch.sourceCurseForge"), key: "curseforge" }
-                ]
-                textRole: "text"
-                valueRole: "key"
-                enabled: !kernel.searchManager.searching
-                Component.onCompleted: {
-                    for (var i = 0; i < model.length; ++i)
-                        if (model[i].key === root.source) { currentIndex = i; break }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("modSearch.sourceLabel")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
                 }
-                onCurrentIndexChanged: {
-                    root.source = model[currentIndex].key
-                    root.doSearch()
+
+                ComboBox {
+                    id: sourceCombo
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.weight: Font.Medium
+                    model: [
+                        { text: I18n.tr("modSearch.sourceAll"), key: "all" },
+                        { text: I18n.tr("modSearch.sourceModrinth"), key: "modrinth" },
+                        { text: I18n.tr("modSearch.sourceCurseForge"), key: "curseforge" }
+                    ]
+                    textRole: "text"
+                    valueRole: "key"
+                    enabled: !kernel.searchManager.searching
+                    Component.onCompleted: {
+                        for (var i = 0; i < model.length; ++i)
+                            if (model[i].key === root.source) { currentIndex = i; break }
+                    }
+                    onCurrentIndexChanged: {
+                        root.source = model[currentIndex].key
+                        root.doSearch()
+                    }
                 }
             }
 
-            Text {
-                text: I18n.tr("modSearch.gameVersion")
-                font.pixelSize: 13
-                color: palette.placeholderText
+            Row {
+                spacing: 6
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("modSearch.gameVersion")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
+                }
+
+                TextField {
+                    id: versionField
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 120
+                    placeholderText: I18n.tr("modSearch.versionPlaceholder")
+                    font.pixelSize: 12
+                    onTextEdited: root.mcVersion = versionField.text.trim()
+                    onEditingFinished: root.doSearch()
+                    onAccepted: root.doSearch()
+                }
             }
 
-            TextField {
-                id: versionField
-                Layout.preferredWidth: 120
-                placeholderText: I18n.tr("modSearch.versionPlaceholder")
-                font.pixelSize: 12
-                onTextEdited: root.mcVersion = versionField.text.trim()
-                onEditingFinished: root.doSearch()
-                onAccepted: root.doSearch()
-            }
+            Row {
+                spacing: 6
 
-            Text {
-                text: I18n.tr("modSearch.sort")
-                font.pixelSize: 13
-                color: palette.placeholderText
-            }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("modSearch.sort")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
+                }
 
-            ComboBox {
-                id: sortCombo
-                font.weight: Font.Medium
-                model: [
-                    { text: I18n.tr("modSearch.rel"),   key: "relevance" },
-                    { text: I18n.tr("modSearch.downloads"), key: "downloads" },
-                    { text: I18n.tr("modSearch.newest"),    key: "newest" },
-                    { text: I18n.tr("modSearch.updated"),   key: "updated" }
-                ]
-                textRole: "text"
-                valueRole: "key"
-                currentIndex: 0
-                onCurrentIndexChanged: {
-                    root.sortKey = model[currentIndex].key
-                    root.doSearch()
+                ComboBox {
+                    id: sortCombo
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.weight: Font.Medium
+                    model: [
+                        { text: I18n.tr("modSearch.rel"),   key: "relevance" },
+                        { text: I18n.tr("modSearch.downloads"), key: "downloads" },
+                        { text: I18n.tr("modSearch.newest"),    key: "newest" },
+                        { text: I18n.tr("modSearch.updated"),   key: "updated" }
+                    ]
+                    textRole: "text"
+                    valueRole: "key"
+                    currentIndex: 0
+                    onCurrentIndexChanged: {
+                        root.sortKey = model[currentIndex].key
+                        root.doSearch()
+                    }
                 }
             }
         }

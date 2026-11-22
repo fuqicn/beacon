@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <g transform="scale(0.24)">
+    <!-- 齿轮外轮廓 -->
+    <path d="M42.5 10h15l2.5 10.5c2 .5 4 1.5 6 2.5l8-7 10.5 10.5-7 8c1 2 2 4 2.5 6L90 42.5v15l-10.5 2.5c-.5 2-1.5 4-2.5 6l7 8-10.5 10.5-8-7c-2 1-4 2-6 2.5L57.5 90h-15L40 79.5c-2-.5-4-1.5-6-2.5l-8 7L15.5 73.5l7-8c-1-2-2-4-2.5-6L9.5 57.5v-15L20 40c.5-2 1.5-4 2.5-6l-7-8L26 15.5l8 7c2-1 4-2 6-2.5L42.5 10Z"
+          stroke="currentColor" stroke-width="6" stroke-linejoin="round"/>
+    <!-- 中间圆环 -->
+    <circle cx="50" cy="50" r="15" stroke="currentColor" stroke-width="6"/>
+  </g>
+</svg>

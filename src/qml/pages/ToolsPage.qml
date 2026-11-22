@@ -62,7 +62,7 @@ Item {
                     model: Qt.platform.os === "windows" ? [
                         { name: I18n.tr("tools.logView"), desc: I18n.tr("tools.logViewDesc"), icon: "file-lines", action: "log" },
                         { name: I18n.tr("java.download"), desc: I18n.tr("tools.javaDownloadDesc"), icon: "coffee", action: "java" },
-                        { name: I18n.tr("tools.memOpt"), desc: I18n.tr("tools.memOptDesc"), icon: "arrow-rotate-right", action: "mem" }
+                        { name: I18n.tr("tools.memOpt"), desc: I18n.tr("tools.memOptDesc"), icon: "arrows-rotate", action: "mem" }
                     ] : [
                         { name: I18n.tr("tools.logView"), desc: I18n.tr("tools.logViewDesc"), icon: "file-lines", action: "log" },
                         { name: I18n.tr("java.download"), desc: I18n.tr("tools.javaDownloadDesc"), icon: "coffee", action: "java" }

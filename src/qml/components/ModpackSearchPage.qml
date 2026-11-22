@@ -180,79 +180,99 @@ property var stackView: null
             }
         }
 
-        RowLayout {
+        // Filter controls wrap onto extra lines when the content pane is
+        // narrow, so nothing is clipped at the minimum window width.
+        Flow {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 12
 
-            Text {
-                text: I18n.tr("modpackSearch.sourceLabel")
-                font.pixelSize: 13
-                color: palette.placeholderText
-            }
+            Row {
+                spacing: 6
 
-            ComboBox {
-                id: packSourceCombo
-                font.weight: Font.Medium
-                model: [
-                    { text: I18n.tr("modpackSearch.sourceAll"), key: "all" },
-                    { text: I18n.tr("modpackSearch.sourceModrinth"), key: "modrinth" },
-                    { text: I18n.tr("modpackSearch.sourceCurseForge"), key: "curseforge" }
-                ]
-                textRole: "text"
-                valueRole: "key"
-                enabled: !kernel.modManager.searchingPacks
-                Component.onCompleted: {
-                    for (var i = 0; i < model.length; ++i)
-                        if (model[i].key === root.source) { currentIndex = i; break }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("modpackSearch.sourceLabel")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
                 }
-                onCurrentIndexChanged: {
-                    root.source = model[currentIndex].key
-                    root.doSearch()
-                }
-            }
 
-            Text {
-                text: I18n.tr("modpackSearch.gameVersion")
-                font.pixelSize: 13
-                color: palette.placeholderText
-            }
-
-            TextField {
-                id: versionField
-                Layout.preferredWidth: 120
-                placeholderText: I18n.tr("modpackSearch.versionPlaceholder")
-                font.pixelSize: 12
-                onTextEdited: root.mcVersion = versionField.text.trim()
-                onEditingFinished: root.doSearch()
-                onAccepted: root.doSearch()
-            }
-
-            Text {
-                text: I18n.tr("modpackSearch.sort")
-                font.pixelSize: 13
-                color: palette.placeholderText
-            }
-
-            ComboBox {
-                id: sortCombo
-                font.weight: Font.Medium
-                model: ListModel {
-                    ListElement { text: "相关度"; key: "relevance" }
-                    ListElement { text: "下载量"; key: "downloads" }
-                    ListElement { text: "关注量"; key: "follows" }
-                    ListElement { text: "最新发布"; key: "newest" }
-                    ListElement { text: "最近更新"; key: "updated" }
-                }
-                textRole: "text"
-                currentIndex: 0
-                delegate: ItemDelegate {
-                    width: parent ? parent.width : 0
-                    text: model.text
+                ComboBox {
+                    id: packSourceCombo
+                    anchors.verticalCenter: parent.verticalCenter
                     font.weight: Font.Medium
+                    model: [
+                        { text: I18n.tr("modpackSearch.sourceAll"), key: "all" },
+                        { text: I18n.tr("modpackSearch.sourceModrinth"), key: "modrinth" },
+                        { text: I18n.tr("modpackSearch.sourceCurseForge"), key: "curseforge" }
+                    ]
+                    textRole: "text"
+                    valueRole: "key"
+                    enabled: !kernel.modManager.searchingPacks
+                    Component.onCompleted: {
+                        for (var i = 0; i < model.length; ++i)
+                            if (model[i].key === root.source) { currentIndex = i; break }
+                    }
+                    onCurrentIndexChanged: {
+                        root.source = model[currentIndex].key
+                        root.doSearch()
+                    }
                 }
-                onCurrentIndexChanged: {
-                    root.sortKey = model.get(currentIndex).key
-                    root.doSearch()
+            }
+
+            Row {
+                spacing: 6
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("modpackSearch.gameVersion")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
+                }
+
+                TextField {
+                    id: versionField
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 120
+                    placeholderText: I18n.tr("modpackSearch.versionPlaceholder")
+                    font.pixelSize: 12
+                    onTextEdited: root.mcVersion = versionField.text.trim()
+                    onEditingFinished: root.doSearch()
+                    onAccepted: root.doSearch()
+                }
+            }
+
+            Row {
+                spacing: 6
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("modpackSearch.sort")
+                    font.pixelSize: 13
+                    color: palette.placeholderText
+                }
+
+                ComboBox {
+                    id: sortCombo
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.weight: Font.Medium
+                    model: ListModel {
+                        ListElement { text: "相关度"; key: "relevance" }
+                        ListElement { text: "下载量"; key: "downloads" }
+                        ListElement { text: "关注量"; key: "follows" }
+                        ListElement { text: "最新发布"; key: "newest" }
+                        ListElement { text: "最近更新"; key: "updated" }
+                    }
+                    textRole: "text"
+                    currentIndex: 0
+                    delegate: ItemDelegate {
+                        width: parent ? parent.width : 0
+                        text: model.text
+                        font.weight: Font.Medium
+                    }
+                    onCurrentIndexChanged: {
+                        root.sortKey = model.get(currentIndex).key
+                        root.doSearch()
+                    }
                 }
             }
         }

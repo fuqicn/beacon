@@ -79,10 +79,10 @@ ApplicationWindow {
     property string subPageTitle: ""
 
     readonly property var navModel: [
-        { labelKey: "nav.launch", icon: "play" },
-        { labelKey: "nav.download", icon: "download" },
-        { labelKey: "nav.settings", icon: "gear" },
-        { labelKey: "nav.tools", icon: "wrench" }
+        { labelKey: "nav.launch", icon: "nav-play" },
+        { labelKey: "nav.download", icon: "nav-download" },
+        { labelKey: "nav.settings", icon: "nav-gear" },
+        { labelKey: "nav.tools", icon: "nav-wrench" }
     ]
 
     function navigateTo(index) {
@@ -165,7 +165,7 @@ ApplicationWindow {
                     onClicked: navRail.collapsed = !navRail.collapsed
 
                     contentItem: AppIcon {
-                        iconName: "bar"
+                        iconName: "nav-columns"
                         iconSize: 18
                     }
 
@@ -280,6 +280,11 @@ ApplicationWindow {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Let the content pane shrink below the natural width of its
+            // children. Without this a wide filter row (search pages) forces
+            // the whole right pane wider than the window and the right edge
+            // gets clipped.
+            Layout.minimumWidth: 0
             spacing: 0
 
             // Top App Bar
@@ -311,6 +316,7 @@ ApplicationWindow {
                 id: pageContainer
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.minimumWidth: 0
 
                 property int current: 0
 
@@ -484,7 +490,7 @@ ApplicationWindow {
         anchors.bottom: isCompact ? navBar.top : parent.bottom
         anchors.rightMargin: 24
         anchors.bottomMargin: 24
-        width: 400
+        width: Math.min(400, window.width - 48)
         z: 100
     }
 

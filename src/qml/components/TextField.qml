@@ -52,7 +52,14 @@ Rectangle {
         clip: true
         verticalAlignment: TextInput.AlignVCenter
 
-        onTextChanged: root.textChanged(text)
+        onTextChanged: {
+            // Keep the public property in sync with user edits. Without this
+            // the `text: root.text` binding breaks on the first keystroke and
+            // root.text stays stale (search boxes read root.text).
+            if (root.text !== text)
+                root.text = text
+            root.textChanged(text)
+        }
 
         Rectangle {
             anchors.left: parent.left
@@ -64,24 +71,27 @@ Rectangle {
         }
     }
 
-    // Clear button — appears only when there is text and the field has focus
-    // or is hovered, giving a quick way to empty the search/input field.
+    // Clear button — appears whenever the field has content, giving a quick
+    // way to empty a search/input field.
     AppIcon {
         id: clearBtn
-        x: root.width - width - 10
-        y: (root.height - height) / 2
+        anchors.right: parent.right
+        anchors.rightMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
         width: 24; height: 24
-        iconName: "backspace"
+        iconName: "circle-xmark"
         iconSize: 16
-        visible: root.text.length > 0 && input.activeFocus
-        opacity: hovered ? 1.0 : 0.6
+        visible: root.text.length > 0
+        opacity: clearMouse.containsMouse ? 1.0 : 0.55
         Behavior on opacity { NumberAnimation { duration: 120 } }
         MouseArea {
+            id: clearMouse
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: { input.text = ""; input.forceActiveFocus() }
         }
-        ToolTip.visible: hovered
+        ToolTip.visible: clearMouse.containsMouse
         ToolTip.delay: 300
         ToolTip.text: I18n.tr("clear")
     }

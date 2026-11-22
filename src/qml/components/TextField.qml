@@ -81,7 +81,7 @@ Rectangle {
         width: 24; height: 24
         iconName: "circle-xmark"
         iconSize: 16
-        visible: root.text.length > 0
+        visible: input.text.length > 0
         opacity: clearMouse.containsMouse ? 1.0 : 0.55
         Behavior on opacity { NumberAnimation { duration: 120 } }
         MouseArea {
@@ -89,7 +89,7 @@ Rectangle {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: { input.text = ""; input.forceActiveFocus() }
+            onClicked: { input.text = ""; root.text = ""; input.forceActiveFocus() }
         }
         ToolTip.visible: clearMouse.containsMouse
         ToolTip.delay: 300

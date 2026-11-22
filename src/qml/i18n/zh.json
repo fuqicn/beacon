@@ -142,7 +142,6 @@
   "type.old_beta": "旧测试版",
   "type.old_alpha": "旧版本",
   "tooltip.killMinecraft": "关闭所有正在运行的 Minecraft",
-  "file.reveal": "在资源管理器中显示",
   "instances.importModpack": "导入整合包(.mrpack)",
   "instances.modpackFilter": "Modrinth 整合包(*.mrpack)",
   "instances.allFiles": "所有文件(*)",
@@ -308,7 +307,6 @@
   "modSearch.all": "所有",
   "modSearch.tags": "标签:",
   "modSearch.allTags": "全部",
-  "downloadCard.status": "%1/%2 文件",
   "downloadCard.fileCount": "%1/%2 文件",
   "downloadCard.queued": "排队中",
   "downloadCard.downloading": "下载中 %1%",
@@ -420,5 +418,14 @@
   "searchResource.otherDir": "其他...",
   "nav.expandRail": "展开侧边栏",
   "nav.collapseRail": "收起侧边栏",
-  "clear": "清除"
+  "clear": "清除",
+  "changelog.section.sidebar.title": "侧边栏重写",
+  "changelog.section.sidebar.item1": "导航栏已用平滑展开/收起动画重写；图标和文字使用统一的 Material 风格描边 SVG。",
+  "changelog.section.sidebar.item2": "设置按钮固定于侧边栏最底部，独立一行，不再与可滚动项竞争空间。",
+  "changelog.section.sidebar.item3": "收起/展开按钮调整为 40×40，提升触摸目标大小；图标按比例缩放更清晰。",
+  "changelog.section.sidebar.item4": "选中高亮改为独立的 settingsActive 标志，确保同一时间只有一个导航项显示强调色竖条。",
+  "changelog.section.themestyle.title": "主题与图标优化",
+  "changelog.section.themestyle.item1": "亮暗切换的太阳/月亮按钮从 Unicode 字符改为真实 SVG 图标，消除放大时的锯齿。",
+  "changelog.section.themestyle.item2": "移除了未使用的图标资源（home、star、play、wrench、folder、magnifying-glass 等），减小包体积。",
+  "changelog.section.themestyle.item3": "修复侧边栏文字不跟随深浅主题切换的问题，改用 Theme.onSurface 替代 palette.text。"
 }

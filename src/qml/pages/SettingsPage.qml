@@ -365,7 +365,7 @@ Item {
                             if (checked)
                                 Theme.setThemeMode("system")
                             else
-                                Theme.setThemeMode(Theme.darkMode ? "dark" : "light")
+                                Theme.setThemeMode("light")
                         }
                         HoverHandler { id: themeFollowHover }
                         ToolTip.visible: themeFollowHover.hovered
@@ -389,11 +389,14 @@ Item {
                             color: Theme.darkMode ? "#333" : "#fff"
                             Behavior on x { NumberAnimation { duration: 200 } }
 
-                            Text {
+                            Image {
                                 anchors.centerIn: parent
-                                text: Theme.darkMode ? "\u263E" : "\u2600"
-                                font.pixelSize: 14
-                                color: palette.text
+                                source: Theme.darkMode
+                                    ? "qrc:/icons/moon.svg"
+                                    : "qrc:/icons/sun.svg"
+                                width: 18; height: 18
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
                             }
                         }
                     }

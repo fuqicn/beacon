@@ -290,6 +290,7 @@ private:
     bool m_memOptimizing = false;
     QString m_modSource = "modrinth";
     bool m_launchCancelled = false;
+    bool m_colorSchemeHooked = false;
     QQuickWindow *m_mainWindow = nullptr;
     QQmlEngine *m_engine = nullptr;
     VersionManager *m_versionManager = nullptr;

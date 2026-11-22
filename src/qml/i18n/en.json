@@ -418,5 +418,14 @@
   "searchResource.otherDir": "Other...",
   "nav.expandRail": "Expand sidebar",
   "nav.collapseRail": "Collapse sidebar",
-  "clear": "Clear"
+  "clear": "Clear",
+  "changelog.section.sidebar.title": "Sidebar redesign",
+  "changelog.section.sidebar.item1": "Navigation rail rewritten with smooth expand/collapse animation; icons and labels use consistent Material-style outline SVGs.",
+  "changelog.section.sidebar.item2": "Settings is now pinned to the bottom of the rail as a separate row — it no longer competes with the scrollable navigation items.",
+  "changelog.section.sidebar.item3": "Toggle button resized to 40×40 for better touch target size; icons are now proportionally scaled.",
+  "changelog.section.sidebar.item4": "Active state highlight uses a dedicated settingsActive flag so only one nav item shows its accent bar at a time.",
+  "changelog.section.themestyle.title": "Theme & icons",
+  "changelog.section.themestyle.item1": "Sun/moon theme toggle buttons now render as proper SVG icons instead of Unicode characters — no more jagged edges on zoom.",
+  "changelog.section.themestyle.item2": "Removed unused icon assets (home, star, play, wrench, folder, magnifying-glass, etc.) to reduce bundle size.",
+  "changelog.section.themestyle.item3": "Fixed sidebar text not responding to light/dark theme switch by switching from palette.text to Theme.onSurface."
 }

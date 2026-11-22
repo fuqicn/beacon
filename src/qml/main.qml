@@ -59,9 +59,13 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        kernel.applyThemeMode(Theme.themeMode)
+        // Theme.themeMode has already been set by main.cpp, so no need to call applyThemeMode again
         // Initialize cached palette colors once (avoids per-frame palette access)
         _cachedTextColor = kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
+        console.log("[main] Component.onCompleted: Theme.themeMode =", Theme.themeMode)
+        console.log("[main] Component.onCompleted: Theme.darkMode =", Theme.darkMode)
+        console.log("[main] Component.onCompleted: kernel.windowColor() =", kernel.windowColor())
+        console.log("[main] Component.onCompleted: _cachedTextColor =", _cachedTextColor)
         refreshMcRunning()
         // Auto update check honours the user's setting (default: on).
         if (kernel.settingsManager.value("update/auto", true))
@@ -76,19 +80,30 @@ ApplicationWindow {
 
     readonly property bool isCompact: window.width < 600
     property int navIndex: 0
+    property bool settingsActive: false
     property string subPageTitle: ""
 
     readonly property var navModel: [
         { labelKey: "nav.launch", icon: "nav-play" },
         { labelKey: "nav.download", icon: "nav-download" },
-        { labelKey: "nav.settings", icon: "nav-gear" },
         { labelKey: "nav.tools", icon: "nav-wrench" }
     ]
 
     function navigateTo(index) {
+        // navModel indices: launch=0, download=1, tools=2
+        // Page indices: launch=0, download=1, settings=2, tools=3
+        if (index === 2)       pageContainer.current = 3   // tools → ToolsPage
+        else                  pageContainer.current = index
         navIndex = index
+        settingsActive = false
         subPageTitle = ""
-        pageContainer.current = index
+    }
+
+    function navigateToSettings() {
+        settingsActive = true
+        navIndex = -1
+        subPageTitle = ""
+        pageContainer.current = 2
     }
 
     function navigateToPage(index, title) {
@@ -156,17 +171,17 @@ ApplicationWindow {
                     // Always anchored to the right edge — no x-calculation that
                     // would shift during the width animation.
                     anchors.right: parent.right
-                    anchors.rightMargin: navRail.collapsed ? 10 : 6
+                    anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 36
-                    height: 36
+                    width: 40
+                    height: 40
                     padding: 0
                     focusPolicy: Qt.NoFocus
                     onClicked: navRail.collapsed = !navRail.collapsed
 
                     contentItem: AppIcon {
                         iconName: "nav-columns"
-                        iconSize: 18
+                        iconSize: 20
                     }
 
                     background: Rectangle {
@@ -187,35 +202,26 @@ ApplicationWindow {
             }
 
             // ---- Nav items ------------------------------------------------
-            // Anchored on all four sides so the ListView always has a
-            // concrete height (a Layout-attached fill inside a plain Column
-            // resolves to zero and renders nothing).
             ListView {
                 id: navList
                 anchors.top: navHeader.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: parent.bottom
+                anchors.bottom: settingsRow.top
                 anchors.topMargin: 4
-                anchors.bottomMargin: 8
                 model: window.navModel
                 spacing: 2
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                interactive: contentHeight > height
 
                 delegate: Item {
                     id: navRow
                     width: navList.width
-                    height: 44
+                    height: uiStyleName === "windows" ? 36 : 44
 
                     readonly property bool active: index === window.navIndex
                     readonly property bool hovered: rowHover.hovered
 
                     HoverHandler { id: rowHover }
 
-                    // Highlight layer — a single rounded rect. Active rows get a subtle
-                    // neutral grey base; hover adds a slightly stronger tint on top.
                     Rectangle {
                         anchors.fill: parent
                         anchors.leftMargin: 6
@@ -232,7 +238,6 @@ ApplicationWindow {
                         }
                     }
 
-                    // Accent stripe on the inner-left edge of the active row.
                     Rectangle {
                         x: 6
                         anchors.verticalCenter: parent.verticalCenter
@@ -243,27 +248,22 @@ ApplicationWindow {
                         visible: navRow.active
                     }
 
-                    // Icon is locked to the left — no horizontal repositioning so the
-                    // rail collapse animation is smooth without any jump.
                     AppIcon {
-                        x: 20
+                        x: uiStyleName === "windows" ? 16 : 20
                         anchors.verticalCenter: parent.verticalCenter
-                        iconSize: 20
+                        iconSize: uiStyleName === "windows" ? 16 : 20
                         iconName: modelData.icon
                     }
 
                     Text {
-                        x: 52
+                        x: uiStyleName === "windows" ? 40 : 52
                         anchors.verticalCenter: parent.verticalCenter
-                        width: navRow.width - x - 12
+                        width: navRow.width - x - (uiStyleName === "windows" ? 8 : 12)
                         visible: !navRail.collapsed
                         text: I18n.tr(modelData.labelKey)
-                        font.pixelSize: 13
+                        font.pixelSize: uiStyleName === "windows" ? 12 : 13
                         font.weight: navRow.active ? Font.DemiBold : Font.Normal
-                        // Text colour is the same for active and inactive rows —
-                        // it only changes with the light/dark theme.  Selection is
-                        // indicated by the left accent bar and background tint only.
-                        color: Theme.onSurface
+                        color: palette.text
                         elide: Text.ElideRight
                     }
 
@@ -275,6 +275,73 @@ ApplicationWindow {
                     }
                 }
             }
+
+            // Settings — fixed at bottom of rail, same layout as nav items
+            Item {
+                id: settingsRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: uiStyleName === "windows" ? 36 : 44
+
+                readonly property bool active: settingsActive
+                readonly property bool hovered: settingsHover.hovered
+
+                HoverHandler { id: settingsHover }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    radius: Theme.shapeMedium
+                    color: {
+                        if (settingsRow.hovered) return Theme.hoverOverlay
+                        if (settingsRow.active)  return Qt.rgba(0.5, 0.5, 0.5, 0.07)
+                        return "transparent"
+                    }
+                    Behavior on color {
+                        enabled: Theme.animationsEnabled
+                        ColorAnimation { duration: 120 }
+                    }
+                }
+
+                Rectangle {
+                    x: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 3
+                    height: 20
+                    radius: 1.5
+                    color: Theme.primary
+                    visible: settingsRow.active
+                }
+
+                AppIcon {
+                    x: uiStyleName === "windows" ? 16 : 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconSize: uiStyleName === "windows" ? 16 : 20
+                    iconName: "nav-gear"
+                }
+
+                Text {
+                    x: uiStyleName === "windows" ? 40 : 52
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(0, settingsRow.width - x - (uiStyleName === "windows" ? 8 : 12))
+                    visible: !navRail.collapsed
+                    text: I18n.tr("nav.settings")
+                    font.pixelSize: uiStyleName === "windows" ? 12 : 13
+                    font.weight: settingsRow.active ? Font.DemiBold : Font.Normal
+                    color: palette.text
+                    elide: Text.ElideRight
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: navigateToSettings()
+                }
+            }
+
         }
 
         ColumnLayout {
@@ -297,7 +364,7 @@ ApplicationWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 20
-                    text: subPageTitle !== "" ? subPageTitle : I18n.tr(window.navModel[window.navIndex].labelKey)
+                    text: subPageTitle !== "" ? subPageTitle : (settingsActive ? I18n.tr("nav.settings") : I18n.tr(window.navModel[window.navIndex].labelKey))
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
                     color: palette.text

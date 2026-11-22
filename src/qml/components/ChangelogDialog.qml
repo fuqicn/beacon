@@ -87,6 +87,23 @@ Popup {
                 I18n.tr("changelog.section.ui.item5"),
                 I18n.tr("changelog.section.ui.item6")
             ]
+        },
+        {
+            title: I18n.tr("changelog.section.sidebar.title"),
+            items: [
+                I18n.tr("changelog.section.sidebar.item1"),
+                I18n.tr("changelog.section.sidebar.item2"),
+                I18n.tr("changelog.section.sidebar.item3"),
+                I18n.tr("changelog.section.sidebar.item4")
+            ]
+        },
+        {
+            title: I18n.tr("changelog.section.themestyle.title"),
+            items: [
+                I18n.tr("changelog.section.themestyle.item1"),
+                I18n.tr("changelog.section.themestyle.item2"),
+                I18n.tr("changelog.section.themestyle.item3")
+            ]
         }
     ]
 

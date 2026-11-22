@@ -2002,19 +2002,31 @@ return 0;
         // first frame is already correct. theme/mode is the current key;
         // theme/colorScheme is the legacy one.
         QString settingsPath = resolveLauncherDir() + "/settings.ini";
+        mc_info("[Startup] Reading theme from: %s", qPrintable(settingsPath));
         QSettings savedSettings(settingsPath, QSettings::IniFormat);
         QString scheme = savedSettings.value("theme/mode",
                            savedSettings.value("theme/colorScheme", "light").toString())
                          .toString();
-        if (scheme != "dark" && scheme != "light" && scheme != "system")
+        mc_info("[Startup] ini theme/mode: %s", qPrintable(scheme));
+        if (scheme != "dark" && scheme != "light" && scheme != "system") {
+            mc_info("[Startup] Invalid theme mode, defaulting to system");
             scheme = "system";
-        KernelBridge::instance()->applyThemeMode(scheme);
+        }
 
         // Sync theme settings from QSettings to AppTheme QML object.
         // These were previously set in AppTheme.qml Component.onCompleted,
         // but that caused qmlcachegen crashes on Linux (Qt 6.8) because
         // the cache generator cannot resolve the 'kernel' context property.
         auto *sm = KernelBridge::instance()->settingsManager();
+        // Propagate the saved theme mode to AppTheme so Theme.themeMode and
+        // Theme.darkMode are correct on the first frame (e.g. ini=dark starts dark).
+        mc_info("[Startup] Setting themeMode directly on AppTheme to: %s", qPrintable(scheme));
+        theme->setProperty("themeMode", scheme);
+        mc_info("[Startup] AppTheme themeMode after setting: %s", qPrintable(theme->property("themeMode").toString()));
+        
+        // Also call applyThemeMode to ensure the palette is set correctly
+        mc_info("[Startup] Calling applyThemeMode on KernelBridge with: %s", qPrintable(scheme));
+        KernelBridge::instance()->applyThemeMode(scheme);
         QMetaObject::invokeMethod(theme, "setAlwaysScrollbars",
                                   Q_ARG(QVariant, sm->value("system/scrollbars", false).toBool()));
         QMetaObject::invokeMethod(theme, "setTransparencyEnabled",

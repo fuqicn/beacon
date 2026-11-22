@@ -125,10 +125,15 @@ QtObject {
     }
 
     function toggleTheme() {
-        if (themeMode === "system")
-            setThemeMode(darkMode ? "light" : "dark")
-        else
-            setThemeMode(themeMode === "dark" ? "light" : "dark")
+        if (themeMode === "system") {
+            // When in system mode, toggle between light and dark based on current system state
+            const newMode = darkMode ? "light" : "dark";
+            setThemeMode(newMode);
+        } else {
+            // When in explicit mode, toggle between light and dark
+            const newMode = themeMode === "dark" ? "light" : "dark";
+            setThemeMode(newMode);
+        }
     }
 
     function setAlwaysScrollbars(v) {

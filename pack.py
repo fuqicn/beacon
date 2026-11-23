@@ -1206,6 +1206,51 @@ def _find_qt_on_macos():
     return None
 
 
+_MACHO_MAGICS = (
+    b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",   # 32-bit thin
+    b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",   # 64-bit thin
+    b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",   # universal / fat
+)
+
+
+def _is_macho(path):
+    """True when *path* starts with a Mach-O or fat-binary magic number."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) in _MACHO_MAGICS
+    except OSError:
+        return False
+
+
+def _ensure_mach_binary(app, backup=None):
+    """Guarantee Contents/MacOS/<BIN_NAME> is a real, executable Mach-O.
+
+    Two steps in this function's callers can silently destroy the main
+    executable:
+      * a ``strip`` from a foreign toolchain rewriting a Mach-O in place, and
+      * ``lipo -output <same path>``, which writes a NEW file and therefore
+        loses the execute permission (macOS then reports the bundle's binary
+        as "not a Unix executable" and refuses to launch it).
+    Recover from *backup* (a pre-strip copy inside the bundle, already fixed up
+    by macdeployqt) when possible; otherwise fail loudly instead of shipping an
+    app that cannot start.
+    """
+    bin_e = app / "Contents" / "MacOS" / BIN_NAME
+    if not _is_macho(bin_e):
+        if backup is not None and Path(backup).is_file() and _is_macho(backup):
+            shutil.copy2(str(backup), str(bin_e))
+            log("restored %s from %s (it was not a Mach-O)"
+                % (bin_e, Path(backup).name))
+        else:
+            raise PackError(
+                "%s is not a Mach-O executable and no backup copy was usable"
+                % bin_e)
+    mode = bin_e.stat().st_mode
+    if not (mode & 0o111):
+        os.chmod(bin_e, mode | 0o755)
+        log("restored execute permission on %s" % bin_e)
+
+
 def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     """Build and package a macOS .app bundle."""
     log("=== Building Beacon for macOS (%s) ===" % arch_suffix)
@@ -1231,14 +1276,23 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     # Install to staging — CMake's MACOSX_BUNDLE creates Beacon.app at the prefix root.
     run([str(cmake), "--install", str(build_dir), "--prefix", str(staging)])
 
-    # Strip the binary.
+    # Strip the binary. Apple's strip (cctools) rejects GNU's --strip-all and a
+    # strip coming from a cross toolchain can corrupt a Mach-O in place, so the
+    # call is best-effort and the result is validated against a pre-strip copy.
     staged_app = staging / "Beacon.app" / "MacOS" / BIN_NAME
+    bin_backup = staged_app.with_name(BIN_NAME + ".prestrip")
     strip = shutil.which("strip")
     if strip and staged_app.is_file():
+        shutil.copy2(str(staged_app), str(bin_backup))
         before = staged_app.stat().st_size
-        run([str(strip), "--strip-all", str(staged_app)])
-        log("stripped %s: %d -> %d bytes"
-            % (staged_app, before, staged_app.stat().st_size))
+        # -x (strip local symbols) is understood by cctools and llvm-strip.
+        run([str(strip), "-x", str(staged_app)], check=False)
+        if _is_macho(staged_app):
+            log("stripped %s: %d -> %d bytes"
+                % (staged_app, before, staged_app.stat().st_size))
+        else:
+            log("WARNING: strip damaged %s; restoring it" % staged_app)
+            _ensure_mach_binary(staging / "Beacon.app", bin_backup)
 
     # Deploy Qt frameworks and plugins via macdeployqt if available.
     qt_root = Path(qt_dir) if qt_dir else _find_qt_on_macos()
@@ -1312,6 +1366,16 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
     shutil.move(str(staging_dir), str(final_app))
     shutil.rmtree(staging, ignore_errors=True)
 
+    # The pre-strip copy (already superseded by macdeployqt's install-name
+    # rewrites) must not ship inside the bundle.
+    stale_backup = final_app / "Contents" / "MacOS" / (BIN_NAME + ".prestrip")
+    if stale_backup.is_file():
+        stale_backup.unlink()
+
+    # Never ship a bundle whose main executable is missing, truncated, or
+    # lacking the execute bit.
+    _ensure_mach_binary(final_app)
+
     # Thin fat binaries to a single arch before reporting completion.
     # CI builds often produce x86_64/arm64 universal binaries; thinning shrinks
     # the bundle and avoids Gatekeeper/Apple notarisation warnings about mixed-
@@ -1332,18 +1396,53 @@ def build_macos(args, version, qt_dir=None, arch_suffix="arm64"):
             candidates += list(qml_resources.rglob("*.so")) + list(qml_resources.rglob("*.dylib"))
         thinned = 0
         for p in candidates:
+            tmp = p.with_name(p.name + ".thin")
             try:
                 out = run(["lipo", "-info", str(p)], capture=True, check=False)
                 if out and "arm64" in out and "x86_64" in out:
-                    run(["lipo", "-thin", arch_suffix, str(p), "-output", str(p)])
+                    # Write to a sibling first: lipo creates a new file, so
+                    # thinning in place would drop the original mode bits (and
+                    # a failure halfway would truncate the input).
+                    if tmp.exists():
+                        tmp.unlink()
+                    mode = p.stat().st_mode
+                    run(["lipo", "-thin", arch_suffix, str(p), "-output", str(tmp)])
+                    os.chmod(tmp, mode)
+                    os.replace(str(tmp), str(p))
                     log("thinned %s -> %s" % (p.name, arch_suffix))
                     thinned += 1
             except Exception as e:
                 log("WARNING: lipo failed for %s: %s" % (p.name, e))
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except OSError:
+                    pass
         if thinned:
             log("thinned %d universal binary(s) to %s" % (thinned, arch_suffix))
     else:
         log("INFO: lipo not found — skipping thin (run on macOS or install Xcode CLT)")
+
+    # Final gate: the main executable must still be a Mach-O with +x.
+    _ensure_mach_binary(final_app)
+
+    # Download artefacts carry a quarantine flag that makes Gatekeeper report
+    # the bundle as damaged/unopenable. Strip extended attributes in-place so a
+    # locally produced .app launches immediately.
+    if shutil.which("xattr"):
+        run(["xattr", "-cr", str(final_app)], check=False)
+
+    # strip/lipo rewrote Mach-O files, which invalidates any existing code
+    # signature. arm64 macOS refuses to run an unsigned/mis-signed binary, so
+    # re-sign the bundle ad-hoc as the very last step (a no-op for codes that
+    # were already signed, but it cannot be skipped after modifying the binary).
+    if shutil.which("codesign"):
+        run(["codesign", "--force", "--deep", "--sign", "-", str(final_app)],
+            check=False)
+        log("ad-hoc signed %s" % final_app)
+    else:
+        log("WARNING: codesign not found; arm64 macOS may refuse to launch "
+            "the unsigned bundle")
 
     log("=== macOS package done ===")
     log("  %s (%d bytes)" % (final_app,

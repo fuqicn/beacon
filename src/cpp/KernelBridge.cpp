@@ -1069,8 +1069,6 @@ QColor KernelBridge::shadowColor() const { return QGuiApplication::palette().col
 
 void KernelBridge::applyThemeMode(const QString &mode)
 {
-    mc_info("[KernelBridge] applyThemeMode called with mode: %s", qPrintable(mode));
-    
     // Follow system dark/light switches live. Without this, "follow system"
     // mode never notices the OS theme changing (Windows personalization,
     // macOS appearance, GNOME style): the palette is never rebuilt, so QML
@@ -1096,7 +1094,6 @@ void KernelBridge::applyThemeMode(const QString &mode)
         scheme = Qt::ColorScheme::Dark;
     else if (mode == "light")
         scheme = Qt::ColorScheme::Light;
-    mc_info("[KernelBridge] Setting color scheme to: %d (dark=1, light=0, unknown=2)", int(scheme));
     QGuiApplication::styleHints()->setColorScheme(scheme);
 
     // Resolve the effective scheme: after setColorScheme(Unknown) the platform
@@ -1104,23 +1101,14 @@ void KernelBridge::applyThemeMode(const QString &mode)
     // rebuild the palette from this, so force an explicit palette that keeps
     // the system accent (QPalette::Highlight).
     Qt::ColorScheme effective = QGuiApplication::styleHints()->colorScheme();
-    mc_info("[KernelBridge] Effective color scheme: %d", int(effective));
     bool dark = effective == Qt::ColorScheme::Dark;
-    if (effective == Qt::ColorScheme::Unknown) {
-        QColor windowColor = QGuiApplication::palette().color(QPalette::Window);
-        dark = windowColor.lightness() < 128;
-        mc_info("[KernelBridge] Unknown scheme, using window color lightness: %d (dark=%d)", windowColor.lightness(), dark);
-    }
+    if (effective == Qt::ColorScheme::Unknown)
+        dark = QGuiApplication::palette().color(QPalette::Window).lightness() < 128;
 
     // Always force our neutral palette: on Linux/Fusion/Windows 10 the platform
     // does not rebuild QPalette from setColorScheme, so we must set it explicitly
     // for both light and dark modes.
-    QPalette newPalette = paletteForScheme(dark);
-    mc_info("[KernelBridge] Setting new palette with window color: #%02x%02x%02x", 
-            newPalette.color(QPalette::Window).red(),
-            newPalette.color(QPalette::Window).green(),
-            newPalette.color(QPalette::Window).blue());
-    QGuiApplication::setPalette(newPalette);
+    QGuiApplication::setPalette(paletteForScheme(dark));
 
     // Fusion style in light mode: the dropdown popup uses QPalette::Window as its
     // background, which is 0xf3f3f3 (light gray) here. Override to pure white so
@@ -1143,7 +1131,6 @@ void KernelBridge::applyThemeMode(const QString &mode)
     }
 
     // Notify QML that the palette has changed so SystemPalette bindings update
-    mc_info("[KernelBridge] Emitting paletteChanged signal");
     emit paletteChanged();
 
     applyWindowTransparency(

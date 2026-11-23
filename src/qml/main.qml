@@ -62,10 +62,6 @@ ApplicationWindow {
         // Theme.themeMode has already been set by main.cpp, so no need to call applyThemeMode again
         // Initialize cached palette colors once (avoids per-frame palette access)
         _cachedTextColor = kernel.windowColor().hslLightness < 0.5 ? Qt.white : Qt.black
-        console.log("[main] Component.onCompleted: Theme.themeMode =", Theme.themeMode)
-        console.log("[main] Component.onCompleted: Theme.darkMode =", Theme.darkMode)
-        console.log("[main] Component.onCompleted: kernel.windowColor() =", kernel.windowColor())
-        console.log("[main] Component.onCompleted: _cachedTextColor =", _cachedTextColor)
         refreshMcRunning()
         // Auto update check honours the user's setting (default: on).
         if (kernel.settingsManager.value("update/auto", true))
@@ -179,9 +175,23 @@ ApplicationWindow {
                     focusPolicy: Qt.NoFocus
                     onClicked: navRail.collapsed = !navRail.collapsed
 
-                    contentItem: AppIcon {
-                        iconName: "nav-columns"
-                        iconSize: 20
+                    // Wrap the icon so the control cannot stretch it: Qt Quick
+                    // Controls resizes contentItem to the content area (40x40
+                    // here, plus whatever padding the active style adds). An
+                    // AppIcon assigned directly would be blown up from its
+                    // 20 px rasterisation, which only stayed correct in
+                    // FluentWinUI3 because that style's padding shrinks the
+                    // content area. The wrapper keeps the glyph at its native
+                    // 20 px and centred for every style.
+                    contentItem: Item {
+                        implicitWidth: 20
+                        implicitHeight: 20
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            iconName: "nav-columns"
+                            iconSize: 20
+                        }
                     }
 
                     background: Rectangle {
